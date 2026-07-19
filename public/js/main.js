@@ -379,7 +379,10 @@ function renderHand(v) {
     if (canStage && v.phase === 'play' && !stagedNow) {
       extendable = engine.validatePlay(ps, v.you.index, [...staged, card]) === null;
     }
-    if (!canStage || (v.phase === 'play' && !stagedNow && !extendable)) el.classList.add('disabled');
+    // Waiting never dims the hand: players can study their cards and prepare.
+    // Only mark a card unavailable when it conflicts with a staged play on
+    // this player's active turn.
+    if (canStage && v.phase === 'play' && !stagedNow && !extendable) el.classList.add('disabled');
 
     attachPress(el,
       () => { // tap: stage/unstage
