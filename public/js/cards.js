@@ -46,7 +46,7 @@ export function cardBackSVG() {
 }
 
 // ── corners ─────────────────────────────────────────────────────────────────
-function corners(card, single = false) {
+function corners(card) {
   const col = card.s ? suitColor(card.s) : INK;
   const glyph = card.s ? SUIT_GLYPH[card.s] : '🪶';
   const label = rankLabel(card.r);
@@ -57,7 +57,6 @@ function corners(card, single = false) {
   return `
     <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
       ${one}
-      ${single ? '' : `<g transform="rotate(180 120 168)">${one}</g>`}
     </g>`;
 }
 
@@ -113,7 +112,8 @@ const POWER_ICONS = {
     <circle cx="94" cy="84" r="4.5" fill="${INK}"/>`,
 };
 const POWER_WORD = { H: 'RALLY', D: 'RAID', C: 'THE MOB ×2', S: 'BARRICADE' };
-const POWER_ACTION = { H: 'DRAW NEW CARDS', D: 'RETURN THE FALLEN', C: 'DOUBLE DAMAGE', S: 'REDUCE ATTACK' };
+const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'RESHUFFLE FALLEN', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
+const POWER_ACTION_SIZE = { H: 18, D: 16, C: 18, S: 18 };
 
 function numberArt(card) {
   const col = suitColor(card.s);
@@ -121,10 +121,11 @@ function numberArt(card) {
     <circle cx="120" cy="160" r="72" fill="none" stroke="${GOLD}" stroke-width="2"/>
     <circle cx="120" cy="160" r="65" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1" opacity=".9"/>
     <g transform="translate(60,100)">${POWER_ICONS[card.s]}</g>
+    <rect x="20" y="238" width="200" height="64" rx="9" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1.5"/>
     <text x="120" y="262" font-size="21" text-anchor="middle" fill="${col}"
       font-family="${SERIF}" font-weight="700" letter-spacing="1.5">${POWER_WORD[card.s]}</text>
-    <text x="120" y="287" font-size="16" text-anchor="middle" fill="${INK}" opacity=".72"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".7">${POWER_ACTION[card.s]}</text>`;
+    <text x="120" y="287" font-size="${POWER_ACTION_SIZE[card.s]}" text-anchor="middle" fill="${INK}" opacity=".76"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".25">${POWER_ACTION[card.s]}</text>`;
 }
 
 // ── royals: period paintings in a gilt frame ────────────────────────────────
@@ -205,9 +206,9 @@ export function cardSVG(card, opts = {}) {
     center = royalArt(card, opts);
     cornerLayer = royalCorners(card);
   } else if (card.r === 'A') {
-    center = companionArt(); extra = banner('Sans-Culotte'); cornerLayer = corners(card, true);
+    center = companionArt(); extra = banner('Sans-Culotte'); cornerLayer = corners(card);
   } else if (card.r === 'X') {
-    center = pamphleteerArt(); extra = banner('The Pamphleteer'); cornerLayer = corners(card, true);
+    center = pamphleteerArt(); extra = banner('The Pamphleteer'); cornerLayer = corners(card);
   } else {
     center = numberArt(card); cornerLayer = corners(card);
   }
