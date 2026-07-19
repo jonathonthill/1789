@@ -359,7 +359,13 @@ input {
   border: 1.5px solid var(--paper);
   width: 21px; height: 21px; font-size: .75rem; line-height: 19px; text-align: center;
 }
-.hand-card.disabled { opacity: .45; }
+.hand-card.disabled {
+  opacity: 1;
+  background: var(--paper); border-radius: 7%;
+  filter: grayscale(.9) saturate(.2) brightness(.66) contrast(.9)
+    drop-shadow(0 2px 3px rgba(20,12,6,.3));
+  cursor: default;
+}
 .hand-card.disabled:hover { transform: none; }
 .hand-empty { font-family: var(--serif-fell); font-style: italic; color: #e8dfc8; margin: auto; }
 #screen-game .btn.ghost { color: var(--gold-hi); border-color: var(--gold); }
