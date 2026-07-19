@@ -352,8 +352,7 @@ input {
 }
 .hand-card + .hand-card { margin-left: var(--hand-gap); }
 .hand-card svg { width: 100%; height: auto; display: block; pointer-events: none; }
-.hand-card:hover { transform: translateY(-6px); }
-.hand-card.staged { transform: translateY(-18px); filter: drop-shadow(0 8px 14px rgba(120,20,30,.5)); }
+.hand-card.staged { z-index: 2; transform: translateY(-18px); filter: drop-shadow(0 8px 14px rgba(120,20,30,.5)); }
 .hand-card.staged::after {
   content: '✔'; position: absolute; top: -8px; right: -4px;
   background: var(--crimson); color: var(--paper); border-radius: 50%;
@@ -367,9 +366,16 @@ input {
     drop-shadow(0 2px 3px rgba(20,12,6,.3));
   cursor: default;
 }
-.hand-card.disabled:hover { transform: none; }
 .hand-empty { font-family: var(--serif-fell); font-style: italic; color: #e8dfc8; margin: auto; }
 #screen-game .btn.ghost { color: var(--gold-hi); border-color: var(--gold); }
+
+/* Touch browsers can leave :hover stuck on the card exposed beneath a lifted
+   selection. Keep hover motion for precise pointers only. */
+@media (hover: hover) and (pointer: fine) {
+  .hand-card:hover { transform: translateY(-6px); }
+  .hand-card.staged:hover { transform: translateY(-18px); }
+  .hand-card.disabled:hover { transform: none; }
+}
 
 .action-bar { padding: 4px 12px calc(10px + env(safe-area-inset-bottom)); flex-shrink: 0; }
 .projection { font-size: .87rem; font-style: italic; text-align: center; min-height: 20px; color: #e8dfc8; }
