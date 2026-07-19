@@ -62,20 +62,20 @@ test('companion pairing rules', () => {
   assert.ok(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 2, s: 'S' }, { r: 2, s: 'H' }]), 'A in combo rejected');
 });
 
-test('companion adds value and both suit powers apply (8D + A-of-clubs = 18 dmg, 9 draws)', () => {
+test('Rally recruits cards; companion adds value and both suit powers apply (8H + A-of-clubs = 18 dmg, 9 draws)', () => {
   const s = newGame(names2, { seed: 4 });
   rig(s, {
-    hands: [[{ r: 8, s: 'D' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }]],
-    enemy: { r: 'J', s: 'H' },
+    hands: [[{ r: 8, s: 'H' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }]],
+    enemy: { r: 'J', s: 'D' },
   });
   const before = s.players[0].hand.length + s.players[1].hand.length - 2; // minus played
-  playCards(s, 0, [{ r: 8, s: 'D' }, { r: 'A', s: 'C' }]);
+  playCards(s, 0, [{ r: 8, s: 'H' }, { r: 'A', s: 'C' }]);
   assert.equal(s.enemy.damage, 18, 'clubs doubles the combined value 9');
   const after = s.players[0].hand.length + s.players[1].hand.length;
   assert.equal(after - before, Math.min(9, 9), 'drew up to 9 (capped by hand size/tavern)');
 });
 
-test('hearts heals from discard under the tavern, before diamonds draws', () => {
+test('Raid returns the Fallen under Le Peuple before Rally recruits', () => {
   const s = newGame(names2, { seed: 5 });
   rig(s, {
     hands: [[{ r: 5, s: 'H' }, { r: 5, s: 'D' }], [{ r: 2, s: 'C' }]],
@@ -83,11 +83,11 @@ test('hearts heals from discard under the tavern, before diamonds draws', () => 
     discard: [{ r: 9, s: 'C' }, { r: 9, s: 'D' }, { r: 9, s: 'H' }],
   });
   const tavernBefore = s.tavern.length;
-  playCards(s, 0, [{ r: 5, s: 'H' }, { r: 5, s: 'D' }]); // pair of 5s: heal 10 (capped 3), draw 10
-  assert.equal(s.discard.length, 0, 'discard fully healed');
-  // healed 3 in, then draws came off the top; the 3 healed went UNDER (start of array)
+  playCards(s, 0, [{ r: 5, s: 'H' }, { r: 5, s: 'D' }]); // pair of 5s: return 10 (capped 3), recruit 10
+  assert.equal(s.discard.length, 0, 'the Fallen fully returned');
+  // returned 3 in, then recruits came off the top; the 3 returned went UNDER (start of array)
   assert.equal(s.enemy.damage, 10);
-  assert.ok(s.tavern.length <= tavernBefore + 3, 'tavern gained healed cards then lost draws');
+  assert.ok(s.tavern.length <= tavernBefore + 3, 'Le Peuple gained returned cards then supplied recruits');
   assert.equal(s.phase, 'discard', 'Jack of Clubs strikes back for 10');
   assert.equal(s.pendingDamage, 10);
 });
@@ -310,7 +310,7 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
   }
   assert.ok(['won', 'lost'].includes(s.phase), 'game terminates');
   const v = viewFor(s, 0);
-  assert.ok(v.log.length > 0);
+  assert.ok(!('log' in v), 'the private game journal is not exposed for lookup');
 });
 
 test('view hides other hands but shows counts', () => {

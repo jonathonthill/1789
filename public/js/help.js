@@ -82,7 +82,7 @@ export function pileInfo(kind, view) {
   }
   if (kind === 'tavern') {
     return `<h3>🥖 ${TERMS.tavern}</h3>
-      <p>The people's deck — <b>${view.tavernCount}</b> cards to draw from (♦ Raid the Treasury). ♥ Rally the People slips the Fallen <i>under</i> it.</p>
+      <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally the People draws from it; ♦ Raid the Treasury slips the shuffled Fallen <i>under</i> it.</p>
       <p>An enemy felled with <b>exactly</b> the right damage is won to the Revolution: placed on top, ready to be drawn and fight for you at full strength.</p>
       <p>An empty deck is no defeat — you simply draw nothing.</p>`;
   }
@@ -92,7 +92,7 @@ export function pileInfo(kind, view) {
       return `<span class="mini-card ${red ? 'red' : ''}">${miniLabel(c)}</span>`;
     }).join('') || '<i>none yet</i>';
     return `<h3>🕯 ${TERMS.discard}</h3>
-      <p><b>${view.discardCount}</b> cards lost to the struggle — spent attacks, sacrifices, and guillotined royals. ♥ Rally the People can return them (shuffled, face down) to ${TERMS.tavern}.</p>
+      <p><b>${view.discardCount}</b> cards lost to the struggle — spent attacks, sacrifices, and guillotined royals. ♦ Raid the Treasury can return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
   if (kind === 'enemy') return enemyInfo(view);
@@ -127,8 +127,8 @@ export function projectionText(view, staged, pseudoState) {
   const p = previewPlay(pseudoState, staged);
   if (p.isJester) return `The Pamphleteer strikes — immunity shattered, you choose who goes next.`;
   const bits = [`⚔️ <b>${p.damage}</b> damage${p.doubled ? ' (mob ×2!)' : ''}`];
-  if (p.heals) bits.push(`♥ ${p.heals} rallied`);
-  if (p.draws) bits.push(`♦ ${p.draws} drawn`);
+  if (p.heals) bits.push(`♦ ${p.heals} Fallen returned`);
+  if (p.draws) bits.push(`♥ ${p.draws} recruited`);
   if (p.shieldAdd) bits.push(`♠ +${p.shieldAdd} barricade`);
   if (p.immuneSuits.length) bits.push(`<span class="warn">⚠ ${p.immuneSuits.map(s => SUIT_META[s].symbol + ' immune').join(', ')}</span>`);
   const e = view.enemy;

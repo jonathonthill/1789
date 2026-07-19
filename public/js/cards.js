@@ -1,7 +1,7 @@
 // SVG card rendering for 1789.
 // Royals carry period paintings; number cards show rank+suit in the corners and
 // a power icon medallion in the middle; the shared card back is a fleur-de-lis.
-import { enemyMeta, SUIT_META } from '/shared/theme.js';
+import { enemyMeta } from '/shared/theme.js';
 
 const RED = '#9e2235', INK = '#26211a', FACE = '#f7f0df';
 const GOLD = '#b08d2c', GOLD_HI = '#d9bc63', BLUE = '#1b2a5e', BLUE_DEEP = '#101c40';
@@ -50,10 +50,10 @@ function corners(card, single = false) {
   const col = card.s ? suitColor(card.s) : INK;
   const glyph = card.s ? SUIT_GLYPH[card.s] : '🪶';
   const label = rankLabel(card.r);
-  const fs = String(label).length > 1 ? 28 : 38;
+  const fs = String(label).length > 1 ? 34 : 46;
   const one = `
-      <text x="29" y="45" font-size="${fs}">${label}</text>
-      <text x="29" y="79" font-size="28">${glyph}</text>`;
+      <text x="34" y="52" font-size="${fs}">${label}</text>
+      <text x="34" y="88" font-size="34">${glyph}</text>`;
   return `
     <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
       ${one}
@@ -112,7 +112,8 @@ const POWER_ICONS = {
     <line x1="107" y1="71" x2="81" y2="97" stroke="${INK}" stroke-width="2.5"/>
     <circle cx="94" cy="84" r="4.5" fill="${INK}"/>`,
 };
-const POWER_WORD = { H: 'RALLY', D: 'TREASURY', C: 'THE MOB ×2', S: 'BARRICADE' };
+const POWER_WORD = { H: 'RALLY', D: 'RAID', C: 'THE MOB ×2', S: 'BARRICADE' };
+const POWER_ACTION = { H: 'DRAW NEW CARDS', D: 'RETURN THE FALLEN', C: 'DOUBLE DAMAGE', S: 'REDUCE ATTACK' };
 
 function numberArt(card) {
   const col = suitColor(card.s);
@@ -120,10 +121,10 @@ function numberArt(card) {
     <circle cx="120" cy="160" r="72" fill="none" stroke="${GOLD}" stroke-width="2"/>
     <circle cx="120" cy="160" r="65" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1" opacity=".9"/>
     <g transform="translate(60,100)">${POWER_ICONS[card.s]}</g>
-    <text x="120" y="262" font-size="15" text-anchor="middle" fill="${col}"
-      font-family="${SERIF}" font-weight="700" letter-spacing="2">${POWER_WORD[card.s]}</text>
-    <text x="120" y="284" font-size="13" text-anchor="middle" fill="${INK}" opacity=".55"
-      font-family="Georgia, serif" font-style="italic">${SUIT_META[card.s].power}</text>`;
+    <text x="120" y="262" font-size="21" text-anchor="middle" fill="${col}"
+      font-family="${SERIF}" font-weight="700" letter-spacing="1.5">${POWER_WORD[card.s]}</text>
+    <text x="120" y="287" font-size="16" text-anchor="middle" fill="${INK}" opacity=".72"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".7">${POWER_ACTION[card.s]}</text>`;
 }
 
 // ── royals: period paintings in a gilt frame ────────────────────────────────

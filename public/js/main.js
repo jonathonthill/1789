@@ -217,8 +217,8 @@ function routeView(v) {
   animateEffects(v);
 }
 
-// Suit-power side effects become table motion: the Fallen shuffle under Le
-// Peuple on a heart, drawn cards fly to the hands on a diamond.
+// Suit-power side effects become table motion: a diamond raid returns the
+// Fallen under Le Peuple, then a heart rally recruits cards into hands.
 let lastActionSeq = -1;
 function animateEffects(v) {
   if (v.actionSeq === lastActionSeq) return;
@@ -287,7 +287,11 @@ function renderGame(v) {
   renderSeats(v);
 
   // status + hand + actions
-  $('#status-strip').innerHTML = help.statusText(v, staged.length);
+  const status = $('#status-strip');
+  status.innerHTML = help.statusText(v, staged.length);
+  const yourTurn = v.you && v.current === v.you.index;
+  status.classList.toggle('danger', v.phase === 'discard');
+  status.classList.toggle('waiting', v.phase !== 'discard' && !yourTurn);
   renderHand(v);
   renderActions(v);
 
@@ -388,7 +392,35 @@ function renderHand(v) {
     );
     zone.appendChild(el);
   });
+  requestAnimationFrame(() => layoutHand(v.you.hand.length));
 }
+
+// Keep every hand visible. Cards overlap by at most one third; once that is no
+// longer enough, the whole hand scales down continuously with the viewport.
+function layoutHand(count = view?.you?.hand.length ?? 0) {
+  const zone = $('#hand-zone');
+  if (!count || !zone.clientWidth) return;
+  const target = window.matchMedia('(min-width: 800px)').matches ? 104 : 84;
+  const available = Math.max(1, zone.clientWidth - 28);
+  const naturalGap = 9;
+  let width = target;
+  let gap = naturalGap;
+
+  if (count > 1 && count * target + (count - 1) * naturalGap > available) {
+    const fittedGap = (available - count * target) / (count - 1);
+    if (fittedGap >= -target / 3) {
+      gap = fittedGap;
+    } else {
+      width = Math.min(target, available / (1 + (count - 1) * 2 / 3));
+      gap = -width / 3;
+    }
+  }
+
+  zone.style.setProperty('--hand-card-w', `${width.toFixed(2)}px`);
+  zone.style.setProperty('--hand-gap', `${gap.toFixed(2)}px`);
+}
+
+window.addEventListener('resize', () => layoutHand());
 
 function renderActions(v) {
   const confirm = $('#btn-confirm'), yield_ = $('#btn-yield'), regroup = $('#btn-regroup');
@@ -479,7 +511,7 @@ $('#btn-home').onclick = () => {
   show('home');
 };
 
-// ── sheets, journal, help panel ─────────────────────────────────────────────
+// ── sheets and help panel ───────────────────────────────────────────────────
 function openSheet(html) {
   $('#sheet-content').innerHTML = html;
   $('#sheet').hidden = false;
@@ -490,8 +522,6 @@ for (const kind of ['castle', 'tavern', 'discard']) {
   $(`#pile-${kind}`).onclick = () => view && openSheet(help.pileInfo(kind, view));
 }
 attachPress($('#enemy-zone'), () => view && openSheet(help.enemyInfo(view)), () => view && openSheet(help.enemyInfo(view)));
-$('#btn-journal').onclick = () => view && openSheet(
-  `<h3>📜 Journal de la Révolution</h3>` + view.log.map(l => `<p>· ${esc(l)}</p>`).join(''));
 
 function openHelp(v) {
   $('#help-content').innerHTML = help.helpHTML(v ?? view);

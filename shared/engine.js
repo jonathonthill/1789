@@ -193,8 +193,8 @@ export function previewPlay(state, cards) {
     value,
     damage: isJester ? 0 : (doubled ? value * 2 : value),
     doubled,
-    heals: suits.includes('H') && active('H') ? Math.min(value, state.discard.length) : 0,
-    draws: suits.includes('D') && active('D') ? Math.min(value, state.tavern.length) : 0,
+    heals: suits.includes('D') && active('D') ? Math.min(value, state.discard.length) : 0,
+    draws: suits.includes('H') && active('H') ? Math.min(value, state.tavern.length) : 0,
     shieldAdd: suits.includes('S') && active('S') ? value : 0,
     immuneSuits: cancelled ? [] : suits.filter(s => s === enemySuit),
     isJester,
@@ -228,15 +228,16 @@ export function playCards(state, playerIdx, cards) {
   const enemySuit = state.enemy.card.s;
   const active = s => s !== enemySuit || state.enemy.immunityCancelled;
 
-  // Hearts before Diamonds, always.
-  if (suits.includes('H') && active('H')) {
+  // Raid before Rally so recovered cards are safely under Le Peuple before
+  // recruitment begins.
+  if (suits.includes('D') && active('D')) {
     shuffle(state.discard, state._rng);
     const healed = state.discard.splice(0, Math.min(value, state.discard.length));
     state.tavern.unshift(...healed); // under the deck, no peeking
     state._lastHealed = healed.length;
-    if (healed.length) log(state, `${player.name} rallies the people — ${healed.length} of the Fallen rejoin the cause.`);
+    if (healed.length) log(state, `${player.name} raids the treasury — ${healed.length} of the Fallen return beneath Le Peuple.`);
   }
-  if (suits.includes('D') && active('D')) {
+  if (suits.includes('H') && active('H')) {
     let toDraw = value;
     let i = playerIdx;
     let skips = 0;
@@ -253,7 +254,7 @@ export function playCards(state, playerIdx, cards) {
     }
     const drawn = value - toDraw;
     state._lastDrawn = drawn;
-    if (drawn) log(state, `${player.name} raids the treasury — the citoyens draw ${drawn} card${drawn === 1 ? '' : 's'}.`);
+    if (drawn) log(state, `${player.name} rallies the people — the citoyens recruit ${drawn} card${drawn === 1 ? '' : 's'}.`);
   }
 
   const healedCount = state._lastHealed ?? 0;
@@ -484,7 +485,6 @@ export function viewFor(state, playerIdx) {
     actionSeq: state.actionSeq,
     lastEffects: state.lastEffects,
     canYield: playerIdx != null ? canYield(state, playerIdx) : canYield(state, state.current),
-    log: state.log.slice(-25),
     lastEvent: state.lastEvent,
     result: state.result,
   };

@@ -41,7 +41,7 @@ input { user-select: text; -webkit-user-select: text; }
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
 }
-#screen-home, #screen-lobby, #screen-end { max-width: 760px; margin: 0 auto; }
+#screen-lobby, #screen-end { max-width: 760px; margin: 0 auto; }
 [hidden] { display: none !important; }
 
 /* ── buttons & fields ── */
@@ -94,7 +94,20 @@ input {
 .error { color: var(--crimson-deep); font-style: italic; text-align: center; }
 
 /* ── home ── */
-.home-inner { margin: auto; width: min(92vw, 420px); text-align: center; padding: 24px 0; }
+#screen-home {
+  width: 100%;
+  padding: max(24px, env(safe-area-inset-top)) 0 max(24px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background:
+    var(--fleur-tile),
+    radial-gradient(ellipse at 50% 0%, #24377a 0%, var(--royal) 45%, var(--royal-deep) 100%);
+}
+.home-inner {
+  margin: auto; width: min(92vw, 440px); text-align: center; padding: 26px 30px 30px;
+  background: radial-gradient(ellipse at 50% 10%, #fdf7e7 0%, var(--paper) 48%, var(--parchment) 100%);
+  border: 3px double var(--gold); border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(5, 8, 20, .58), inset 0 0 36px rgba(140, 110, 50, .1);
+}
 .cockade { position: relative; width: 92px; height: 92px; margin: 0 auto 12px; filter: drop-shadow(0 4px 8px rgba(60,40,10,.25)); }
 .cockade span { position: absolute; border-radius: 50%; inset: 0; background: var(--crimson); }
 .cockade span:nth-child(2) { inset: 15px; background: var(--paper); }
@@ -193,7 +206,7 @@ input {
 /* ── decks that look like decks ── */
 .deck {
   background: none; border: none; padding: 0; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
   position: relative; font-family: inherit;
   flex-shrink: 0;
 }
@@ -225,7 +238,7 @@ input {
 }
 .deck-label {
   font-family: var(--serif-display); font-size: .74rem; letter-spacing: .1em;
-  color: var(--ink-soft);
+  color: var(--ink-soft); position: relative; z-index: 4; line-height: 1.2;
 }
 
 /* shuffle riffle */
@@ -302,22 +315,34 @@ input {
   border: 1.5px solid var(--gold);
   min-height: 42px;
   box-shadow: 0 3px 8px rgba(16,20,40,.3);
+  transition: background .22s ease, color .22s ease, border-color .22s ease;
 }
 .status-strip .em { color: var(--gold-hi); font-weight: bold; }
+.status-strip.danger {
+  background: linear-gradient(180deg, #b93a50, var(--crimson) 55%, var(--crimson-deep));
+  border-color: #e6c56c;
+}
+.status-strip.waiting {
+  background: linear-gradient(180deg, #fffaf0, var(--parchment));
+  color: var(--ink); border-color: var(--gold);
+  box-shadow: 0 3px 8px rgba(16,20,40,.22);
+}
+.status-strip.waiting .em { color: var(--crimson-deep); }
 
 /* hand */
 .hand-zone {
-  flex: 1; display: flex; align-items: flex-end; gap: 9px;
-  /* generous top padding: staged cards lift 18px and must not clip against the
-     scroll container (overflow-x:auto forces vertical clipping too) */
-  padding: 30px 14px 4px; overflow-x: auto;
+  --hand-card-w: var(--card-w);
+  --hand-gap: 9px;
+  flex: 1; display: flex; align-items: flex-end; justify-content: center;
+  padding: 30px 14px 4px; overflow: visible; min-width: 0;
   min-height: calc(var(--card-h, 118px) + 40px);
 }
 .hand-card {
-  width: var(--card-w); flex-shrink: 0; position: relative;
-  transition: transform .15s ease; cursor: pointer;
+  width: var(--hand-card-w); flex-shrink: 0; position: relative;
+  transition: transform .15s ease, width .22s ease, margin-left .22s ease; cursor: pointer;
   filter: drop-shadow(0 3px 6px rgba(20,12,6,.4));
 }
+.hand-card + .hand-card { margin-left: var(--hand-gap); }
 .hand-card svg { width: 100%; height: auto; display: block; pointer-events: none; }
 .hand-card:hover { transform: translateY(-6px); }
 .hand-card.staged { transform: translateY(-18px); filter: drop-shadow(0 8px 14px rgba(120,20,30,.5)); }
@@ -471,8 +496,6 @@ input {
   }
   .enemy-card { width: 136px; }
   .status-strip { margin-top: 10px; }
-  .hand-card:first-child { margin-left: auto; }
-  .hand-card:last-child { margin-right: auto; }
   .table-card { width: 52px; }
   .deck-label { color: #6a5a35; }
 }
@@ -486,6 +509,8 @@ input {
 
 @media (max-width: 480px) {
   :root { --deck-w: 52px; }
+  .home-inner { padding: 22px 20px 24px; }
+  .title { font-size: 3.6rem; }
   .enemy-card { width: 96px; }
   .seat-fan { width: 96px; height: 38px; }
   .fan-card { width: 24px; }
