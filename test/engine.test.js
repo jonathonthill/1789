@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newGame, playCards, yieldTurn, discardForDamage, chooseNext, soloRegroup,
+  surrenderGame,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
   currentShield, effectiveEnemyAttack, cardValue,
 } from '../shared/engine.js';
@@ -320,4 +321,12 @@ test('view hides other hands but shows counts', () => {
   assert.equal(v.you.hand.length, 6);
   assert.equal(v.players[0].handCount, 6);
   assert.ok(!('hand' in v.players[0]));
+});
+
+test('a citoyen may surrender the game', () => {
+  const s = newGame(names2, { seed: 21 });
+  surrenderGame(s, 1);
+  assert.equal(s.phase, 'lost');
+  assert.match(s.result.reason, /Robespierre surrendered/);
+  assert.equal(s.lastEvent.type, 'loss');
 });

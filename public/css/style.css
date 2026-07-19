@@ -168,6 +168,13 @@ input {
 }
 .topbar-room { font-size: .8rem; color: var(--gold-hi); letter-spacing: .18em; opacity: .8; }
 .topbar-spacer { flex: 1; }
+.surrender-btn {
+  padding: 6px 9px; border: 1px solid #d98a97; border-radius: 7px;
+  background: rgba(158, 34, 53, .38); color: #fff1e5;
+  font-family: var(--serif-display); font-size: .68rem; letter-spacing: .04em;
+  cursor: pointer;
+}
+.surrender-btn:hover { background: rgba(185, 58, 80, .65); }
 
 /* Narrow: a plain tan band across the top. Wide: a framed table panel. */
 .board-wrap { padding: 0; display: flex; justify-content: center; }
@@ -509,6 +516,10 @@ input {
 
 @media (max-width: 480px) {
   :root { --deck-w: 52px; }
+  .topbar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .topbar-title { font-size: .95rem; letter-spacing: .12em; }
+  .topbar-room { font-size: .68rem; letter-spacing: .08em; }
+  .surrender-btn { padding: 6px; font-size: .62rem; }
   .home-inner { padding: 22px 20px 24px; }
   .title { font-size: 3.6rem; }
   .enemy-card { width: 96px; }

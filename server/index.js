@@ -166,6 +166,7 @@ io.on('connection', socket => {
         case 'yield': engine.yieldTurn(s, idx); break;
         case 'discard': engine.discardForDamage(s, idx, msg.cards ?? []); break;
         case 'chooseNext': engine.chooseNext(s, idx, msg.target); break;
+        case 'surrender': engine.surrenderGame(s, idx); break;
         default: return cb?.({ ok: false, error: 'Unknown action.' });
       }
       if (s.phase === 'won' || s.phase === 'lost') room.status = 'ended';

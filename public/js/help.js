@@ -82,7 +82,7 @@ export function pileInfo(kind, view) {
   }
   if (kind === 'tavern') {
     return `<h3>🥖 ${TERMS.tavern}</h3>
-      <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally the People draws from it; ♦ Raid the Treasury slips the shuffled Fallen <i>under</i> it.</p>
+      <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally the People draws from it; ♦ Raid la Prison slips the freed and shuffled Fallen <i>under</i> it.</p>
       <p>An enemy felled with <b>exactly</b> the right damage is won to the Revolution: placed on top, ready to be drawn and fight for you at full strength.</p>
       <p>An empty deck is no defeat — you simply draw nothing.</p>`;
   }
@@ -92,7 +92,7 @@ export function pileInfo(kind, view) {
       return `<span class="mini-card ${red ? 'red' : ''}">${miniLabel(c)}</span>`;
     }).join('') || '<i>none yet</i>';
     return `<h3>🕯 ${TERMS.discard}</h3>
-      <p><b>${view.discardCount}</b> cards lost to the struggle — spent attacks, sacrifices, and guillotined royals. ♦ Raid the Treasury can return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
+      <p><b>${view.discardCount}</b> cards lost to the struggle — spent attacks, sacrifices, and guillotined royals. ♦ Raid la Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
   if (kind === 'enemy') return enemyInfo(view);

@@ -77,18 +77,23 @@ const POWER_ICONS = {
     <path d="M42 22 L62 23.7 L62 60.3 L42 62 Z" fill="${BLUE}"/>
     <path d="M82 24.4 Q79 42 84 58.6 L102 57 Q95 42 102 27 Z" fill="${RED}"/>
     <path d="M30 78 a10 10 0 0 1 16 -8 a10 10 0 0 1 16 8 q0 10 -16 22 q-16 -12 -16 -22 Z" fill="${RED}"/>`,
-  // Raid the Treasury — a chest flung open, gold heaped and spilling
+  // Raid la Prison — a prisoner steps through a broken barred door
   D: `
-    <path d="M32 54 Q18 22 58 15 Q68 14 71 20 Q45 24 40 52 Z" fill="#5d4326" stroke="${INK}" stroke-width="2.5"/>
-    <path d="M32 54 Q40 38 52 44 Q58 32 68 42 Q80 36 88 54 Z" fill="${GOLD_HI}" stroke="#7d6318" stroke-width="2"/>
-    <rect x="28" y="54" width="64" height="42" rx="6" fill="#7a5a33" stroke="${INK}" stroke-width="2.5"/>
-    <rect x="28" y="54" width="64" height="9" fill="#5d4326"/>
-    <rect x="52" y="54" width="16" height="42" fill="#5d4326" opacity=".55"/>
-    <circle cx="60" cy="78" r="6" fill="${GOLD_HI}" stroke="#7d6318" stroke-width="2"/>
-    <circle cx="18" cy="98" r="9" fill="${GOLD_HI}" stroke="#7d6318" stroke-width="2"/>
-    <circle cx="102" cy="92" r="8" fill="${GOLD_HI}" stroke="#7d6318" stroke-width="2"/>
-    <circle cx="106" cy="106" r="7" fill="${GOLD_HI}" stroke="#7d6318" stroke-width="2"/>
-    <path d="M98 22 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 Z" fill="${GOLD_HI}"/>`,
+    <path d="M12 108 V42 Q12 16 38 16 H82 Q108 16 108 42 V108" fill="#9b9284" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M27 108 V46 Q27 29 44 29 H76 Q93 29 93 46 V108 Z" fill="${BLUE_DEEP}" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M12 45 H108 M14 72 H27 M93 72 H106 M16 22 L30 34 M90 34 L104 22" fill="none" stroke="#c9bda8" stroke-width="5"/>
+    <g stroke="#6b6258" stroke-width="4" stroke-linecap="round">
+      <line x1="36" y1="34" x2="36" y2="102"/>
+      <line x1="52" y1="32" x2="52" y2="65"/>
+      <line x1="68" y1="32" x2="68" y2="60"/>
+      <line x1="84" y1="34" x2="84" y2="102"/>
+    </g>
+    <path d="M55 67 L46 51 M65 67 L75 48" fill="none" stroke="#e8c39e" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="61" cy="61" r="11" fill="#e8c39e" stroke="${INK}" stroke-width="2"/>
+    <path d="M42 108 Q44 78 61 76 Q79 78 82 108 Z" fill="${BLUE}" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M53 78 L69 78 L66 91 L56 91 Z" fill="#f2ede1"/>
+    <path d="M56 91 H66 L65 100 H57 Z" fill="${RED}"/>
+    <path d="M47 53 L42 45 M74 50 L81 42" stroke="${GOLD_HI}" stroke-width="3" stroke-linecap="round"/>`,
   // Fury of the Mob — a burning torch
   C: `
     <path d="M52 58 L68 58 L64 112 L56 112 Z" fill="#6b4a2f" stroke="${INK}" stroke-width="2"/>
@@ -111,8 +116,9 @@ const POWER_ICONS = {
     <line x1="107" y1="71" x2="81" y2="97" stroke="${INK}" stroke-width="2.5"/>
     <circle cx="94" cy="84" r="4.5" fill="${INK}"/>`,
 };
-const POWER_WORD = { H: 'RALLY', D: 'RAID', C: 'THE MOB ×2', S: 'BARRICADE' };
-const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'RESHUFFLE FALLEN', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
+const POWER_WORD = { H: 'RALLY', D: 'RAID LA PRISON', C: 'THE MOB ×2', S: 'BARRICADE' };
+const POWER_WORD_SIZE = { H: 21, D: 18, C: 21, S: 21 };
+const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'FREE THE FALLEN', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
 const POWER_ACTION_SIZE = { H: 18, D: 16, C: 18, S: 18 };
 
 function numberArt(card) {
@@ -121,10 +127,10 @@ function numberArt(card) {
     <circle cx="120" cy="160" r="72" fill="none" stroke="${GOLD}" stroke-width="2"/>
     <circle cx="120" cy="160" r="65" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1" opacity=".9"/>
     <g transform="translate(60,100)">${POWER_ICONS[card.s]}</g>
-    <rect x="20" y="238" width="200" height="64" rx="9" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1.5"/>
-    <text x="120" y="262" font-size="21" text-anchor="middle" fill="${col}"
+    <rect x="20" y="252" width="200" height="64" rx="9" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1.5"/>
+    <text x="120" y="276" font-size="${POWER_WORD_SIZE[card.s]}" text-anchor="middle" fill="${col}"
       font-family="${SERIF}" font-weight="700" letter-spacing="1.5">${POWER_WORD[card.s]}</text>
-    <text x="120" y="287" font-size="${POWER_ACTION_SIZE[card.s]}" text-anchor="middle" fill="${INK}" opacity=".76"
+    <text x="120" y="301" font-size="${POWER_ACTION_SIZE[card.s]}" text-anchor="middle" fill="${INK}" opacity=".76"
       font-family="${SERIF}" font-weight="700" letter-spacing=".25">${POWER_ACTION[card.s]}</text>`;
 }
 

@@ -14,7 +14,7 @@ export const TERMS = {
 
 export const SUIT_META = {
   H: { symbol: '♥', color: 'red',   power: 'Rally the People',   short: 'Draw',    desc: 'Recruit cards equal to the attack value from Le Peuple, starting with you, round the table, skipping full hands.' },
-  D: { symbol: '♦', color: 'red',   power: 'Raid the Treasury',  short: 'Return',  desc: 'Shuffle the Fallen and slip cards equal to the attack value under Le Peuple — recovered resources rejoin the cause.' },
+  D: { symbol: '♦', color: 'red',   power: 'Raid la Prison',     short: 'Return',  desc: 'Free the Fallen, shuffle them, and slip cards equal to the attack value under Le Peuple — liberated citoyens rejoin the cause.' },
   C: { symbol: '♣', color: 'black', power: 'Fury of the Mob',    short: '×2 dmg', desc: 'The mob doubles your blow — damage dealt counts twice.' },
   S: { symbol: '♠', color: 'black', power: 'Man the Barricades', short: 'Shield', desc: 'Reduce the enemy’s attack by the attack value played. Barricades stack and hold until the enemy falls.' },
 };
@@ -42,7 +42,7 @@ export const ENEMIES = {
     name: 'Foullon de Doué', title: 'Controller of Finances',
     threats: [
       'If the people are hungry, let them eat hay!',
-      'Your treasury? Everything you own already passed through my hands.',
+      'Raid my prisons? Every gaoler in Paris answers to me.',
       'I have taxed your bread, your salt, your windows. Next: your breath.',
     ],
   },
@@ -74,7 +74,7 @@ export const ENEMIES = {
   QD: {
     name: 'Madame du Barry', title: 'Comtesse, Favourite of the King',
     threats: [
-      'You would raid the treasury? Darling, I *am* the treasury.',
+      'You would raid la Prison? Your friends look better behind bars.',
       'These diamonds cost more than your entire faubourg. Kneel.',
       'One more moment, executioner — and for you, rabble, not even that.',
     ],
@@ -108,7 +108,7 @@ export const ENEMIES = {
     name: 'Louis XV', title: 'The Well-Beloved',
     threats: [
       'Après moi, le déluge. And here you are — the flood. How tedious.',
-      'I emptied the treasury on wars and mistresses. There is nothing left to raid.',
+      'I filled the prisons with dissenters. You will not empty them.',
       'France survived my indifference. It will not survive my anger.',
     ],
   },

@@ -103,6 +103,7 @@ function sendAction(action, cb) {
       else if (action.type === 'yield') engine.yieldTurn(s, 0);
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
       else if (action.type === 'regroup') engine.soloRegroup(s);
+      else if (action.type === 'surrender') engine.surrenderGame(s, 0);
       onView(engine.viewFor(s, 0));
       cb?.({ ok: true });
     } catch (e) { cb?.({ ok: false, error: e.message }); }
@@ -496,19 +497,36 @@ $('#btn-rematch').onclick = () => {
     net().emit('rematch', {}, flashError);
   }
 };
+function exitToHome(forgetSession = false) {
+  if (mode === 'mp' && forgetSession) { saveSession(null); session = null; }
+  if (mode === 'mp') { socket?.disconnect(); socket = null; }
+  mode = null; soloState = null; view = null; staged = [];
+  show('home');
+}
+
 $('#btn-quit').onclick = () => {
   const msg = mode === 'mp'
     ? 'Leave this salon? Your seat stays reserved — rejoin any time with the same browser.'
     : 'Abandon this solo game?';
   if (!window.confirm(msg)) return;
-  if (mode === 'mp') { socket?.disconnect(); socket = null; } // keep session for rejoin
-  mode = null; soloState = null; view = null; staged = [];
-  show('home');
+  exitToHome(); // multiplayer keeps its seat for rejoining
+};
+$('#btn-surrender').onclick = () => {
+  const msg = mode === 'mp'
+    ? 'Surrender this game for everyone and exit the salon?'
+    : 'Surrender this solo game and exit?';
+  if (!window.confirm(msg)) return;
+  if (mode === 'mp') {
+    sendAction({ type: 'surrender' }, res => {
+      if (!res?.ok) return flashError(res);
+      exitToHome(true);
+    });
+  } else {
+    exitToHome();
+  }
 };
 $('#btn-home').onclick = () => {
-  if (mode === 'mp') { saveSession(null); session = null; socket?.disconnect(); socket = null; }
-  mode = null; soloState = null; view = null; staged = [];
-  show('home');
+  exitToHome(true);
 };
 
 // ── sheets and help panel ───────────────────────────────────────────────────

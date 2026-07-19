@@ -235,7 +235,7 @@ export function playCards(state, playerIdx, cards) {
     const healed = state.discard.splice(0, Math.min(value, state.discard.length));
     state.tavern.unshift(...healed); // under the deck, no peeking
     state._lastHealed = healed.length;
-    if (healed.length) log(state, `${player.name} raids the treasury — ${healed.length} of the Fallen return beneath Le Peuple.`);
+    if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} of the Fallen return beneath Le Peuple.`);
   }
   if (suits.includes('H') && active('H')) {
     let toDraw = value;
@@ -376,6 +376,20 @@ export function discardForDamage(state, playerIdx, cards) {
   log(state, `${player.name} sacrifices ${cards.length} card${cards.length === 1 ? '' : 's'} to survive.`);
   state.pendingDamage = 0;
   advanceTurn(state);
+  return state;
+}
+
+export function surrenderGame(state, playerIdx) {
+  if (state.phase === 'won' || state.phase === 'lost') throw new Error('The game is already over.');
+  const player = state.players[playerIdx];
+  if (!player) throw new Error('Unknown citoyen.');
+  state.phase = 'lost';
+  state.pendingDamage = 0;
+  state.lastEffects = null;
+  state.actionSeq++;
+  state.result = { reason: `${player.name} surrendered. The Revolution is over.` };
+  state.lastEvent = { type: 'loss' };
+  log(state, state.result.reason);
   return state;
 }
 
