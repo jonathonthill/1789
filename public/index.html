@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1c2f57">
+<title>1789</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%23a4243b'/%3E%3Ccircle cx='50' cy='50' r='31' fill='%23f5f0e6'/%3E%3Ccircle cx='50' cy='50' r='16' fill='%231c2f57'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ═══ HOME ═══ -->
+<section id="screen-home" class="screen">
+  <div class="home-inner">
+    <div class="cockade" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1 class="title">1789</h1>
+    <p class="tagline">A cooperative card game of revolution.<br>Overthrow the twelve royals of the Ancien Régime.</p>
+    <label class="field">
+      <span>Your name, citoyen</span>
+      <input id="name-input" maxlength="16" placeholder="e.g. Danton" autocomplete="off">
+    </label>
+    <div class="home-buttons">
+      <button id="btn-resume" class="btn primary" hidden></button>
+      <button id="btn-create" class="btn primary">Form a Salon <small>host a game for 2–4</small></button>
+      <div class="join-row">
+        <input id="code-input" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters">
+        <button id="btn-join" class="btn">Join</button>
+      </div>
+      <button id="btn-solo" class="btn">Solo — Défendre Seul <small>1 player, medal victories</small></button>
+      <button id="btn-rules" class="btn ghost">How to Play</button>
+    </div>
+    <p id="home-error" class="error" hidden></p>
+  </div>
+</section>
+
+<!-- ═══ LOBBY ═══ -->
+<section id="screen-lobby" class="screen" hidden>
+  <div class="lobby-inner">
+    <h2>The Salon Convenes</h2>
+    <p class="lobby-hint">Fellow citoyens join with this code:</p>
+    <div id="lobby-code" class="big-code">····</div>
+    <ul id="lobby-players" class="lobby-players"></ul>
+    <p id="lobby-status" class="lobby-status">Waiting for citoyens… (2–4 to begin)</p>
+    <button id="btn-start" class="btn primary" hidden>Begin the Revolution</button>
+    <button id="btn-leave" class="btn ghost">Leave</button>
+    <p id="lobby-error" class="error" hidden></p>
+  </div>
+</section>
+
+<!-- ═══ GAME ═══ -->
+<section id="screen-game" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-quit" class="topbar-title" title="Leave the game">⚜ 1789</button>
+    <span id="topbar-room" class="topbar-room"></span>
+    <span class="topbar-spacer"></span>
+    <button id="btn-journal" class="iconbtn" title="Journal">📜</button>
+    <button id="btn-help" class="iconbtn" title="Help">?</button>
+  </header>
+
+  <div class="board-wrap">
+    <div class="board">
+      <div id="seats" class="seats"></div>
+      <div class="board-center">
+        <button class="deck" id="pile-castle" data-info="castle">
+          <span class="deck-stack" id="stack-castle"></span>
+          <span class="deck-count" id="count-castle"></span>
+          <span class="deck-label">Régime</span>
+        </button>
+        <div id="enemy-zone" class="enemy-zone" data-info="enemy">
+          <div id="enemy-card" class="enemy-card"></div>
+          <div class="enemy-facts">
+            <div id="enemy-name" class="enemy-name"></div>
+            <div id="enemy-title" class="enemy-title"></div>
+            <div class="hp-wrap"><div id="hp-bar" class="hp-bar"></div><span id="hp-text" class="hp-text"></span></div>
+            <div id="enemy-attack" class="enemy-attack"></div>
+            <div id="enemy-immunity" class="enemy-immunity"></div>
+          </div>
+        </div>
+        <div class="deck-col">
+          <button class="deck" id="pile-tavern" data-info="tavern">
+            <span class="deck-stack" id="stack-tavern"></span>
+            <span class="deck-count" id="count-tavern"></span>
+            <span class="deck-label">Peuple</span>
+          </button>
+          <button class="deck" id="pile-discard" data-info="discard">
+            <span class="deck-stack" id="stack-discard"></span>
+            <span class="deck-count" id="count-discard"></span>
+            <span class="deck-label">Fallen</span>
+          </button>
+        </div>
+      </div>
+      <div id="played-row" class="played-row"></div>
+    </div>
+  </div>
+
+  <div id="status-strip" class="status-strip" data-info="status"></div>
+
+  <div id="hand-zone" class="hand-zone"></div>
+
+  <div id="action-bar" class="action-bar">
+    <div id="projection" class="projection"></div>
+    <div class="action-buttons">
+      <button id="btn-regroup" class="btn small ghost" hidden>Regroup (2)</button>
+      <button id="btn-yield" class="btn small" hidden>Lay Low</button>
+      <button id="btn-confirm" class="btn small primary" disabled>Attack</button>
+    </div>
+  </div>
+
+  <div id="pause-banner" class="pause-banner" hidden></div>
+</section>
+
+<!-- ═══ END ═══ -->
+<section id="screen-end" class="screen" hidden>
+  <div class="end-inner">
+    <div id="end-emblem" class="end-emblem"></div>
+    <h2 id="end-title"></h2>
+    <p id="end-detail"></p>
+    <button id="btn-rematch" class="btn primary">Once More to the Barricades</button>
+    <button id="btn-home" class="btn ghost">Back to the Streets</button>
+  </div>
+</section>
+
+<!-- ═══ OVERLAYS ═══ -->
+<div id="entrance-overlay" class="overlay" hidden>
+  <div class="entrance-stage">
+    <div id="entrance-card" class="entrance-card"></div>
+    <div class="speech">
+      <div id="entrance-threat" class="speech-text"></div>
+    </div>
+    <div id="entrance-facts" class="entrance-facts"></div>
+    <div class="entrance-dismiss">tap to continue</div>
+  </div>
+</div>
+
+<div id="guillotine-overlay" class="overlay" hidden>
+  <div class="guillotine-stage">
+    <div class="g-frame">
+      <div class="g-blade" id="g-blade"></div>
+      <div id="g-victim" class="g-victim"></div>
+    </div>
+    <div id="g-caption" class="g-caption"></div>
+  </div>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-grip"></div>
+    <div id="sheet-content"></div>
+  </div>
+</div>
+
+<div id="help-panel" class="help-panel" hidden>
+  <div class="help-inner">
+    <button id="help-close" class="iconbtn help-close">✕</button>
+    <div id="help-content"></div>
+  </div>
+</div>
+
+<div id="coach" class="coach" hidden>
+  <div id="coach-bubble" class="coach-bubble">
+    <p id="coach-text"></p>
+    <button id="coach-next" class="btn small primary">Next</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
