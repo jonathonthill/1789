@@ -253,7 +253,9 @@ $('#entrance-overlay').addEventListener('click', dismissEntrance);
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 function renderGame(v) {
-  if ($('#screen-game').hidden && v.phase !== 'won' && v.phase !== 'lost') show('game');
+  const gameScreen = $('#screen-game');
+  if (gameScreen.hidden && v.phase !== 'won' && v.phase !== 'lost') show('game');
+  gameScreen.classList.toggle('multiplayer', mode === 'mp');
   $('#topbar-room').textContent = mode === 'mp' ? `salon ${v.roomCode}` : 'solo';
 
   // enemy
@@ -404,7 +406,8 @@ function renderHand(v) {
 function layoutHand(count = view?.you?.hand.length ?? 0) {
   const zone = $('#hand-zone');
   if (!count || !zone.clientWidth) return;
-  const target = window.matchMedia('(min-width: 800px)').matches ? 104 : 84;
+  const compactMultiplayer = mode === 'mp' && window.innerWidth <= 480 && window.innerHeight <= 760;
+  const target = window.matchMedia('(min-width: 800px)').matches ? 104 : (compactMultiplayer ? 72 : 84);
   const available = Math.max(1, zone.clientWidth - 28);
   const naturalGap = 9;
   let width = target;
