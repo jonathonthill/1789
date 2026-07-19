@@ -430,7 +430,7 @@ function renderActions(v) {
 
   confirm.hidden = false;
   if (v.phase === 'play' && myTurn) {
-    confirm.textContent = 'Attack';
+    confirm.textContent = 'Attaquez!';
     confirm.disabled = staged.length === 0 || engine.validatePlay(ps, you.index, staged) !== null;
     yield_.hidden = false;
     yield_.disabled = !v.canYield;

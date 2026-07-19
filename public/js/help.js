@@ -30,7 +30,7 @@ export function statusText(view, stagedCount) {
   if (view.phase === 'play') {
     if (!yourTurn) return `Awaiting <span class="em">${cur.name}</span>… (they attack ${enemyName(view)} or lay low)`;
     const bits = [`Your turn, citoyen. Tap cards to stage an attack on <span class="em">${enemyName(view)}</span>`];
-    if (stagedCount > 0) bits.push(`then press <span class="em">Attack</span>`);
+    if (stagedCount > 0) bits.push(`then press <span class="em">Attaquez!</span>`);
     else if (view.canYield) bits.push(`or <span class="em">Lay Low</span> and take the hit`);
     else bits.push(`— you <span class="em">cannot lay low</span> (everyone else just did)`);
     if (view.you.hand.length === 0) return `You hold no cards. ${view.canYield ? 'You must <span class="em">Lay Low</span>.' : '<span class="em">You cannot act…</span>'}`;
