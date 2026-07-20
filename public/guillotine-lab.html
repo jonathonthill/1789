@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111a38">
+  <title>Guillotine Motion Lab · 1789</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/guillotine-lab.css">
+</head>
+<body class="lab-page">
+  <main class="lab-shell">
+    <header class="lab-header">
+      <div>
+        <p class="lab-kicker">1789 · motion study</p>
+        <h1>Guillotine Animation Lab</h1>
+        <p>Replay the isolated effect, slow it down, and tune each contact point without playing a round.</p>
+      </div>
+      <a class="lab-back" href="/">Return to game</a>
+    </header>
+
+    <section class="lab-workbench" aria-label="Animation workbench">
+      <div class="lab-preview-panel">
+        <div class="lab-preview" id="lab-preview">
+          <div class="lab-grid" aria-hidden="true"></div>
+          <div class="guillotine-stage lab-guillotine-stage">
+            <div class="g-frame">
+              <div class="g-blade" id="g-blade"></div>
+              <div id="g-victim" class="g-victim"></div>
+            </div>
+            <div id="g-caption" class="g-caption"></div>
+          </div>
+          <div class="lab-timecode" id="lab-timecode" aria-live="off">0.00 s</div>
+        </div>
+
+        <div class="lab-transport">
+          <button id="replay" class="btn primary" type="button">Replay <kbd>Space</kbd></button>
+          <button id="reset" class="btn ghost" type="button">Production defaults</button>
+          <label class="lab-toggle"><input id="loop" type="checkbox"> Loop</label>
+        </div>
+
+        <div class="lab-timeline" aria-label="Animation event timeline">
+          <div class="timeline-track">
+            <span class="timeline-fill" id="timeline-fill"></span>
+            <span class="timeline-marker marker-blade" id="marker-blade"><b>Blade starts</b></span>
+            <span class="timeline-marker marker-audio" id="marker-audio"><b>Audible onset</b></span>
+            <span class="timeline-marker marker-peak" id="marker-peak"><b>Swish peak</b></span>
+            <span class="timeline-marker marker-split" id="marker-split"><b>Card separates</b></span>
+          </div>
+          <div class="timeline-scale"><span>0</span><span>0.6</span><span>1.2</span><span>1.8</span><span>2.4</span><span>3.0 s</span></div>
+        </div>
+      </div>
+
+      <aside class="lab-controls" aria-label="Animation controls">
+        <div class="control-heading">
+          <div>
+            <p class="lab-kicker">Live controls</p>
+            <h2>Timing &amp; motion</h2>
+          </div>
+          <button id="copy-settings" class="copy-button" type="button">Copy settings</button>
+        </div>
+
+        <label class="select-control">
+          <span>Royal card</span>
+          <select id="royal">
+            <option value="JS">Marquis de Launay · J♠</option>
+            <option value="JC">Baron de Besenval · J♣</option>
+            <option value="JD">Foullon de Doué · J♦</option>
+            <option value="JH">Bertier de Sauvigny · J♥</option>
+            <option value="QS">Madame de Pompadour · Q♠</option>
+            <option value="QC">Marie de Médicis · Q♣</option>
+            <option value="QD">Madame du Barry · Q♦</option>
+            <option value="QH">Marie Antoinette · Q♥</option>
+            <option value="KS">Louis XIII · K♠</option>
+            <option value="KC">Louis XIV · K♣</option>
+            <option value="KD">Louis XV · K♦</option>
+            <option value="KH">Louis XVI · K♥</option>
+          </select>
+        </label>
+
+        <label class="select-control">
+          <span>Playback speed</span>
+          <select id="speed">
+            <option value="0.25">¼× — inspect</option>
+            <option value="0.5">½× — slow</option>
+            <option value="1" selected>1× — production</option>
+            <option value="1.5">1½× — fast</option>
+          </select>
+        </label>
+
+        <div class="control-group">
+          <h3>Blade</h3>
+          <label class="range-control">
+            <span>Drop delay <output id="blade-delay-out">300 ms</output></span>
+            <input id="blade-delay" type="range" min="0" max="700" step="10" value="300">
+          </label>
+          <label class="range-control">
+            <span>Drop duration <output id="blade-duration-out">660 ms</output></span>
+            <input id="blade-duration" type="range" min="300" max="1200" step="10" value="660">
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3>Card halves</h3>
+          <label class="range-control">
+            <span>Separation moment <output id="split-delay-out">870 ms</output></span>
+            <input id="split-delay" type="range" min="300" max="1500" step="10" value="870">
+          </label>
+          <label class="range-control">
+            <span>Flutter duration <output id="split-duration-out">1800 ms</output></span>
+            <input id="split-duration" type="range" min="600" max="2600" step="10" value="1800">
+          </label>
+          <label class="range-control">
+            <span>Horizontal spread <output id="spread-out">34 px</output></span>
+            <input id="spread" type="range" min="4" max="70" step="1" value="34">
+          </label>
+          <label class="range-control">
+            <span>Rotation <output id="rotation-out">27°</output></span>
+            <input id="rotation" type="range" min="0" max="35" step="1" value="27">
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3>Sound</h3>
+          <label class="range-control">
+            <span>Sample start <output id="sound-delay-out">450 ms</output></span>
+            <input id="sound-delay" type="range" min="0" max="900" step="10" value="450">
+          </label>
+          <label class="range-control">
+            <span>Volume <output id="volume-out">50%</output></span>
+            <input id="volume" type="range" min="0" max="100" step="1" value="50">
+          </label>
+          <p class="control-note">The WAV has ~128 ms of lead-in and its strongest transient is ~500 ms after playback begins.</p>
+        </div>
+
+        <div class="lab-readout" id="lab-readout"></div>
+      </aside>
+    </section>
+  </main>
+
+  <script type="module" src="/js/guillotine-lab.js"></script>
+</body>
+</html>

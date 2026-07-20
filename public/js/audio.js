@@ -1,21 +1,14 @@
-// Procedural music and sound for 1789. Everything is synthesized with the Web
-// Audio API so the game stays lightweight and works offline on the local LAN.
+// MIDI-backed music and procedural sound effects for 1789. Everything is
+// synthesized with the Web Audio API so the game works offline on the local LAN.
+
+import { parseMidi } from '/js/midi.js';
 
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 
-const SCENES = {
-  intro: {
-    tempo: 96,
-    melody: [74, 77, 81, 82, 81, 77, 74, 69, 74, 77, 81, 86, 84, 81, 77, 74],
-    bass:   [38, null, 45, null, 41, null, 45, null, 38, null, 45, null, 43, null, 45, null],
-  },
-  game: {
-    tempo: 72,
-    melody: [62, null, 65, 69, null, 67, 65, null, 60, null, 64, 67, null, 65, 64, null,
-      62, null, 65, 70, null, 69, 65, null, 60, null, 64, 69, 67, 65, 62, null],
-    bass:   [38, null, null, null, 45, null, null, null, 36, null, null, null, 41, null, null, null,
-      38, null, null, null, 46, null, null, null, 36, null, null, null, 45, null, null, null],
-  },
+const MIDI_URL = '/audio/do-you-hear-the-people-sing.mid';
+const SAMPLE_URLS = {
+  attack: '/audio/sword-clash.wav',
+  guillotine: '/audio/guillotine-swish.wav',
 };
 
 let ctx = null;
@@ -26,14 +19,38 @@ let noiseBuffer = null;
 let scheduler = null;
 let desiredScene = 'intro';
 let activeScene = null;
-let nextNoteTime = 0;
-let step = 0;
+let midiScore = null;
+let midiLoad = null;
+let midiEpoch = 0;
+let midiEventIndex = 0;
+let sampleBuffers = {};
+let sampleLoad = null;
 let muted = (() => {
   try { return localStorage.getItem('r1789_audio_muted') === 'true'; } catch { return false; }
 })();
 
 export function isSupported() { return !!AudioContextClass; }
 export function isMuted() { return muted; }
+
+// User-set volumes (0..1) layered on top of the per-scene music level and the
+// effects bus. Persisted so a player's mix survives reloads.
+const SFX_BASE = 0.52;
+const clamp01 = v => Math.max(0, Math.min(1, Number(v)));
+function loadVol(key, dflt) {
+  try { const v = parseFloat(localStorage.getItem(key)); return Number.isFinite(v) ? clamp01(v) : dflt; }
+  catch { return dflt; }
+}
+function persistVol(key, v) { try { localStorage.setItem(key, String(v)); } catch {} }
+let musicVol = loadVol('r1789_music_vol', 0.85);
+let sfxVol = loadVol('r1789_sfx_vol', 0.9);
+function musicSceneGain() { return (desiredScene === 'intro' ? 0.46 : 0.38) * musicVol; }
+function applyMusicGain(smooth = 0.18) {
+  if (ctx && musicBus && !muted && desiredScene) musicBus.gain.setTargetAtTime(musicSceneGain(), ctx.currentTime, smooth);
+}
+export function getMusicVolume() { return musicVol; }
+export function getSfxVolume() { return sfxVol; }
+export function setMusicVolume(v) { musicVol = clamp01(v); persistVol('r1789_music_vol', musicVol); applyMusicGain(0.04); }
+export function setSfxVolume(v) { sfxVol = clamp01(v); persistVol('r1789_sfx_vol', sfxVol); if (sfxBus) sfxBus.gain.value = SFX_BASE * sfxVol; }
 
 function ensureContext() {
   if (ctx || !AudioContextClass) return;
@@ -47,8 +64,10 @@ function ensureContext() {
   compressor.ratio.value = 5;
   compressor.attack.value = .004;
   compressor.release.value = .22;
-  musicBus.gain.value = .15;
-  sfxBus.gain.value = .52;
+  // The music used to sit around 10–15 dB below the effects. Keep effects crisp,
+  // but give the arrangement enough level to read as an actual backing track.
+  musicBus.gain.value = .42;
+  sfxBus.gain.value = SFX_BASE * sfxVol;
   master.gain.value = muted ? 0 : .72;
   musicBus.connect(master);
   sfxBus.connect(master);
@@ -67,8 +86,54 @@ export async function unlock() {
     try { await ctx.resume(); } catch { return false; }
   }
   master.gain.setTargetAtTime(.72, ctx.currentTime, .03);
+  await Promise.all([loadMidi(), loadSamples()]);
   startMusic();
   return true;
+}
+
+async function loadMidi() {
+  if (midiScore) return midiScore;
+  if (!midiLoad) {
+    midiLoad = fetch(MIDI_URL)
+      .then(res => {
+        if (!res.ok) throw new Error(`MIDI request failed (${res.status})`);
+        return res.arrayBuffer();
+      })
+      .then(parseMidi)
+      .then(score => {
+        if (!score.notes.length) throw new Error('MIDI contains no playable notes');
+        midiScore = score;
+        return score;
+      })
+      .catch(err => {
+        console.warn('Background MIDI could not be loaded:', err);
+        midiLoad = null;
+        return null;
+      });
+  }
+  return midiLoad;
+}
+
+async function loadSamples() {
+  if (Object.keys(sampleBuffers).length === Object.keys(SAMPLE_URLS).length) return sampleBuffers;
+  if (!sampleLoad) {
+    sampleLoad = Promise.all(Object.entries(SAMPLE_URLS).map(async ([name, url]) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${name} sample request failed (${res.status})`);
+      const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+      return [name, buffer];
+    }))
+      .then(entries => {
+        sampleBuffers = Object.fromEntries(entries);
+        return sampleBuffers;
+      })
+      .catch(err => {
+        console.warn('Sound-effect samples could not be loaded:', err);
+        sampleLoad = null;
+        return sampleBuffers;
+      });
+  }
+  return sampleLoad;
 }
 
 export async function toggleMuted() {
@@ -92,43 +157,70 @@ export function setScene(scene) {
   if (!scene) {
     activeScene = null;
     if (scheduler) { clearInterval(scheduler); scheduler = null; }
+    midiEpoch = 0;
+    midiEventIndex = 0;
     musicBus.gain.setTargetAtTime(0, ctx.currentTime, .18);
     return;
   }
   if (activeScene !== scene) {
     activeScene = scene;
-    step = 0;
-    nextNoteTime = ctx.currentTime + .08;
   }
-  musicBus.gain.setTargetAtTime(scene === 'intro' ? .16 : .12, ctx.currentTime, .18);
+  applyMusicGain();
   startMusic();
 }
 
 function startMusic() {
-  if (!ctx || muted || !desiredScene || ctx.state !== 'running') return;
+  if (!ctx || muted || !desiredScene || !midiScore || ctx.state !== 'running') return;
   if (activeScene !== desiredScene) {
     activeScene = desiredScene;
-    step = 0;
-    nextNoteTime = ctx.currentTime + .08;
+  }
+  applyMusicGain();
+  if (!midiEpoch) {
+    midiEpoch = ctx.currentTime + .08;
+    midiEventIndex = 0;
   }
   if (!scheduler) scheduler = setInterval(scheduleMusic, 50);
   scheduleMusic();
 }
 
 function scheduleMusic() {
-  if (!ctx || muted || !activeScene || ctx.state !== 'running') return;
-  const score = SCENES[activeScene];
-  const eighth = 60 / score.tempo / 2;
-  if (nextNoteTime < ctx.currentTime) nextNoteTime = ctx.currentTime + .04;
-  while (nextNoteTime < ctx.currentTime + .2) {
-    const i = step % score.melody.length;
-    const melody = score.melody[i];
-    const bass = score.bass[i % score.bass.length];
-    if (melody != null) note(melody, nextNoteTime, eighth * .82, activeScene === 'intro' ? .105 : .065, 'triangle', musicBus);
-    if (bass != null) note(bass, nextNoteTime, eighth * 1.8, .075, 'sine', musicBus);
-    if (activeScene === 'intro' && i % 4 === 0) note(melody - 12, nextNoteTime, eighth * 1.6, .035, 'sine', musicBus);
-    nextNoteTime += eighth;
-    step++;
+  if (!ctx || muted || !activeScene || !midiScore || ctx.state !== 'running') return;
+  const horizon = ctx.currentTime + .25;
+  const loopLength = Math.max(1, midiScore.duration + .65);
+  let guard = 0;
+  while (guard++ < 2000) {
+    const event = midiScore.notes[midiEventIndex];
+    const time = midiEpoch + event.time;
+    if (time > horizon) break;
+    if (time >= ctx.currentTime - .04) playMidiNote(event, time);
+    midiEventIndex++;
+    if (midiEventIndex >= midiScore.notes.length) {
+      midiEventIndex = 0;
+      midiEpoch += loopLength;
+    }
+  }
+}
+
+function playMidiNote(event, time) {
+  const velocity = event.velocity / 127;
+  if (event.channel === 9) {
+    midiDrum(event.note, time, velocity);
+    return;
+  }
+
+  let wave = 'triangle';
+  let volume = .045;
+  if (event.program >= 40 && event.program <= 55) { wave = 'sawtooth'; volume = .027; } // strings
+  else if (event.program >= 24 && event.program <= 31) { wave = 'triangle'; volume = .038; } // guitar
+  else if (event.program >= 112) { wave = 'sine'; volume = .052; } // taiko / percussion
+  note(event.note, time, Math.min(event.duration, 3.5), Math.max(.006, volume * velocity), wave, musicBus);
+}
+
+function midiDrum(midi, time, velocity) {
+  if (midi <= 40) {
+    sweep(115, 48, time, .18, .055 * velocity, 'sine', musicBus);
+  } else {
+    noise(time, midi >= 49 ? .24 : .1, .045 * velocity, midi >= 49 ? 1800 : 500, 7200, musicBus);
   }
 }
 
@@ -154,7 +246,7 @@ function note(midi, time, duration, volume, wave = 'triangle', destination = sfx
   osc.stop(time + duration + .04);
 }
 
-function sweep(from, to, time, duration, volume, wave = 'sawtooth') {
+function sweep(from, to, time, duration, volume, wave = 'sawtooth', destination = sfxBus) {
   if (!ctx) return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -170,12 +262,12 @@ function sweep(from, to, time, duration, volume, wave = 'sawtooth') {
   gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
   osc.connect(filter);
   filter.connect(gain);
-  gain.connect(sfxBus);
+  gain.connect(destination);
   osc.start(time);
   osc.stop(time + duration + .03);
 }
 
-function noise(time, duration, volume, highpass = 120, lowpass = 5000) {
+function noise(time, duration, volume, highpass = 120, lowpass = 5000, destination = sfxBus) {
   if (!ctx || !noiseBuffer) return;
   const source = ctx.createBufferSource();
   const hp = ctx.createBiquadFilter();
@@ -186,9 +278,24 @@ function noise(time, duration, volume, highpass = 120, lowpass = 5000) {
   lp.type = 'lowpass'; lp.frequency.value = lowpass;
   gain.gain.setValueAtTime(volume, time);
   gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
-  source.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(sfxBus);
+  source.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(destination);
   source.start(time);
   source.stop(time + duration);
+}
+
+function playSample(name, time, volume = 1, offset = 0, duration = null) {
+  const buffer = sampleBuffers[name];
+  if (!ctx || !buffer || !sfxBus) return false;
+  const source = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  source.buffer = buffer;
+  gain.gain.value = volume;
+  source.connect(gain);
+  gain.connect(sfxBus);
+  const safeOffset = Math.min(offset, Math.max(0, buffer.duration - .01));
+  if (duration == null) source.start(time, safeOffset);
+  else source.start(time, safeOffset, Math.min(duration, buffer.duration - safeOffset));
+  return true;
 }
 
 export function sfx(kind) {
@@ -200,7 +307,7 @@ export function sfx(kind) {
     case 'deselect':
       note(69, t, .12, .13); break;
     case 'attack':
-      noise(t, .16, .22, 80, 1800); sweep(150, 62, t, .24, .24); note(50, t, .28, .12, 'square'); break;
+      if (!playSample('attack', t, .62)) note(86, t, .16, .13, 'triangle'); break;
     case 'sacrifice':
       noise(t, .28, .14, 500, 4200); sweep(360, 90, t, .3, .13, 'triangle'); break;
     case 'shuffle':
@@ -211,7 +318,9 @@ export function sfx(kind) {
       [38, 45, 50].forEach((m, i) => note(m, t + i * .045, .7, .12, i === 0 ? 'sawtooth' : 'triangle'));
       noise(t, .22, .08, 60, 900); break;
     case 'guillotine':
-      sweep(620, 75, t, .48, .22, 'sawtooth'); noise(t + .39, .14, .32, 80, 2400); break;
+      // The sample has 128ms of lead-in and peaks near 500ms. The tuned start
+      // puts its peak near 950ms, just after the card begins to separate.
+      if (!playSample('guillotine', t + .45, .5)) note(91, t + .95, .08, .1, 'triangle'); break;
     case 'yield':
       note(67, t, .22, .1, 'sine'); note(62, t + .08, .3, .08, 'sine'); break;
     case 'pamphleteer':

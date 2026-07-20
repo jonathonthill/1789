@@ -9,10 +9,10 @@ const SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣' };
 const SERIF = `'Cinzel', Georgia, serif`;
 
 export function suitColor(s) { return (s === 'H' || s === 'D') ? RED : INK; }
-export function rankLabel(r) { return r === 'X' ? '✒' : String(r); }
+export function rankLabel(r) { return r === 'X' ? '0' : String(r); }
 
 export function miniLabel(card) {
-  if (card.r === 'X') return '🪶P';
+  if (card.r === 'X') return '0✒';
   return `${card.r}${SUIT_GLYPH[card.s] ?? ''}`;
 }
 
@@ -58,13 +58,14 @@ function corners(card) {
   const col = card.s ? suitColor(card.s) : INK;
   const glyph = card.s ? SUIT_GLYPH[card.s] : '🪶';
   const label = rankLabel(card.r);
-  const fs = String(label).length > 1 ? 34 : 46;
-  const one = `
-      <text x="34" y="52" font-size="${fs}">${label}</text>
-      <text x="34" y="88" font-size="34">${glyph}</text>`;
+  // One size for every rank so numbers never shift vertically; the two-glyph
+  // '10' keeps that height and is condensed horizontally to fit the corner.
+  const wide = String(label).length > 1;
+  const rank = `<text x="34" y="52" font-size="46"${wide ? ' textLength="42" lengthAdjust="spacingAndGlyphs"' : ''}>${label}</text>`;
   return `
     <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
-      ${one}
+      ${rank}
+      <text x="34" y="88" font-size="34">${glyph}</text>
     </g>`;
 }
 
@@ -75,71 +76,31 @@ function frame() {
 }
 
 // ── power icons for number cards ────────────────────────────────────────────
-// Each is drawn in a 120×120 box centered on (60,60).
-const POWER_ICONS = {
-  // Rally the People — a tricolor standard
-  H: `
-    <line x1="38" y1="14" x2="38" y2="108" stroke="#6b4a2f" stroke-width="6" stroke-linecap="round"/>
-    <circle cx="38" cy="12" r="5" fill="${GOLD}"/>
-    <path d="M42 22 L102 27 Q95 42 102 57 L42 62 Z" fill="#f2ede1" stroke="${INK}" stroke-width="2"/>
-    <path d="M42 22 L62 23.7 L62 60.3 L42 62 Z" fill="${BLUE}"/>
-    <path d="M82 24.4 Q79 42 84 58.6 L102 57 Q95 42 102 27 Z" fill="${RED}"/>
-    <path d="M30 78 a10 10 0 0 1 16 -8 a10 10 0 0 1 16 8 q0 10 -16 22 q-16 -12 -16 -22 Z" fill="${RED}"/>`,
-  // Raid la Prison — a prisoner steps through a broken barred door
-  D: `
-    <path d="M12 108 V42 Q12 16 38 16 H82 Q108 16 108 42 V108" fill="#9b9284" stroke="${INK}" stroke-width="2.5"/>
-    <path d="M27 108 V46 Q27 29 44 29 H76 Q93 29 93 46 V108 Z" fill="${BLUE_DEEP}" stroke="${INK}" stroke-width="2.5"/>
-    <path d="M12 45 H108 M14 72 H27 M93 72 H106 M16 22 L30 34 M90 34 L104 22" fill="none" stroke="#c9bda8" stroke-width="5"/>
-    <g stroke="#6b6258" stroke-width="4" stroke-linecap="round">
-      <line x1="36" y1="34" x2="36" y2="102"/>
-      <line x1="52" y1="32" x2="52" y2="65"/>
-      <line x1="68" y1="32" x2="68" y2="60"/>
-      <line x1="84" y1="34" x2="84" y2="102"/>
-    </g>
-    <path d="M55 67 L46 51 M65 67 L75 48" fill="none" stroke="#e8c39e" stroke-width="7" stroke-linecap="round"/>
-    <circle cx="61" cy="61" r="11" fill="#e8c39e" stroke="${INK}" stroke-width="2"/>
-    <path d="M42 108 Q44 78 61 76 Q79 78 82 108 Z" fill="${BLUE}" stroke="${INK}" stroke-width="2.5"/>
-    <path d="M53 78 L69 78 L66 91 L56 91 Z" fill="#f2ede1"/>
-    <path d="M56 91 H66 L65 100 H57 Z" fill="${RED}"/>
-    <path d="M47 53 L42 45 M74 50 L81 42" stroke="${GOLD_HI}" stroke-width="3" stroke-linecap="round"/>`,
-  // Fury of the Mob — a burning torch
-  C: `
-    <path d="M52 58 L68 58 L64 112 L56 112 Z" fill="#6b4a2f" stroke="${INK}" stroke-width="2"/>
-    <path d="M48 52 L72 52 L70 62 L50 62 Z" fill="#4d372a" stroke="${INK}" stroke-width="2"/>
-    <path d="M60 8 C48 24 44 34 48 44 C50 50 55 53 60 53 C65 53 70 50 72 44 C76 34 72 24 60 8 Z" fill="#c96a2b"/>
-    <path d="M60 20 C54 30 52 36 55 43 C57 47 63 47 65 43 C68 36 66 30 60 20 Z" fill="${GOLD_HI}"/>`,
-  // Man the Barricades — piled timbers, a barrel, a cartwheel
-  S: `
-    <path d="M10 110 Q26 98 42 103 Q54 96 66 101 Q80 96 92 103 Q102 99 110 110 Z" fill="#93887a" stroke="${INK}" stroke-width="2"/>
-    <rect x="22" y="84" width="80" height="15" rx="4" fill="#7a5a33" stroke="${INK}" stroke-width="2.5"/>
-    <rect x="30" y="67" width="62" height="15" rx="4" fill="#8a6a3f" stroke="${INK}" stroke-width="2.5"/>
-    <rect x="40" y="50" width="42" height="15" rx="4" fill="#9a7d58" stroke="${INK}" stroke-width="2.5"/>
-    <rect x="12" y="60" width="26" height="42" rx="9" fill="#8a5f36" stroke="${INK}" stroke-width="2.5"/>
-    <line x1="13" y1="73" x2="37" y2="73" stroke="#4d372a" stroke-width="2.5"/>
-    <line x1="13" y1="88" x2="37" y2="88" stroke="#4d372a" stroke-width="2.5"/>
-    <circle cx="94" cy="84" r="20" fill="#cbb98b" stroke="${INK}" stroke-width="3"/>
-    <line x1="94" y1="66" x2="94" y2="102" stroke="${INK}" stroke-width="2.5"/>
-    <line x1="76" y1="84" x2="112" y2="84" stroke="${INK}" stroke-width="2.5"/>
-    <line x1="81" y1="71" x2="107" y2="97" stroke="${INK}" stroke-width="2.5"/>
-    <line x1="107" y1="71" x2="81" y2="97" stroke="${INK}" stroke-width="2.5"/>
-    <circle cx="94" cy="84" r="4.5" fill="${INK}"/>`,
-};
-const POWER_WORD = { H: 'RALLY', D: 'RAID LA PRISON', C: 'THE MOB ×2', S: 'BARRICADE' };
-const POWER_WORD_SIZE = { H: 21, D: 18, C: 21, S: 21 };
+// The illustrated medallions were lifted from the printed card artwork and
+// live as transparent PNGs in /img/powers/{suit}.png (the gold ring is baked
+// into each image, so numberArt draws no ring of its own).
+const POWER_WORD = { H: 'RALLY LA TROUPE!', D: 'RAID LA PRISON!', C: 'RISE EN MASSE!', S: 'A LA BARRICADE!' };
 const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'FREE THE FALLEN', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
-const POWER_ACTION_SIZE = { H: 18, D: 16, C: 18, S: 18 };
+// One size for every card, sized to fit the longest title ('RALLY LA TROUPE!').
+const POWER_WORD_SIZE = 18;
+const POWER_ACTION_SIZE = 15;
+
+// The two-line title/effect box shared by number cards and the Sans-Culotte Ace.
+// The Ace overrides the colours (a red box) to flag its special nature.
+function powerBox(title, action, o) {
+  return `
+    <rect x="17" y="253" width="206" height="66" rx="9" fill="${o.fill}" stroke="${o.stroke}" stroke-width="1.5"/>
+    <text x="120" y="281" font-size="${o.titleSize ?? POWER_WORD_SIZE}" text-anchor="middle" fill="${o.titleFill}"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">${title}</text>
+    <text x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${o.actionFill}" opacity="${o.actionOpacity}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".25">${action}</text>`;
+}
 
 function numberArt(card) {
-  const col = suitColor(card.s);
   return `
-    <circle cx="120" cy="160" r="72" fill="none" stroke="${GOLD}" stroke-width="2"/>
-    <circle cx="120" cy="160" r="65" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1" opacity=".9"/>
-    <g transform="translate(60,100)">${POWER_ICONS[card.s]}</g>
-    <rect x="20" y="252" width="200" height="64" rx="9" fill="#f1e7cf" stroke="${GOLD}" stroke-width="1.5"/>
-    <text x="120" y="276" font-size="${POWER_WORD_SIZE[card.s]}" text-anchor="middle" fill="${col}"
-      font-family="${SERIF}" font-weight="700" letter-spacing="1.5">${POWER_WORD[card.s]}</text>
-    <text x="120" y="301" font-size="${POWER_ACTION_SIZE[card.s]}" text-anchor="middle" fill="${INK}" opacity=".76"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".25">${POWER_ACTION[card.s]}</text>`;
+    <image href="/img/powers/${card.s}.png" x="12" y="24" width="216" height="216"/>
+    ${powerBox(POWER_WORD[card.s], POWER_ACTION[card.s], {
+      fill: '#f1e7cf', stroke: GOLD, titleFill: suitColor(card.s), actionFill: INK, actionOpacity: '.76' })}`;
 }
 
 // ── royals: period paintings in a gilt frame ────────────────────────────────
@@ -149,14 +110,14 @@ function royalArt(card, opts) {
   const id = `clip${card.r}${card.s}${++uid}`;
   return `
     <defs><clipPath id="${id}"><rect x="22" y="24" width="196" height="240" rx="8"/></clipPath></defs>
-    <rect x="17" y="19" width="206" height="250" rx="11" fill="${BLUE_DEEP}" stroke="${GOLD}" stroke-width="4"/>
+    <rect x="17" y="19" width="206" height="300" rx="11" fill="${BLUE_DEEP}" stroke="${GOLD}" stroke-width="4"/>
     <image href="/img/enemies/${card.r}${card.s}.jpg" x="22" y="24" width="196" height="240"
       preserveAspectRatio="xMidYMin slice" clip-path="url(#${id})"/>
     <rect x="22" y="24" width="196" height="240" rx="8" fill="none" stroke="${GOLD}" stroke-width="1.5" opacity=".7"/>
-    <rect x="16" y="272" width="208" height="${opts.subtitle ? 54 : 44}" rx="8" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
-    <text x="120" y="${opts.subtitle ? 294 : 300}" font-size="${meta.name.length > 17 ? 16 : 19}" text-anchor="middle"
+    <rect x="20" y="267" width="200" height="50" rx="6" fill="${BLUE}"/>
+    <text x="120" y="${opts.subtitle ? 289 : 298}" font-size="${meta.name.length > 17 ? 16 : 19}" text-anchor="middle"
       fill="#f2ead2" font-family="${SERIF}" font-weight="700">${meta.name}</text>
-    ${opts.subtitle ? `<text x="120" y="315" font-size="12.5" text-anchor="middle" fill="${GOLD_HI}"
+    ${opts.subtitle ? `<text x="120" y="309" font-size="12.5" text-anchor="middle" fill="${GOLD_HI}"
       font-family="Georgia, serif" font-style="italic">${meta.title}</text>` : ''}`;
 }
 
@@ -166,7 +127,7 @@ function royalCorners(card) {
   const col = suitColor(card.s);
   return `
     <g font-family="${SERIF}" font-weight="700" text-anchor="middle">
-      <g stroke="${FACE}" stroke-width="7" stroke-linejoin="round" fill="${FACE}">
+      <g stroke="${FACE}" stroke-width="3.5" stroke-linejoin="round" fill="${FACE}">
         <text x="36" y="54" font-size="36">${card.r}</text>
         <text x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
       </g>
@@ -177,40 +138,38 @@ function royalCorners(card) {
     </g>`;
 }
 
-// ── the two specials keep their drawn art, polished ─────────────────────────
+// The Pamphleteer has no suit: value 0 over an upright pen nib (the "suit").
+function pamphleteerCorners() {
+  return `
+    <g fill="${INK}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
+      <text x="34" y="52" font-size="46">0</text>
+    </g>
+    <g transform="translate(34,80)">
+      <path d="M0 -14 C3 -6 5.5 -2 5.5 3 L-5.5 3 C-5.5 -2 -3 -6 0 -14 Z" fill="${INK}"/>
+      <rect x="-4" y="2.5" width="8" height="12" rx="2.5" fill="${INK}"/>
+      <line x1="0" y1="-13" x2="0" y2="1" stroke="${FACE}" stroke-width="1.2"/>
+      <circle cx="0" cy="0.5" r="1.4" fill="${FACE}"/>
+    </g>`;
+}
+
+// ── the specials ────────────────────────────────────────────────────────────
+// The Sans-Culotte carries the lifted figure over a red title box.
 function companionArt() {
   return `
-    <line x1="168" y1="86" x2="152" y2="252" stroke="#6b4a2f" stroke-width="7" stroke-linecap="round"/>
-    <path d="M168 84 L159 56 L168 30 L177 56 Z" fill="#8b929c" stroke="${INK}" stroke-width="2"/>
-    <path d="M56 264 q8 -58 52 -60 q44 2 52 60 z" fill="${BLUE}" stroke="${BLUE_DEEP}" stroke-width="2.5"/>
-    <path d="M94 212 q14 12 28 0 l-5 30 l-18 0 z" fill="#f2ede1"/>
-    <path d="M100 240 l16 0 l-2 10 l-12 0 z" fill="${RED}"/>
-    <ellipse cx="108" cy="172" rx="30" ry="34" fill="#e8c39e"/>
-    <path d="M78 158 Q78 118 110 112 Q138 108 146 124 Q156 132 148 142 Q141 148 134 141 Q137 131 130 127 Q134 143 137 154 Q108 144 78 158 Z"
-      fill="${RED}" stroke="#701626" stroke-width="2.5"/>
-    <circle cx="88" cy="148" r="10" fill="${BLUE}" stroke="#f2ede1" stroke-width="2.5"/>
-    <circle cx="88" cy="148" r="5" fill="#f2ede1"/>
-    <circle cx="88" cy="148" r="2.5" fill="${RED}"/>
-    <text x="120" y="284" font-size="14" text-anchor="middle" fill="${INK}" opacity=".55"
-      font-family="Georgia, serif" font-style="italic">fights beside one other card · +1</text>`;
+    <image href="/img/specials/sans-culotte.png" x="55" y="28" width="130" height="200"/>
+    ${powerBox('CALL LES RENFORTS!', 'ADD 1 ATTACK', {
+      fill: RED, stroke: GOLD, titleFill: '#fbf3dc', actionFill: '#fbf3dc', actionOpacity: '.85', titleSize: 16 })}`;
 }
 function pamphleteerArt() {
   return `
-    <g transform="rotate(-7 120 176)">
-      <rect x="66" y="112" width="108" height="138" rx="4" fill="#fdfaf1" stroke="${INK}" stroke-width="2.5"/>
-      <text x="120" y="142" font-size="19" font-family="${SERIF}" font-weight="700" text-anchor="middle" fill="${RED}">LIBERTÉ!</text>
-      ${[158, 172, 186, 200, 214, 228].map(y => `<line x1="78" y1="${y}" x2="162" y2="${y}" stroke="${INK}" stroke-width="3" opacity=".5"/>`).join('')}
-    </g>
-    <path d="M152 238 q46 -34 36 -86 q24 46 -12 96 q-9 9 -16 3 z" fill="${BLUE}" stroke="${BLUE_DEEP}" stroke-width="1.5"/>
-    <line x1="154" y1="240" x2="172" y2="258" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>
-    <text x="120" y="286" font-size="14" text-anchor="middle" fill="${INK}" opacity=".55"
-      font-family="Georgia, serif" font-style="italic">shatters immunity · choose who's next</text>`;
-}
-
-function banner(text) {
-  return `
-    <rect x="24" y="292" width="192" height="32" rx="7" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
-    <text x="120" y="314" font-size="17" text-anchor="middle" fill="#f2ead2" font-family="${SERIF}" font-weight="700">${text}</text>`;
+    <image href="/img/specials/pamphleteer.png" x="60" y="58" width="120" height="149"/>
+    <rect x="17" y="239" width="206" height="80" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
+    <text x="120" y="263" font-size="16" text-anchor="middle" fill="#fbf3dc"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">THE PAMPHLETEER</text>
+    <text x="120" y="287" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".3">SHATTERS IMMUNITY</text>
+    <text x="120" y="306" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".3">CHOOSE WHO'S NEXT</text>`;
 }
 
 export function cardSVG(card, opts = {}) {
@@ -220,9 +179,9 @@ export function cardSVG(card, opts = {}) {
     center = royalArt(card, opts);
     cornerLayer = royalCorners(card);
   } else if (card.r === 'A') {
-    center = companionArt(); extra = banner('Sans-Culotte'); cornerLayer = corners(card);
+    center = companionArt(); cornerLayer = corners(card);
   } else if (card.r === 'X') {
-    center = pamphleteerArt(); extra = banner('The Pamphleteer'); cornerLayer = corners(card);
+    center = pamphleteerArt(); cornerLayer = pamphleteerCorners();
   } else {
     center = numberArt(card); cornerLayer = corners(card);
   }
@@ -234,7 +193,10 @@ export function cardSVG(card, opts = {}) {
   </svg>`;
 }
 
-// The guillotine drops on the royal's card itself.
+// Two clipped copies let the guillotine visibly separate the card along its
+// diagonal blade line without rasterizing or damaging the original card art.
 export function victimSVG(card) {
-  return cardSVG(card);
+  const svg = cardSVG(card);
+  return `<span class="victim-half victim-half-top">${svg}</span>
+    <span class="victim-half victim-half-bottom" aria-hidden="true">${svg}</span>`;
 }

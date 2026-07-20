@@ -47,7 +47,7 @@ export function cardInfo(card, view) {
   const e = view.enemy;
   let html = '';
   if (card.r === 'X') {
-    html = `<h3>🪶 The Pamphleteer</h3>
+    html = `<h3>0✒ The Pamphleteer</h3>
       <p>Attack 0, played <b>alone</b>. His exposé <b>shatters the enemy's immunity</b> — suit powers matching the enemy's suit work from then on (even barricades already built).</p>
       <p>You skip the enemy's counterattack and <b>choose any citoyen</b> (or yourself) to act next. Until they act, everyone may hint whether they want the floor — but never what they hold.</p>
       <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;

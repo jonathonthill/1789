@@ -78,15 +78,72 @@ export function flyCards(fromEl, toEl, count, svg, then) {
   }
 }
 
+// Once the blade parts the card, each half falls as its own scrap of card
+// stock. Instead of a fixed keyframe (which only ever jiggles the same way),
+// we integrate the motion frame-by-frame: gravity pulls each half down toward a
+// terminal velocity (air drag), a continuous 3D flip tumbles it, and a lift
+// force that swings with the flip angle makes it flutter and drift sideways —
+// the aerodynamic coupling that gives real falling cards their wandering fall.
+let severRaf = 0;
+export function severFall(container, { speed = 1, done } = {}) {
+  cancelAnimationFrame(severRaf);
+  const top = container.querySelector('.victim-half-top');
+  const bottom = container.querySelector('.victim-half-bottom');
+  if (!top || !bottom) { done?.(); return; }
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const mk = (el, dir) => ({
+    el,
+    x: 0, y: 0,
+    vx: dir * rand(25, 60), vy: rand(-40, 15),
+    rx: rand(-6, 6), ry: rand(-8, 8), rz: rand(-4, 4),
+    wx: rand(230, 400) * (Math.random() < 0.5 ? 1 : -1), // flip (deg/s)
+    wy: rand(-55, 55),
+    wz: dir * rand(28, 66),
+    lift: rand(560, 820),                                 // flutter force
+    liftPhase: rand(0, Math.PI * 2),
+    drift: dir * rand(45, 95),                            // net outward drift
+  });
+  const halves = [mk(top, -1), mk(bottom, 1)];
+  const g = 2000, vTerm = 920, k = g / vTerm, dragH = 1.5;
+  const limit = window.innerHeight + 280;
+  let last = performance.now();
+  const start = last;
+  function step(now) {
+    const dt = Math.min(0.034, (now - last) / 1000) * speed;
+    last = now;
+    let alive = false;
+    for (const h of halves) {
+      h.vy += (g - k * h.vy) * dt;
+      h.y += h.vy * dt;
+      const liftForce = h.lift * Math.sin(h.rx * Math.PI / 180 + h.liftPhase);
+      h.vx += (liftForce + h.drift) * dt;
+      h.vx -= h.vx * dragH * dt;
+      h.x += h.vx * dt;
+      h.rx += h.wx * dt;
+      h.ry += h.wy * dt;
+      h.rz += h.wz * dt;
+      h.el.style.transform =
+        `translate3d(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px, 0) ` +
+        `rotateZ(${h.rz.toFixed(1)}deg) rotateY(${h.ry.toFixed(1)}deg) rotateX(${h.rx.toFixed(1)}deg)`;
+      if (h.y < limit) alive = true;
+    }
+    if (alive && (now - start) * speed < 2600) severRaf = requestAnimationFrame(step);
+    else done?.();
+  }
+  severRaf = requestAnimationFrame(step);
+}
+
 export function showGuillotine(enemyCard, exact, done) {
   const meta = enemyMeta(enemyCard);
   $('#g-victim').innerHTML = victimSVG(enemyCard);
   const victim = $('#g-victim');
   const blade = $('#g-blade');
   const caption = $('#g-caption');
+  cancelAnimationFrame(severRaf);
   victim.classList.remove('severed');
   blade.classList.remove('drop');
   caption.classList.remove('show');
+  for (const half of victim.querySelectorAll('.victim-half')) half.style.transform = '';
   caption.innerHTML = exact
     ? `${EXCLAIM.converted}<span class="sub">${meta.name} joins the cause — top of Le Peuple</span>`
     : `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;
@@ -96,8 +153,9 @@ export function showGuillotine(enemyCard, exact, done) {
   blade.classList.add('drop');
   victim.classList.add('severed');
   caption.classList.add('show');
+  setTimeout(() => severFall(victim), 870);
   setTimeout(() => {
     $('#guillotine-overlay').hidden = true;
     done?.();
-  }, 2300);
+  }, 3100);
 }

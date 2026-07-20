@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1789 · Card Check</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 28px 24px 60px;
+    background: #0e1633;
+    color: #e9dcc0;
+    font-family: 'Cinzel', Georgia, serif;
+  }
+  h1 { font-size: 1.5rem; letter-spacing: .14em; text-align: center; margin: 0 0 6px; }
+  .sub { text-align: center; color: #b9a370; font-size: .85rem; margin: 0 0 32px; letter-spacing: .06em; }
+  section { max-width: 1200px; margin: 0 auto 40px; }
+  h2 {
+    font-size: 1rem; letter-spacing: .12em; color: #d9bc63;
+    border-bottom: 1px solid rgba(217,188,99,.35); padding-bottom: 6px; margin: 0 0 18px;
+  }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; }
+  .card { width: 150px; }
+  .card svg { width: 100%; display: block; filter: drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
+</style>
+</head>
+<body>
+  <h1>1789 · CARD CHECK</h1>
+  <p class="sub">The full deck — every face as the game renders it</p>
+  <div id="root"></div>
+
+<script type="module">
+import { cardSVG } from '/js/cards.js';
+
+const SUITS = ['S', 'H', 'D', 'C'];
+const root = document.getElementById('root');
+
+function section(title, cards, opts = {}) {
+  const sec = document.createElement('section');
+  const h = document.createElement('h2'); h.textContent = title; sec.appendChild(h);
+  const grid = document.createElement('div'); grid.className = 'grid';
+  for (const c of cards) {
+    const d = document.createElement('div'); d.className = 'card';
+    d.innerHTML = cardSVG(c, opts); grid.appendChild(d);
+  }
+  sec.appendChild(grid); root.appendChild(sec);
+}
+
+// Number cards 2–10, grouped by suit
+for (const s of SUITS) {
+  const ranks = [];
+  for (let r = 2; r <= 10; r++) ranks.push({ r, s });
+  section(`Number cards · ${({S:'Spades ♠',H:'Hearts ♥',D:'Diamonds ♦',C:'Clubs ♣'})[s]}`, ranks);
+}
+
+// Aces (Sans-Culotte)
+section('Aces · Sans-Culotte', SUITS.map(s => ({ r: 'A', s })));
+
+// Royalty
+for (const r of ['J', 'Q', 'K']) {
+  section(`Royalty · ${({J:'Jacks',Q:'Queens',K:'Kings'})[r]}`, SUITS.map(s => ({ r, s })), { subtitle: true });
+}
+
+// Pamphleteer
+section('Pamphleteer', [{ r: 'X', s: null }]);
+</script>
+</body>
+</html>

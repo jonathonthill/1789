@@ -157,6 +157,21 @@
   </div>
 </div>
 
+<div id="sound-menu" class="sound-menu" hidden role="dialog" aria-label="Sound settings">
+  <div class="sound-menu-head">
+    <span>Sound</span>
+    <button id="sound-mute" class="sound-mute" type="button">Mute all</button>
+  </div>
+  <label class="sound-slider">
+    <span>Music <output id="music-vol-out">85%</output></span>
+    <input id="music-vol" type="range" min="0" max="100" step="1" value="85" aria-label="Music volume">
+  </label>
+  <label class="sound-slider">
+    <span>Sound effects <output id="sfx-vol-out">90%</output></span>
+    <input id="sfx-vol" type="range" min="0" max="100" step="1" value="90" aria-label="Sound effects volume">
+  </label>
+</div>
+
 <div id="help-panel" class="help-panel" hidden>
   <div class="help-inner">
     <button id="help-close" class="iconbtn help-close">✕</button>

@@ -55,19 +55,55 @@ function show(name) {
 }
 
 function syncAudioButtons() {
+  const muted = audio.isMuted();
   $$('.audio-toggle').forEach(btn => {
-    const muted = audio.isMuted();
     btn.textContent = muted ? '🔇' : '♫';
     btn.classList.toggle('muted', muted);
-    btn.setAttribute('aria-pressed', String(muted));
-    btn.setAttribute('aria-label', muted ? 'Turn music and sound on' : 'Mute music and sound');
-    btn.title = muted ? 'Turn music and sound on' : 'Mute music and sound';
+    btn.setAttribute('aria-label', 'Sound settings');
+    btn.title = 'Sound settings';
   });
+  const menu = $('#sound-menu');
+  menu.classList.toggle('muted', muted);
+  const mute = $('#sound-mute');
+  mute.textContent = muted ? 'Unmute' : 'Mute all';
+  mute.classList.toggle('on', muted);
+  const mv = Math.round(audio.getMusicVolume() * 100);
+  const sv = Math.round(audio.getSfxVolume() * 100);
+  $('#music-vol').value = mv; $('#music-vol-out').value = `${mv}%`;
+  $('#sfx-vol').value = sv; $('#sfx-vol-out').value = `${sv}%`;
 }
 
+// Sound menu: any ♫ button opens the volume popover anchored beneath itself.
+const soundMenu = $('#sound-menu');
+let soundAnchor = null;
+function openSoundMenu(btn) {
+  soundAnchor = btn;
+  soundMenu.hidden = false;
+  syncAudioButtons();
+  const r = btn.getBoundingClientRect();
+  const w = soundMenu.offsetWidth, h = soundMenu.offsetHeight;
+  const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+  let top = r.bottom + 8;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+  soundMenu.style.left = `${left}px`;
+  soundMenu.style.top = `${top}px`;
+}
+function closeSoundMenu() { soundMenu.hidden = true; soundAnchor = null; }
+
 $$('.audio-toggle').forEach(btn => {
-  btn.onclick = async () => { await audio.toggleMuted(); syncAudioButtons(); };
+  btn.onclick = e => {
+    e.stopPropagation();
+    audio.unlock();
+    (!soundMenu.hidden && soundAnchor === btn) ? closeSoundMenu() : openSoundMenu(btn);
+  };
 });
+soundMenu.addEventListener('click', e => e.stopPropagation());
+$('#sound-mute').onclick = async () => { await audio.toggleMuted(); syncAudioButtons(); };
+$('#music-vol').oninput = e => { audio.setMusicVolume(e.target.value / 100); $('#music-vol-out').value = `${e.target.value}%`; };
+$('#sfx-vol').oninput = e => { audio.setSfxVolume(e.target.value / 100); $('#sfx-vol-out').value = `${e.target.value}%`; };
+$('#sfx-vol').addEventListener('change', () => { if (!audio.isMuted()) audio.sfx('select'); });
+document.addEventListener('click', () => { if (!soundMenu.hidden) closeSoundMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSoundMenu(); });
 syncAudioButtons();
 document.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true });
 document.addEventListener('keydown', () => audio.unlock(), { once: true, capture: true });
@@ -297,8 +333,17 @@ function renderGame(v) {
     $('#enemy-name').textContent = meta.name;
     $('#enemy-title').textContent = `${meta.title} · ${sm.symbol}`;
     const hp = Math.max(0, e.health - e.damage);
-    $('#hp-bar').style.width = `${(hp / e.health) * 100}%`;
-    $('#hp-text').textContent = `${hp} / ${e.health}`;
+    const hpRatio = hp / e.health;
+    const hpWrap = $('.hp-wrap');
+    $('#hp-bar').style.width = `${hpRatio * 100}%`;
+    $('#hp-text').textContent = `${hpRatio <= .25 ? '♥ ' : ''}${hp} / ${e.health}`;
+    hpWrap.classList.toggle('low', hpRatio <= .5);
+    hpWrap.classList.toggle('critical', hpRatio <= .25);
+    hpWrap.setAttribute('role', 'progressbar');
+    hpWrap.setAttribute('aria-label', `${meta.name} health`);
+    hpWrap.setAttribute('aria-valuemin', '0');
+    hpWrap.setAttribute('aria-valuemax', String(e.health));
+    hpWrap.setAttribute('aria-valuenow', String(hp));
     $('#enemy-attack').innerHTML = `⚔️ Strikes for <b>${e.effectiveAttack}</b>` +
       (e.shield ? ` <span class="shielded">(${e.attack} − ${e.shield} 🛡️)</span>` : '');
     $('#enemy-immunity').innerHTML = e.immunityCancelled
@@ -444,7 +489,7 @@ function layoutHand(count = view?.you?.hand.length ?? 0) {
   const zone = $('#hand-zone');
   if (!count || !zone.clientWidth) return;
   const compactMultiplayer = mode === 'mp' && window.innerWidth <= 480 && window.innerHeight <= 760;
-  const target = window.matchMedia('(min-width: 800px)').matches ? 104 : (compactMultiplayer ? 72 : 84);
+  const target = window.matchMedia('(min-width: 800px)').matches ? 124 : (compactMultiplayer ? 76 : 96);
   const available = Math.max(1, zone.clientWidth - 28);
   const naturalGap = 9;
   let width = target;
