@@ -5,6 +5,7 @@ import { enemyMeta, SUIT_META, EXCLAIM } from '/shared/theme.js';
 import { cardSVG, cardBackSVG } from '/js/cards.js';
 import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards } from '/js/anim.js';
 import * as help from '/js/help.js';
+import * as audio from '/js/audio.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -50,7 +51,26 @@ function saveSession(v) {
 const SCREENS = ['home', 'lobby', 'game', 'end'];
 function show(name) {
   for (const s of SCREENS) $(`#screen-${s}`).hidden = s !== name;
+  audio.setScene(name === 'game' ? 'game' : (name === 'home' || name === 'lobby' ? 'intro' : null));
 }
+
+function syncAudioButtons() {
+  $$('.audio-toggle').forEach(btn => {
+    const muted = audio.isMuted();
+    btn.textContent = muted ? '🔇' : '♫';
+    btn.classList.toggle('muted', muted);
+    btn.setAttribute('aria-pressed', String(muted));
+    btn.setAttribute('aria-label', muted ? 'Turn music and sound on' : 'Mute music and sound');
+    btn.title = muted ? 'Turn music and sound on' : 'Mute music and sound';
+  });
+}
+
+$$('.audio-toggle').forEach(btn => {
+  btn.onclick = async () => { await audio.toggleMuted(); syncAudioButtons(); };
+});
+syncAudioButtons();
+document.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true });
+document.addEventListener('keydown', () => audio.unlock(), { once: true, capture: true });
 
 // ── pseudo-state: lets the client reuse engine validation on a partial view ──
 function pseudoState(v) {
@@ -206,11 +226,19 @@ function routeView(v) {
     staged = [];
     const ev = v.lastEvent;
     if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
-      withAnim(done => showGuillotine(ev.card, ev.exact, () => showEntrance(v.enemy, done)));
+      audio.sfx('guillotine');
+      withAnim(done => showGuillotine(ev.card, ev.exact, () => {
+        audio.sfx('enemy');
+        showEntrance(v.enemy, done);
+      }));
     } else {
+      audio.sfx('enemy');
       withAnim(done => showEntrance(v.enemy, done), maybeCoach);
       if (seq === 1) { // fresh game: the decks get their shuffle
-        setTimeout(() => { riffleDeck($('#stack-tavern')); riffleDeck($('#stack-castle')); }, 300);
+        setTimeout(() => {
+          audio.sfx('shuffle');
+          riffleDeck($('#stack-tavern')); riffleDeck($('#stack-castle'));
+        }, 300);
       }
     }
   }
@@ -228,12 +256,16 @@ function animateEffects(v) {
   if (first || !v.lastEffects) return; // don't replay history on rejoin
   const { healed = 0, drawn = 0 } = v.lastEffects;
   if (healed > 0) {
+    audio.sfx('shuffle');
     riffleDeck($('#stack-discard'));
     flyCards($('#stack-discard'), $('#stack-tavern'), healed, cardBackSVG(),
       () => riffleDeck($('#stack-tavern')));
   }
   if (drawn > 0) {
-    setTimeout(() => flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG()),
+    setTimeout(() => {
+      audio.sfx('draw');
+      flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG());
+    },
       healed > 0 ? 1100 : 0);
   }
 }
@@ -389,8 +421,13 @@ function renderHand(v) {
     attachPress(el,
       () => { // tap: stage/unstage
         if (!canStage) return;
-        if (stagedNow) staged = staged.filter(s => !engine.sameCard(s, card));
-        else if (v.phase === 'discard' || extendable) staged = [...staged, card];
+        if (stagedNow) {
+          audio.sfx('deselect');
+          staged = staged.filter(s => !engine.sameCard(s, card));
+        } else if (v.phase === 'discard' || extendable) {
+          audio.sfx('select');
+          staged = [...staged, card];
+        }
         else return;
         renderGame(view);
       },
@@ -470,21 +507,24 @@ function flashError(res) {
 $('#btn-confirm').onclick = () => {
   if (!view?.you) return;
   if (view.phase === 'jesterChoose') {
+    audio.sfx('pamphleteer');
     sendAction({ type: 'chooseNext', target: view.you.index }, flashError);
     return;
   }
   const type = view.phase === 'discard' ? 'discard' : 'play';
   const cards = staged;
+  audio.sfx(type === 'discard' ? 'sacrifice' : (cards.some(c => c.r === 'X') ? 'pamphleteer' : 'attack'));
   staged = [];
   sendAction({ type, cards }, res => { if (!res.ok) { staged = cards; renderGame(view); flashError(res); } });
 };
-$('#btn-yield').onclick = () => { staged = []; sendAction({ type: 'yield' }, flashError); };
-$('#btn-regroup').onclick = () => { staged = []; sendAction({ type: 'regroup' }, flashError); };
+$('#btn-yield').onclick = () => { audio.sfx('yield'); staged = []; sendAction({ type: 'yield' }, flashError); };
+$('#btn-regroup').onclick = () => { audio.sfx('shuffle'); staged = []; sendAction({ type: 'regroup' }, flashError); };
 
 // ── end screen ──────────────────────────────────────────────────────────────
 function renderEnd(v) {
   show('end');
   const won = v.phase === 'won';
+  audio.sfx(won ? 'win' : 'lose');
   $('#end-emblem').textContent = won ? '🇫🇷' : '⚰️';
   $('#end-title').textContent = won ? EXCLAIM.win : EXCLAIM.lose;
   let detail = '';

@@ -79,6 +79,14 @@ input { user-select: text; -webkit-user-select: text; }
   cursor: pointer;
   flex-shrink: 0;
 }
+.home-inner, .lobby-inner, .end-inner { position: relative; }
+.audio-toggle-card {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1.5px solid var(--gold); background: rgba(248,241,223,.78);
+  color: var(--royal); font-size: 1rem; font-weight: bold; cursor: pointer;
+}
+.audio-toggle.muted { opacity: .58; }
 .field { display: block; margin: 14px 0; }
 .field span { display: block; font-size: .85rem; font-style: italic; color: var(--ink-soft); margin-bottom: 4px; }
 input {
