@@ -6,17 +6,17 @@ export const TERMS = {
   players: 'Citoyens',
   castle: 'The Ancien Régime',
   tavern: 'Le Peuple',
-  discard: 'The Fallen',
+  discard: 'La Prison',
   jester: 'The Pamphleteer',
   companion: 'Sans-Culotte',
   yield: 'Lay Low',
 };
 
 export const SUIT_META = {
-  H: { symbol: '♥', color: 'red',   power: 'Rally the People',   short: 'Draw',    desc: 'Recruit cards equal to the attack value from Le Peuple, starting with you, round the table, skipping full hands.' },
-  D: { symbol: '♦', color: 'red',   power: 'Raid la Prison',     short: 'Return',  desc: 'Free the Fallen, shuffle them, and slip cards equal to the attack value under Le Peuple — liberated citoyens rejoin the cause.' },
-  C: { symbol: '♣', color: 'black', power: 'Fury of the Mob',    short: '×2 dmg', desc: 'The mob doubles your blow — damage dealt counts twice.' },
-  S: { symbol: '♠', color: 'black', power: 'Man the Barricades', short: 'Shield', desc: 'Reduce the enemy’s attack by the attack value played. Barricades stack and hold until the enemy falls.' },
+  H: { symbol: '♥', color: 'red',   power: 'Rally Le Peuple',    short: 'Draw',   desc: 'Recruit cards equal to the attack value from Le Peuple, starting with you, round the table, skipping full hands.' },
+  D: { symbol: '♦', color: 'red',   power: 'Raid La Prison',     short: 'Return', desc: 'Free prisoners from La Prison, shuffle them, and slip cards equal to the attack value under Le Peuple — liberated citoyens rejoin the cause.' },
+  C: { symbol: '♣', color: 'black', power: 'Rise en Masse',      short: '×2 dmg', desc: 'The mob doubles your blow — damage dealt counts twice.' },
+  S: { symbol: '♠', color: 'black', power: 'A La Barricade',     short: 'Shield', desc: 'Reduce the enemy’s attack by the attack value played. Barricades stack and hold until the enemy falls.' },
 };
 
 // The twelve royals of the Ancien Régime. Keyed by rank+suit.
@@ -142,5 +142,5 @@ export const EXCLAIM = {
   win: 'Vive la République!',
   lose: 'The Revolution is crushed.',
   guillotine: 'Guillotiné!',
-  converted: 'Won to the Revolution!',
+  converted: 'Won over to the Revolution!',
 };

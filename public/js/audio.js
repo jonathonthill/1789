@@ -35,22 +35,27 @@ export function isMuted() { return muted; }
 // User-set volumes (0..1) layered on top of the per-scene music level and the
 // effects bus. Persisted so a player's mix survives reloads.
 const SFX_BASE = 0.52;
+// The slider fraction (0..1) is scaled down so the 50% default sits at a gentle
+// level: 0.5 * VOL_SCALE lands where the raw 20% setting used to, and 100% only
+// reaches 40% of the bus base. (Keys are versioned so the old raw fractions in
+// a returning player's storage aren't reinterpreted under the new scale.)
+const VOL_SCALE = 0.4;
 const clamp01 = v => Math.max(0, Math.min(1, Number(v)));
 function loadVol(key, dflt) {
   try { const v = parseFloat(localStorage.getItem(key)); return Number.isFinite(v) ? clamp01(v) : dflt; }
   catch { return dflt; }
 }
 function persistVol(key, v) { try { localStorage.setItem(key, String(v)); } catch {} }
-let musicVol = loadVol('r1789_music_vol', 0.85);
-let sfxVol = loadVol('r1789_sfx_vol', 0.9);
-function musicSceneGain() { return (desiredScene === 'intro' ? 0.46 : 0.38) * musicVol; }
+let musicVol = loadVol('r1789_music_vol_v2', 0.5);
+let sfxVol = loadVol('r1789_sfx_vol_v2', 0.5);
+function musicSceneGain() { return (desiredScene === 'intro' ? 0.46 : 0.38) * musicVol * VOL_SCALE; }
 function applyMusicGain(smooth = 0.18) {
   if (ctx && musicBus && !muted && desiredScene) musicBus.gain.setTargetAtTime(musicSceneGain(), ctx.currentTime, smooth);
 }
 export function getMusicVolume() { return musicVol; }
 export function getSfxVolume() { return sfxVol; }
-export function setMusicVolume(v) { musicVol = clamp01(v); persistVol('r1789_music_vol', musicVol); applyMusicGain(0.04); }
-export function setSfxVolume(v) { sfxVol = clamp01(v); persistVol('r1789_sfx_vol', sfxVol); if (sfxBus) sfxBus.gain.value = SFX_BASE * sfxVol; }
+export function setMusicVolume(v) { musicVol = clamp01(v); persistVol('r1789_music_vol_v2', musicVol); applyMusicGain(0.04); }
+export function setSfxVolume(v) { sfxVol = clamp01(v); persistVol('r1789_sfx_vol_v2', sfxVol); if (sfxBus) sfxBus.gain.value = SFX_BASE * sfxVol * VOL_SCALE; }
 
 function ensureContext() {
   if (ctx || !AudioContextClass) return;
@@ -67,7 +72,7 @@ function ensureContext() {
   // The music used to sit around 10–15 dB below the effects. Keep effects crisp,
   // but give the arrangement enough level to read as an actual backing track.
   musicBus.gain.value = .42;
-  sfxBus.gain.value = SFX_BASE * sfxVol;
+  sfxBus.gain.value = SFX_BASE * sfxVol * VOL_SCALE;
   master.gain.value = muted ? 0 : .72;
   musicBus.connect(master);
   sfxBus.connect(master);
@@ -186,7 +191,9 @@ function startMusic() {
 function scheduleMusic() {
   if (!ctx || muted || !activeScene || !midiScore || ctx.state !== 'running') return;
   const horizon = ctx.currentTime + .25;
-  const loopLength = Math.max(1, midiScore.duration + .65);
+  // The bundled score is cut on a harmonic boundary; adding tail silence here
+  // would turn a seamless musical loop into an audible pause.
+  const loopLength = Math.max(1, midiScore.duration);
   let guard = 0;
   while (guard++ < 2000) {
     const event = midiScore.notes[midiEventIndex];
@@ -208,42 +215,64 @@ function playMidiNote(event, time) {
     return;
   }
 
-  let wave = 'triangle';
-  let volume = .045;
-  if (event.program >= 40 && event.program <= 55) { wave = 'sawtooth'; volume = .027; } // strings
-  else if (event.program >= 24 && event.program <= 31) { wave = 'triangle'; volume = .038; } // guitar
-  else if (event.program >= 112) { wave = 'sine'; volume = .052; } // taiko / percussion
-  note(event.note, time, Math.min(event.duration, 3.5), Math.max(.006, volume * velocity), wave, musicBus);
+  const voice = midiVoice(event.program);
+  note(
+    event.note,
+    time,
+    Math.min(event.duration, 3.5),
+    Math.max(.003, voice.volume * velocity),
+    voice.wave,
+    musicBus,
+    voice,
+  );
+}
+
+function midiVoice(program) {
+  if (program === 47) return { wave: 'sine', volume: .055, attack: .008, release: .18, cutoff: 760 }; // timpani
+  if (program === 42) return { wave: 'triangle', volume: .040, attack: .035, release: .13, cutoff: 1050 }; // cello
+  if (program === 43) return { wave: 'triangle', volume: .043, attack: .04, release: .16, cutoff: 720 }; // contrabass
+  if (program === 48) return { wave: 'sawtooth', volume: .019, attack: .075, release: .23, cutoff: 1350 }; // ensemble
+  if (program >= 56 && program <= 59) return { wave: 'sawtooth', volume: .026, attack: .018, release: .07, cutoff: 2100 }; // trumpet
+  if (program >= 60 && program <= 67) return { wave: 'triangle', volume: .036, attack: .04, release: .14, cutoff: 1250 }; // horn
+  if (program >= 68 && program <= 71) return { wave: 'square', volume: .017, attack: .026, release: .08, cutoff: 1650 }; // oboe
+  if (program <= 7) return { wave: 'triangle', volume: .036, attack: .007, release: .07, cutoff: 2600 }; // piano
+  return { wave: 'triangle', volume: .032, attack: .018, release: .06, cutoff: 1800 };
 }
 
 function midiDrum(midi, time, velocity) {
-  if (midi <= 40) {
-    sweep(115, 48, time, .18, .055 * velocity, 'sine', musicBus);
+  if (midi === 35 || midi === 36) {
+    sweep(105, 46, time, .16, .050 * velocity, 'sine', musicBus);
+  } else if (midi >= 37 && midi <= 40) {
+    noise(time, .105, .040 * velocity, 480, 4100, musicBus);
+  } else if (midi >= 49) {
+    noise(time, .32, .032 * velocity, 1900, 7600, musicBus);
   } else {
-    noise(time, midi >= 49 ? .24 : .1, .045 * velocity, midi >= 49 ? 1800 : 500, 7200, musicBus);
+    noise(time, .075, .026 * velocity, 1300, 6500, musicBus);
   }
 }
 
 function hz(midi) { return 440 * 2 ** ((midi - 69) / 12); }
 
-function note(midi, time, duration, volume, wave = 'triangle', destination = sfxBus) {
+function note(midi, time, duration, volume, wave = 'triangle', destination = sfxBus, envelope = {}) {
   if (!ctx || !destination) return;
   const osc = ctx.createOscillator();
   const filter = ctx.createBiquadFilter();
   const gain = ctx.createGain();
+  const attack = Math.min(envelope.attack ?? .018, Math.max(.004, duration * .45));
+  const release = envelope.release ?? .025;
   osc.type = wave;
   osc.frequency.setValueAtTime(hz(midi), time);
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(wave === 'sine' ? 900 : 1800, time);
+  filter.frequency.setValueAtTime(envelope.cutoff ?? (wave === 'sine' ? 900 : 1800), time);
   filter.Q.value = .7;
   gain.gain.setValueAtTime(.0001, time);
-  gain.gain.exponentialRampToValueAtTime(Math.max(.0002, volume), time + .018);
-  gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
+  gain.gain.exponentialRampToValueAtTime(Math.max(.0002, volume), time + attack);
+  gain.gain.exponentialRampToValueAtTime(.0001, time + duration + release);
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(destination);
   osc.start(time);
-  osc.stop(time + duration + .04);
+  osc.stop(time + duration + release + .03);
 }
 
 function sweep(from, to, time, duration, volume, wave = 'sawtooth', destination = sfxBus) {

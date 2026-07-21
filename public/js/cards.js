@@ -62,11 +62,15 @@ function corners(card) {
   // '10' keeps that height and is condensed horizontally to fit the corner.
   const wide = String(label).length > 1;
   const rank = `<text x="34" y="52" font-size="46"${wide ? ' textLength="42" lengthAdjust="spacingAndGlyphs"' : ''}>${label}</text>`;
+  // Blocked-power slash: an angled stroke in the opposite colour, hidden until a
+  // hand card carries the .power-off class (see main.js / style.css).
+  const slash = (card.s === 'H' || card.s === 'D') ? INK : RED;
   return `
     <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
       ${rank}
-      <text x="34" y="88" font-size="34">${glyph}</text>
-    </g>`;
+      <text class="corner-suit" x="34" y="88" font-size="34">${glyph}</text>
+    </g>
+    <line class="corner-suit-slash" x1="18" y1="91" x2="50" y2="61" stroke="${slash}" stroke-width="5.5" stroke-linecap="round"/>`;
 }
 
 function frame() {
@@ -79,9 +83,9 @@ function frame() {
 // The illustrated medallions were lifted from the printed card artwork and
 // live as transparent PNGs in /img/powers/{suit}.png (the gold ring is baked
 // into each image, so numberArt draws no ring of its own).
-const POWER_WORD = { H: 'RALLY LA TROUPE!', D: 'RAID LA PRISON!', C: 'RISE EN MASSE!', S: 'A LA BARRICADE!' };
-const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'FREE THE FALLEN', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
-// One size for every card, sized to fit the longest title ('RALLY LA TROUPE!').
+const POWER_WORD = { H: 'RALLY LE PEUPLE!', D: 'RAID LA PRISON!', C: 'RISE EN MASSE!', S: 'A LA BARRICADE!' };
+const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'FREE PRISONERS', C: 'DOUBLE DAMAGE', S: 'LOWER ATTACK' };
+// One size for every card, sized to fit the longest title ('RALLY LE PEUPLE!').
 const POWER_WORD_SIZE = 18;
 const POWER_ACTION_SIZE = 15;
 
@@ -90,15 +94,15 @@ const POWER_ACTION_SIZE = 15;
 function powerBox(title, action, o) {
   return `
     <rect x="17" y="253" width="206" height="66" rx="9" fill="${o.fill}" stroke="${o.stroke}" stroke-width="1.5"/>
-    <text x="120" y="281" font-size="${o.titleSize ?? POWER_WORD_SIZE}" text-anchor="middle" fill="${o.titleFill}"
+    <text class="pb-title" x="120" y="281" font-size="${o.titleSize ?? POWER_WORD_SIZE}" text-anchor="middle" fill="${o.titleFill}"
       font-family="${SERIF}" font-weight="700" letter-spacing="0.4">${title}</text>
-    <text x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${o.actionFill}" opacity="${o.actionOpacity}"
+    <text class="pb-effect" x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${o.actionFill}" opacity="${o.actionOpacity}"
       font-family="${SERIF}" font-weight="700" letter-spacing=".25">${action}</text>`;
 }
 
 function numberArt(card) {
   return `
-    <image href="/img/powers/${card.s}.png" x="12" y="24" width="216" height="216"/>
+    <image href="/img/powers/${card.s}.png" x="12" y="40" width="216" height="216"/>
     ${powerBox(POWER_WORD[card.s], POWER_ACTION[card.s], {
       fill: '#f1e7cf', stroke: GOLD, titleFill: suitColor(card.s), actionFill: INK, actionOpacity: '.76' })}`;
 }
@@ -125,16 +129,18 @@ function royalArt(card, opts) {
 // collide with the name banner), with a paper halo for legibility.
 function royalCorners(card) {
   const col = suitColor(card.s);
+  const slash = (card.s === 'H' || card.s === 'D') ? INK : RED;
   return `
     <g font-family="${SERIF}" font-weight="700" text-anchor="middle">
       <g stroke="${FACE}" stroke-width="3.5" stroke-linejoin="round" fill="${FACE}">
         <text x="36" y="54" font-size="36">${card.r}</text>
-        <text x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
+        <text class="corner-suit" x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
       </g>
       <g fill="${col}">
         <text x="36" y="54" font-size="36">${card.r}</text>
-        <text x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
+        <text class="corner-suit" x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
       </g>
+      <line class="corner-suit-slash" x1="23" y1="89" x2="49" y2="65" stroke="${slash}" stroke-width="4.5" stroke-linecap="round"/>
     </g>`;
 }
 
@@ -195,8 +201,18 @@ export function cardSVG(card, opts = {}) {
 
 // Two clipped copies let the guillotine visibly separate the card along its
 // diagonal blade line without rasterizing or damaging the original card art.
+// Each half is a double-sided 3D piece: the card face and the deck back mounted
+// back-to-back, so when severFall tumbles the piece its reverse shows the deck
+// artwork instead of vanishing (backface-visibility).
 export function victimSVG(card) {
-  const svg = cardSVG(card);
-  return `<span class="victim-half victim-half-top">${svg}</span>
-    <span class="victim-half victim-half-bottom" aria-hidden="true">${svg}</span>`;
+  const front = cardSVG(card);
+  const back = cardBackSVG();
+  const half = (cls, hidden) =>
+    `<span class="victim-half ${cls}"${hidden ? ' aria-hidden="true"' : ''}>` +
+      `<span class="vh-tumble">` +
+        `<span class="vh-face vh-front">${front}</span>` +
+        `<span class="vh-face vh-back">${back}</span>` +
+      `</span>` +
+    `</span>`;
+  return half('victim-half-top', false) + half('victim-half-bottom', true);
 }

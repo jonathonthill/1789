@@ -87,8 +87,8 @@ export function flyCards(fromEl, toEl, count, svg, then) {
 let severRaf = 0;
 export function severFall(container, { speed = 1, done } = {}) {
   cancelAnimationFrame(severRaf);
-  const top = container.querySelector('.victim-half-top');
-  const bottom = container.querySelector('.victim-half-bottom');
+  const top = container.querySelector('.victim-half-top .vh-tumble');
+  const bottom = container.querySelector('.victim-half-bottom .vh-tumble');
   if (!top || !bottom) { done?.(); return; }
   const rand = (a, b) => a + Math.random() * (b - a);
   const mk = (el, dir) => ({
@@ -123,7 +123,7 @@ export function severFall(container, { speed = 1, done } = {}) {
       h.ry += h.wy * dt;
       h.rz += h.wz * dt;
       h.el.style.transform =
-        `translate3d(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px, 0) ` +
+        `perspective(900px) translate3d(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px, 0) ` +
         `rotateZ(${h.rz.toFixed(1)}deg) rotateY(${h.ry.toFixed(1)}deg) rotateX(${h.rx.toFixed(1)}deg)`;
       if (h.y < limit) alive = true;
     }
@@ -143,7 +143,7 @@ export function showGuillotine(enemyCard, exact, done) {
   victim.classList.remove('severed');
   blade.classList.remove('drop');
   caption.classList.remove('show');
-  for (const half of victim.querySelectorAll('.victim-half')) half.style.transform = '';
+  for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
   caption.innerHTML = exact
     ? `${EXCLAIM.converted}<span class="sub">${meta.name} joins the cause — top of Le Peuple</span>`
     : `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;

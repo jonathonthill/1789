@@ -7,6 +7,9 @@ of “Do You Hear the People Sing” (Claude-Michel Schönberg), downloaded from
 MIDI DB states that its free MIDI files are demo arrangements and that the
 copyright owners have granted permission to download them. The bundled file is
 the demo only; the full professional arrangement is available from Hit Trax.
+For this game, the supplied piano reduction was cut into a 61-bar
+verse-and-chorus loop and re-orchestrated for oboe, horn, trumpet, strings,
+cello, contrabass, piano, timpani, and field drum.
 
 ## Sound effects
 

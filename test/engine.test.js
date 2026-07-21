@@ -76,7 +76,7 @@ test('Rally recruits cards; companion adds value and both suit powers apply (8H 
   assert.equal(after - before, Math.min(9, 9), 'drew up to 9 (capped by hand size/tavern)');
 });
 
-test('Raid returns the Fallen under Le Peuple before Rally recruits', () => {
+test('Raid returns prisoners under Le Peuple before Rally recruits', () => {
   const s = newGame(names2, { seed: 5 });
   rig(s, {
     hands: [[{ r: 5, s: 'H' }, { r: 5, s: 'D' }], [{ r: 2, s: 'C' }]],
@@ -85,7 +85,7 @@ test('Raid returns the Fallen under Le Peuple before Rally recruits', () => {
   });
   const tavernBefore = s.tavern.length;
   playCards(s, 0, [{ r: 5, s: 'H' }, { r: 5, s: 'D' }]); // pair of 5s: return 10 (capped 3), recruit 10
-  assert.equal(s.discard.length, 0, 'the Fallen fully returned');
+  assert.equal(s.discard.length, 0, 'the prisoners fully returned');
   // returned 3 in, then recruits came off the top; the 3 returned went UNDER (start of array)
   assert.equal(s.enemy.damage, 10);
   assert.ok(s.tavern.length <= tavernBefore + 3, 'Le Peuple gained returned cards then supplied recruits');
@@ -193,6 +193,35 @@ test('exact kill places the royal on top of the tavern; overkill goes to discard
   assert.equal(currentShield(s), 0, 'played cards cleared');
   // the played 10C went to discard
   assert.ok(s.discard.some(c => c.r === 10 && c.s === 'C'));
+});
+
+test('Heart and Diamond powers resolve on a killing blow before the royal is defeated', () => {
+  const hearts = newGame(names2, { seed: 111 });
+  rig(hearts, {
+    hands: [[{ r: 10, s: 'H' }], []],
+    enemy: { r: 'J', s: 'S' },
+  });
+  hearts.enemy.damage = 10;
+  const handsBefore = hearts.players.reduce((sum, player) => sum + player.hand.length, 0);
+  playCards(hearts, 0, [{ r: 10, s: 'H' }]);
+  const handsAfter = hearts.players.reduce((sum, player) => sum + player.hand.length, 0);
+  assert.equal(handsAfter - (handsBefore - 1), 10, 'Rally recruits before the killing blow resolves');
+  assert.deepEqual(hearts.lastEffects, { healed: 0, drawn: 10 });
+  assert.deepEqual(hearts.tavern.at(-1), { r: 'J', s: 'S' }, 'exactly defeated royal is added after Rally');
+
+  const diamonds = newGame(names2, { seed: 112 });
+  rig(diamonds, {
+    hands: [[{ r: 10, s: 'D' }], []],
+    enemy: { r: 'J', s: 'S' },
+    discard: [{ r: 2, s: 'C' }, { r: 3, s: 'H' }, { r: 4, s: 'S' }],
+  });
+  diamonds.enemy.damage = 10;
+  const tavernBefore = diamonds.tavern.length;
+  playCards(diamonds, 0, [{ r: 10, s: 'D' }]);
+  assert.deepEqual(diamonds.lastEffects, { healed: 3, drawn: 0 });
+  assert.equal(diamonds.tavern.length, tavernBefore + 4, 'three prisoners and the exact-kill royal enter Le Peuple');
+  assert.deepEqual(diamonds.tavern.at(-1), { r: 'J', s: 'S' }, 'royal remains on top after Raid');
+  assert.deepEqual(diamonds.discard, [{ r: 10, s: 'D' }], 'the killing card is discarded only after Raid');
 });
 
 test('a captured royal in hand attacks at 10/15/20 with live suit power', () => {

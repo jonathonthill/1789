@@ -387,6 +387,19 @@ input {
 }
 .hand-card + .hand-card { margin-left: var(--hand-gap); }
 .hand-card svg { width: 100%; height: auto; display: block; pointer-events: none; }
+/* Power blocked: strike through the power-box text when the card's suit matches
+   the (still-immune) enemy, so it reads as nullified at a glance. */
+.hand-card.power-off :is(.pb-title, .pb-effect) {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+/* The angled corner-suit slash is baked into every card SVG but stays hidden
+   until the card is flagged power-off. */
+.corner-suit-slash { display: none; }
+.hand-card.power-off .corner-suit-slash {
+  display: inline;
+  transform: translate(2px, -2px);
+}
 .hand-card.staged { z-index: 2; transform: translateY(-18px); filter: drop-shadow(0 8px 14px rgba(120,20,30,.5)); }
 .hand-card.staged::after {
   content: '✔'; position: absolute; top: -8px; right: -4px;
@@ -476,6 +489,11 @@ input {
   position: relative; width: 200px; height: 280px; margin: 0 auto;
   border-left: 11px solid #5d4326; border-right: 11px solid #5d4326; border-top: 15px solid #5d4326;
   overflow: visible;
+  /* Lift the whole frame subtree (including the falling halves, which spill out
+     via overflow: visible) above the caption below it, so both card halves pass
+     in front of the "defeated" text. The frame/blade/half ordering is resolved
+     inside this context by their own z-index values. */
+  z-index: 1;
 }
 .g-frame::before {
   content: ''; position: absolute; z-index: 3; pointer-events: none;
@@ -497,14 +515,24 @@ input {
 .g-victim {
   position: absolute; bottom: 8px; left: calc(50% - 59px);
   width: 118px; height: 165px;
-  perspective: 900px; perspective-origin: 50% 40%;
 }
-/* Each half pivots about its own centre so it tumbles freely (rather than
-   hinging at the cut line); severFall in anim.js drives the transform. */
-.victim-half { position: absolute; inset: 0; will-change: transform; backface-visibility: hidden; }
-.victim-half svg { width: 100%; height: auto; display: block; }
-.victim-half-top { z-index: 1; clip-path: polygon(0 0, 100% 0, 100% 45%, 0 57%); transform-origin: 50% 26%; }
-.victim-half-bottom { z-index: 4; clip-path: polygon(0 57%, 100% 45%, 100% 100%, 0 100%); transform-origin: 50% 76%; }
+/* The outer .victim-half carries only the z-index so the bottom half (z4, in
+   front of the frame) and top half (z1, behind it) stay direct participants of
+   the frame's stack — perspective lives on the inner .vh-tumble instead, so it
+   never becomes a container stacking context that would trap those z-indexes.
+   .vh-tumble is the piece severFall tumbles; its two faces (card front + deck
+   back) are mounted back-to-back and pivot about the piece's own centre. */
+.victim-half { position: absolute; inset: 0; }
+.victim-half-top { z-index: 1; }
+.victim-half-bottom { z-index: 4; }
+.vh-tumble { position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform; }
+.victim-half-top .vh-tumble { transform-origin: 50% 26%; }
+.victim-half-bottom .vh-tumble { transform-origin: 50% 76%; }
+.vh-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.vh-face svg { width: 100%; height: auto; display: block; }
+.vh-back { transform: rotateX(180deg); }
+.victim-half-top .vh-face { clip-path: polygon(0 0, 100% 0, 100% 45%, 0 57%); }
+.victim-half-bottom .vh-face { clip-path: polygon(0 57%, 100% 45%, 100% 100%, 0 100%); }
 .g-victim::after {
   content: ''; position: absolute; z-index: 3; left: 1px; right: 1px; top: 51%;
   height: 2px; border-radius: 2px; opacity: 0; pointer-events: none;
@@ -545,13 +573,77 @@ input {
 
 /* help panel */
 .help-panel { position: fixed; inset: 0; z-index: 80; background: var(--parchment); overflow-y: auto; }
-.help-inner { max-width: 640px; margin: 0 auto; padding: 18px 20px 60px; position: relative; }
+.help-inner { max-width: 760px; margin: 0 auto; padding: 18px 20px 60px; position: relative; }
 .help-close { position: sticky; top: 10px; float: right; z-index: 2; }
 .help-inner h2 { font-family: var(--serif-display); border-bottom: 2px solid var(--gold); padding-bottom: 6px; }
 .help-inner h3 { font-family: var(--serif-display); margin: 22px 0 6px; color: var(--crimson-deep); }
 .help-inner h3.here::after { content: ' ← you are here'; font-size: .75rem; color: var(--good); font-family: Georgia, serif; font-style: italic; }
 .help-inner p, .help-inner li { line-height: 1.5; font-size: .97rem; }
 .help-inner .suit-line { margin: 4px 0; }
+.help-intro {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px;
+  padding: 12px 14px; border: 1px solid rgba(176,141,44,.5); border-radius: 12px;
+  background: rgba(255,255,255,.24);
+}
+.help-intro p { margin: 0; }
+.help-royal-line, .help-example-cards, .help-exact-cards { display: flex; align-items: center; }
+.help-royal-line .help-card + .help-card { margin-left: -24px; }
+.help-card {
+  display: inline-flex; flex: 0 0 auto; width: 64px; flex-direction: column;
+  align-items: center; gap: 3px; color: var(--ink-soft); font-size: .66rem;
+  font-family: var(--serif-display); text-align: center;
+}
+.help-card svg { display: block; width: 100%; filter: drop-shadow(0 3px 4px rgba(24,18,8,.22)); }
+.help-turn-flow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.help-turn-flow > div {
+  display: grid; grid-template-columns: 28px 1fr; gap: 8px; padding: 10px;
+  border: 1px solid rgba(176,141,44,.38); border-radius: 9px; background: rgba(255,255,255,.2);
+}
+.help-turn-flow > div > b {
+  display: grid; place-items: center; align-self: start; width: 28px; height: 28px;
+  border-radius: 50%; background: var(--crimson-deep); color: var(--paper);
+  font-family: var(--serif-display);
+}
+.help-turn-flow strong { display: block; color: var(--ink); font-family: var(--serif-display); margin-bottom: 2px; }
+.help-turn-flow span { color: var(--ink-soft); font-size: .9rem; line-height: 1.38; }
+.help-power-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.help-power {
+  display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: center;
+  min-height: 108px; padding: 9px 11px; border-radius: 10px;
+  border: 1px solid rgba(176,141,44,.42); background: rgba(255,255,255,.22);
+}
+.help-power .help-card { width: 54px; }
+.help-power h4 { margin: 0 0 3px; font-family: var(--serif-display); font-size: .91rem; }
+.help-power p { margin: 0; font-size: .84rem; line-height: 1.35; color: var(--ink-soft); }
+.help-power-h h4, .help-power-d h4 { color: var(--crimson); }
+.help-rule-note { padding: 9px 11px; border-left: 3px solid var(--crimson); background: rgba(158,34,53,.07); }
+.help-example-row {
+  display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center;
+  padding: 8px 0;
+}
+.help-example-row p { margin: 0; }
+.help-example-cards { justify-content: center; min-height: 94px; }
+.help-example-cards .help-card + .help-card { margin-left: -18px; }
+.help-example-cards .help-card { width: 62px; }
+.help-example-cards .help-card:nth-child(1) { transform: rotate(-5deg); }
+.help-example-cards .help-card:nth-child(3) { transform: rotate(5deg); }
+.help-pair .help-card + .help-card { margin-left: -10px; }
+.help-single .help-card { transform: none !important; }
+.help-exact {
+  display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: center;
+  padding: 10px 12px; border: 1px solid rgba(176,141,44,.45); border-radius: 10px;
+  background: rgba(255,255,255,.2);
+}
+.help-exact p { margin: 0; }
+.help-exact-cards { justify-content: center; gap: 7px; }
+.help-exact-cards .help-card { width: 58px; }
+.help-arrow { color: var(--crimson-deep); font-family: var(--serif-display); font-weight: 700; white-space: nowrap; }
+.help-deck { display: inline-flex; width: 49px; flex-direction: column; align-items: center; gap: 4px; font-size: .62rem; text-align: center; }
+.help-deck svg { width: 100%; filter: drop-shadow(0 3px 4px rgba(24,18,8,.22)); }
+.help-decks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.help-decks > div { padding: 10px; border-top: 3px solid var(--gold); background: rgba(255,255,255,.23); }
+.help-decks dt { color: var(--crimson-deep); font-family: var(--serif-display); font-weight: 700; }
+.help-decks dd { margin: 4px 0 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.35; }
 
 /* coach marks */
 .coach { position: fixed; inset: 0; z-index: 90; background: rgba(12, 10, 22, .55); }
@@ -606,6 +698,14 @@ input {
   .enemy-name { font-size: 1.02rem; }
   .table-card { width: 36px; }
   .table-combo .table-card + .table-card { margin-left: -22px; }
+  .help-inner { padding: 12px 14px 46px; }
+  .help-intro { grid-template-columns: 1fr; }
+  .help-royal-line { justify-content: center; }
+  .help-turn-flow, .help-power-grid { grid-template-columns: 1fr; }
+  .help-example-row, .help-exact { grid-template-columns: 1fr; }
+  .help-example-row p, .help-exact p { text-align: left; }
+  .help-exact-cards { min-width: 0; }
+  .help-decks { grid-template-columns: 1fr; }
 }
 
 /* Multiplayer seats consume extra height. On short phones, tighten the table

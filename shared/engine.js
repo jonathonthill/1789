@@ -235,7 +235,7 @@ export function playCards(state, playerIdx, cards) {
     const healed = state.discard.splice(0, Math.min(value, state.discard.length));
     state.tavern.unshift(...healed); // under the deck, no peeking
     state._lastHealed = healed.length;
-    if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} of the Fallen return beneath Le Peuple.`);
+    if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} prisoner${healed.length === 1 ? '' : 's'} return beneath Le Peuple.`);
   }
   if (suits.includes('H') && active('H')) {
     let toDraw = value;
@@ -282,13 +282,13 @@ function defeatEnemy(state, playerIdx) {
   const exact = state.enemy.damage === enemyHealth(state);
   const enemyCard = state.enemy.card;
   if (exact) {
-    state.tavern.push(enemyCard); // facedown on top — the royal is won to the Revolution
+    state.tavern.push(enemyCard); // facedown on top — the royal is won over to the Revolution
   } else {
     state.discard.push(enemyCard);
   }
   for (const combo of state.playedCombos) state.discard.push(...combo.cards);
   log(state, exact
-    ? `${cardName(enemyCard)} falls with surgical precision — won to the Revolution! (top of Le Peuple)`
+    ? `${cardName(enemyCard)} falls with surgical precision — won over to the Revolution! (top of Le Peuple)`
     : `${cardName(enemyCard)} is sent to the guillotine!`);
 
   if (state.castle.length === 0) {

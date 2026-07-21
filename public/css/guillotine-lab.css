@@ -38,9 +38,12 @@
 .lab-back { flex: 0 0 auto; color: var(--gold-hi); font-family: var(--serif-display); font-size: .76rem; letter-spacing: .08em; text-decoration: none; border-bottom: 1px solid rgba(217,188,99,.4); padding-bottom: 3px; }
 .lab-back:hover { color: #fff0b5; }
 
-.lab-workbench { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(310px, .75fr); overflow: hidden; border: 1px solid rgba(217,188,99,.35); border-radius: 18px; background: rgba(8,12,29,.6); box-shadow: 0 24px 70px rgba(0,0,0,.34); }
+.lab-workbench { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(310px, .75fr); overflow: visible; border: 1px solid rgba(217,188,99,.35); border-radius: 18px; background: rgba(8,12,29,.6); box-shadow: 0 24px 70px rgba(0,0,0,.34); }
 .lab-preview-panel { min-width: 0; padding: 28px; }
-.lab-preview { position: relative; display: grid; place-items: center; min-height: 560px; overflow: hidden; border: 1px solid rgba(217,188,99,.24); border-radius: 13px; background: radial-gradient(circle, rgba(40,53,92,.52), rgba(8,11,27,.92) 70%); }
+/* Full-height stage so the whole card drop (and the caption beneath the frame)
+   stays visible instead of being clipped by a short panel. */
+.lab-preview { position: relative; display: grid; place-items: start center; min-height: 100dvh; padding-top: 40px; overflow: visible; border: 1px solid rgba(217,188,99,.24); border-radius: 13px; background: radial-gradient(circle at 50% 22%, rgba(40,53,92,.52), rgba(8,11,27,.92) 70%); }
+.lab-transport { position: sticky; bottom: 10px; z-index: 5; background: rgba(8,12,29,.82); border-radius: 10px; padding: 12px 12px 12px; backdrop-filter: blur(3px); }
 .lab-grid { position: absolute; inset: 0; opacity: .18; background-image: linear-gradient(rgba(217,188,99,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(217,188,99,.16) 1px, transparent 1px); background-size: 32px 32px; }
 .lab-guillotine-stage { position: relative; z-index: 1; transform: scale(1.38); transform-origin: center; }
 .lab-timecode { position: absolute; right: 15px; bottom: 12px; min-width: 64px; color: rgba(248,241,223,.7); font: 600 .72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }

@@ -132,7 +132,7 @@ function replay() {
   blade.classList.remove('drop');
   victim.classList.remove('severed');
   caption.classList.remove('show');
-  for (const half of victim.querySelectorAll('.victim-half')) half.style.transform = '';
+  for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
   void blade.offsetWidth;
   blade.classList.add('drop');
   victim.classList.add('severed');

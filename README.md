@@ -55,9 +55,9 @@ fly deploy
 
 ### Theme glossary
 
-Tavern deck → **Le Peuple** · Discard → **The Fallen** · Castle deck → **The Ancien Régime**
+Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **The Ancien Régime**
 · Jester → **The Pamphleteer** · Animal Companion → **Sans-Culotte** · Yield → **Lay Low**
-· ♥ Rally the People · ♦ Raid la Prison · ♣ Fury of the Mob · ♠ Man the Barricades
+· ♥ Rally Le Peuple · ♦ Raid La Prison · ♣ Rise en Masse · ♠ A La Barricade
 
 Rules reference: `RegicideRulesA4.pdf` (original game by Paul Abrahams, Luke Badger,
 Andy Richdale). This is a fan retheme for personal play.

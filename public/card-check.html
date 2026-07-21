@@ -22,6 +22,9 @@
   .grid { display: flex; flex-wrap: wrap; gap: 16px; }
   .card { width: 150px; }
   .card svg { width: 100%; display: block; filter: drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
+  /* The blocked-power slash is baked into every card SVG but only shown in-game
+     on a power-off hand card; keep the gallery matching that. */
+  .corner-suit-slash { display: none; }
 </style>
 </head>
 <body>

@@ -245,7 +245,11 @@ function routeView(v) {
       endHandled = true;
       staged = [];
       if (v.phase === 'won' && v.lastEvent?.type === 'victory') {
-        withAnim(done => showGuillotine(v.lastEvent.card, v.lastEvent.exact, done), () => renderEnd(v));
+        // A killing Heart/Diamond still resolves before the royal falls.
+        withAnim(done => animateEffects(v, () => {
+          audio.sfx('guillotine');
+          showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+        }), () => renderEnd(v));
       } else {
         renderEnd(v);
       }
@@ -262,11 +266,15 @@ function routeView(v) {
     staged = [];
     const ev = v.lastEvent;
     if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
-      audio.sfx('guillotine');
-      withAnim(done => showGuillotine(ev.card, ev.exact, () => {
-        audio.sfx('enemy');
-        showEntrance(v.enemy, done);
+      renderGame(v);
+      withAnim(done => animateEffects(v, () => {
+        audio.sfx('guillotine');
+        showGuillotine(ev.card, ev.exact, () => {
+          audio.sfx('enemy');
+          showEntrance(v.enemy, done);
+        });
       }));
+      return;
     } else {
       audio.sfx('enemy');
       withAnim(done => showEntrance(v.enemy, done), maybeCoach);
@@ -283,26 +291,30 @@ function routeView(v) {
 }
 
 // Suit-power side effects become table motion: a diamond raid returns the
-// Fallen under Le Peuple, then a heart rally recruits cards into hands.
+// Prisoners under Le Peuple, then a heart rally recruits cards into hands.
 let lastActionSeq = -1;
-function animateEffects(v) {
-  if (v.actionSeq === lastActionSeq) return;
+function animateEffects(v, done) {
+  if (v.actionSeq === lastActionSeq) { done?.(); return; }
   const first = lastActionSeq === -1 && v.actionSeq > 1;
   lastActionSeq = v.actionSeq;
-  if (first || !v.lastEffects) return; // don't replay history on rejoin
+  if (first || !v.lastEffects) { done?.(); return; } // don't replay history on rejoin
   const { healed = 0, drawn = 0 } = v.lastEffects;
+  const draw = () => {
+    if (drawn <= 0) { done?.(); return; }
+    audio.sfx('draw');
+    flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), done);
+  };
   if (healed > 0) {
     audio.sfx('shuffle');
     riffleDeck($('#stack-discard'));
     flyCards($('#stack-discard'), $('#stack-tavern'), healed, cardBackSVG(),
-      () => riffleDeck($('#stack-tavern')));
-  }
-  if (drawn > 0) {
-    setTimeout(() => {
-      audio.sfx('draw');
-      flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG());
-    },
-      healed > 0 ? 1100 : 0);
+      () => {
+        riffleDeck($('#stack-tavern'));
+        if (drawn > 0) setTimeout(draw, 300);
+        else done?.();
+      });
+  } else {
+    draw();
   }
 }
 
@@ -384,7 +396,7 @@ function renderGame(v) {
   } else banner.hidden = true;
 }
 
-// A physical-looking pile: under-edges + a top card (back, or a face for the Fallen).
+// A physical-looking pile: under-edges + a top card (back, or a face for La Prison).
 function renderDeck(stackEl, count, topFaceCard) {
   if (count === 0) {
     stackEl.className = 'deck-stack empty-deck';
@@ -446,12 +458,19 @@ function renderHand(v) {
   const ps = pseudoState(v);
   const myTurn = v.current === v.you.index;
   const canStage = myTurn && (v.phase === 'play' || v.phase === 'discard');
+  // The enemy is immune to its own suit's power (until the Pamphleteer cancels
+  // it), so a matching-suit card still deals damage but its power won't fire.
+  const immuneSuit = (v.enemy && !v.enemy.immunityCancelled) ? v.enemy.card.s : null;
 
   zone.innerHTML = v.you.hand.length ? '' : '<div class="hand-empty">Empty-handed — but not out of the fight.</div>';
   v.you.hand.forEach((card, i) => {
     const el = document.createElement('div');
     el.className = 'hand-card';
     el.innerHTML = cardSVG(card);
+    if (card.s && card.s === immuneSuit) {
+      el.classList.add('power-off');
+      el.title = "This suit's power is blocked — the enemy is immune.";
+    }
     const stagedNow = isStaged(card);
     if (stagedNow) el.classList.add('staged');
     let extendable = true;

@@ -1,11 +1,26 @@
 // Context-dependent help: status strip, long-press explainers, help panel.
 import { SUIT_META, TERMS, enemyMeta, suitPowerLine } from '/shared/theme.js';
-import { miniLabel } from '/js/cards.js';
+import { cardSVG, cardBackSVG, miniLabel } from '/js/cards.js';
 import { cardValue, previewPlay } from '/shared/engine.js';
 
 const RANKS = { J: 'Officer', Q: 'Queen', K: 'King' };
 
 function enemyName(view) { return view.enemy ? enemyMeta(view.enemy.card).name : ''; }
+
+function helpCard(card, label, opts = {}) {
+  return `<span class="help-card" aria-label="${label}">
+    ${cardSVG(card, opts)}
+    <span>${label}</span>
+  </span>`;
+}
+
+function powerGuide(suit) {
+  const meta = SUIT_META[suit];
+  return `<article class="help-power help-power-${suit.toLowerCase()}">
+    ${helpCard({ r: 5, s: suit }, `5${meta.symbol}`)}
+    <div><h4>${meta.symbol} ${meta.power}</h4><p>${meta.desc}</p></div>
+  </article>`;
+}
 
 // ── the always-on status strip ──────────────────────────────────────────────
 export function statusText(view, stagedCount) {
@@ -59,7 +74,7 @@ export function cardInfo(card, view) {
   } else if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
     const meta = enemyMeta(card);
     html = `<h3>${miniLabel(card)} ${meta.name}</h3>
-      <p><i>${meta.title} — won to the Revolution and fighting for you.</i></p>
+      <p><i>${meta.title} — won over to the Revolution and fighting for you.</i></p>
       <p>Attacks for <b>${v}</b> with the full ${SUIT_META[card.s].power} power. Worth <b>${v}</b> when sacrificed to damage.</p>
       <p>${suitPowerLine(card.s)}</p>`;
   } else {
@@ -82,8 +97,8 @@ export function pileInfo(kind, view) {
   }
   if (kind === 'tavern') {
     return `<h3>🥖 ${TERMS.tavern}</h3>
-      <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally the People draws from it; ♦ Raid la Prison slips the freed and shuffled Fallen <i>under</i> it.</p>
-      <p>An enemy felled with <b>exactly</b> the right damage is won to the Revolution: placed on top, ready to be drawn and fight for you at full strength.</p>
+      <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally Le Peuple draws from it; ♦ Raid La Prison slips the freed and shuffled prisoners <i>under</i> it.</p>
+      <p>An enemy felled with <b>exactly</b> the right damage is won over to the Revolution: placed on top, ready to be drawn and fight for you at full strength.</p>
       <p>An empty deck is no defeat — you simply draw nothing.</p>`;
   }
   if (kind === 'discard') {
@@ -92,7 +107,7 @@ export function pileInfo(kind, view) {
       return `<span class="mini-card ${red ? 'red' : ''}">${miniLabel(c)}</span>`;
     }).join('') || '<i>none yet</i>';
     return `<h3>🕯 ${TERMS.discard}</h3>
-      <p><b>${view.discardCount}</b> cards lost to the struggle — spent attacks, sacrifices, and guillotined royals. ♦ Raid la Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
+      <p><b>${view.discardCount}</b> prisoners — spent attacks, sacrifices, and guillotined royals. ♦ Raid La Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
   if (kind === 'enemy') return enemyInfo(view);
@@ -127,13 +142,13 @@ export function projectionText(view, staged, pseudoState) {
   const p = previewPlay(pseudoState, staged);
   if (p.isJester) return `The Pamphleteer strikes — immunity shattered, you choose who goes next.`;
   const bits = [`⚔️ <b>${p.damage}</b> damage${p.doubled ? ' (mob ×2!)' : ''}`];
-  if (p.heals) bits.push(`♦ ${p.heals} Fallen returned`);
+  if (p.heals) bits.push(`♦ ${p.heals} freed from La Prison`);
   if (p.draws) bits.push(`♥ ${p.draws} recruited`);
   if (p.shieldAdd) bits.push(`♠ +${p.shieldAdd} barricade`);
   if (p.immuneSuits.length) bits.push(`<span class="warn">⚠ ${p.immuneSuits.map(s => SUIT_META[s].symbol + ' immune').join(', ')}</span>`);
   const e = view.enemy;
   const remaining = e.health - e.damage - p.damage;
-  if (remaining === 0) bits.push(`<b>exact — won to the Revolution!</b>`);
+  if (remaining === 0) bits.push(`<b>exact — won over to the Revolution!</b>`);
   else if (remaining < 0) bits.push(`<b>the guillotine awaits</b>`);
   return bits.join(' · ');
 }
@@ -144,37 +159,75 @@ export function helpHTML(view) {
   const here = id => (id === phaseSection(phase) ? 'here' : '');
   return `
     <h2>How to Play — 1789</h2>
-    <p><i>A cooperative game. Together, defeat all twelve royals of the Ancien Régime — 4 Officers, then 4 Queens, then 4 Kings. If one citoyen falls, the Revolution fails.</i></p>
+    <div class="help-intro">
+      <div class="help-royal-line" aria-hidden="true">
+        ${helpCard({ r: 'J', s: 'S' }, 'Officer', { subtitle: true })}
+        ${helpCard({ r: 'Q', s: 'H' }, 'Queen', { subtitle: true })}
+        ${helpCard({ r: 'K', s: 'C' }, 'King', { subtitle: true })}
+      </div>
+      <p><b>One Revolution, twelve royals.</b> Defeat 4 Officers of the Crown, then 4 Queens, then 4 Kings. If one citoyen falls, everyone loses.</p>
+    </div>
 
     <h3 class="${here('turn')}">Your Turn</h3>
-    <ol>
-      <li><b>Play cards</b> (or Lay Low): one card, a Sans-Culotte pairing, a same-number combo totaling ≤ 10, or the Pamphleteer alone.</li>
-      <li><b>Suit power fires</b> at the total value played (see below). Powers are mandatory.</li>
-      <li><b>Damage is dealt.</b> Reduce the enemy's endurance; at 0 they fall.</li>
-      <li><b>The enemy strikes back.</b> Sacrifice cards from hand totaling at least their attack (minus barricades) — or die, and all is lost.</li>
-    </ol>
+    <div class="help-turn-flow">
+      <div><b>1</b><span><strong>Stage an attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> You may instead <em>Lay Low</em>.</span></div>
+      <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
+      <div><b>3</b><span><strong>Deal damage</strong>Reduce the royal's endurance. Rise en Masse doubles the damage; an exact defeat wins the royal over.</span></div>
+      <div><b>4</b><span><strong>Survive the counterattack</strong>If the royal remains, sacrifice cards totaling at least their attack after barricades. A defeated royal never strikes back.</span></div>
+    </div>
 
     <h3>Suit Powers</h3>
-    ${['H', 'D', 'C', 'S'].map(s => `<p class="suit-line">${suitPowerLine(s)}</p>`).join('')}
-    <p><b>Immunity:</b> each royal ignores the power of their own suit (the damage still counts) — until a Pamphleteer ends it.</p>
+    <div class="help-power-grid">${['H', 'D', 'C', 'S'].map(powerGuide).join('')}</div>
+    <p class="help-rule-note"><b>Immunity:</b> each royal blocks the power of their own suit—the crossed-out suit on affected cards—but their damage still counts. A Pamphleteer shatters that immunity for the rest of the fight.</p>
 
     <h3 class="${here('discard')}">Suffering Damage</h3>
-    <p>Sacrificed cards are worth their value (Sans-Culotte 1, Pamphleteer 0, captured Officer 10 / Queen 15 / King 20). An empty hand is allowed — but if you cannot cover the damage, the Revolution is crushed. You also lose if a citoyen can neither play nor lay low on their turn.</p>
+    <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Sans-Culottes are worth 1, Pamphleteers 0, and captured royals 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
+    <p><b>Lay Low:</b> skip your attack and take the royal's counterattack after barricades. In multiplayer you cannot Lay Low if every other citoyen just did; solo, you cannot do it twice in a row.</p>
 
     <h3>Combos & Sans-Culottes</h3>
-    <p>Pairs, triples, or quads of the same number may attack together if their total is ≤ 10 (2s through 5s). All suit powers fire at the combined value. A Sans-Culotte may instead join any one card, adding 1 and their own suit power.</p>
+    <div class="help-example-row">
+      <div class="help-example-cards" aria-hidden="true">
+        ${helpCard({ r: 3, s: 'H' }, '3♥')}${helpCard({ r: 3, s: 'D' }, '3♦')}${helpCard({ r: 3, s: 'C' }, '3♣')}
+      </div>
+      <p><b>Same-number combo:</b> play 2–4 matching number cards when their total is ≤ 10. This trio has value 9: Hearts and Diamonds resolve at 9, then Clubs doubles the damage to 18.</p>
+    </div>
+    <div class="help-example-row">
+      <div class="help-example-cards help-pair" aria-hidden="true">
+        ${helpCard({ r: 'A', s: 'S' }, 'Sans-Culotte')}${helpCard({ r: 8, s: 'H' }, '8♥')}
+      </div>
+      <p><b>Sans-Culotte pair:</b> a Sans-Culotte may fight alone or join exactly one non-Pamphleteer card—including another Sans-Culotte. Add 1 to the value and fire both powers.</p>
+    </div>
 
     <h3 class="${here('jester')}">The Pamphleteer</h3>
-    <p>Played alone, attack 0. Shatters the enemy's immunity (barricades already built now count; a mob's doubling does not apply retroactively). Skip the counterattack and choose anyone — including yourself — to act next.</p>
+    <div class="help-example-row">
+      <div class="help-example-cards help-single" aria-hidden="true">${helpCard({ r: 'X', s: null }, 'Pamphleteer')}</div>
+      <p>Play alone for attack 0. The Pamphleteer shatters immunity, skips the counterattack, and lets you choose any citoyen—including yourself—to act next. Earlier barricades begin working; earlier mob attacks are not doubled retroactively.</p>
+    </div>
 
-    <h3>Exact Kills</h3>
-    <p>Fell a royal with damage <i>exactly</i> equal to their remaining endurance and they are won to the Revolution: placed atop ${TERMS.tavern}, drawn like any card, and devastating in your hand.</p>
+    <h3>Defeating a Royal</h3>
+    <div class="help-exact">
+      <div class="help-exact-cards" aria-hidden="true">
+        ${helpCard({ r: 10, s: 'C' }, '10♣')}
+        <span class="help-arrow">×2 →</span>
+        ${helpCard({ r: 'J', s: 'H' }, 'Officer', { subtitle: true })}
+        <span class="help-arrow">→</span>
+        <span class="help-deck">${cardBackSVG()}<small>${TERMS.tavern}</small></span>
+      </div>
+      <p><b>Exact damage:</b> the royal is won over to the Revolution and placed atop ${TERMS.tavern}, ready to be recruited. <b>Overkill:</b> the royal goes to ${TERMS.discard}. In either case, the slayer immediately attacks the next royal.</p>
+    </div>
+
+    <h3>The Three Decks</h3>
+    <dl class="help-decks">
+      <div><dt>${TERMS.castle}</dt><dd>Royals still waiting: Officers, Queens, then Kings.</dd></div>
+      <div><dt>${TERMS.tavern}</dt><dd>Face-down recruits drawn by Rally Le Peuple.</dd></div>
+      <div><dt>${TERMS.discard}</dt><dd>Played and sacrificed cards; Raid La Prison returns prisoners beneath Le Peuple.</dd></div>
+    </dl>
 
     <h3>Table Talk</h3>
-    <p>Never reveal or hint at what you hold. Public facts are fair game ("I have two cards", "Le Peuple runs low"). After a Pamphleteer, you may say whether you'd like to go next — nothing more.</p>
+    <p>Never reveal or hint at what you hold. Public facts are fair game (“I have two cards,” “Le Peuple runs low”). After a Pamphleteer, you may say whether you would like to act next—nothing more.</p>
 
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
-    <p>You fight alone with 8 cards. Twice per game you may <b>Regroup</b>: discard your whole hand and draw 8 fresh — before playing, or before suffering damage. Win using 0 Regroups for <b>Gold</b>, 1 for <b>Silver</b>, 2 for <b>Bronze</b>. You may not Lay Low twice in a row.</p>` : ''}
+    <p>You fight alone with 8 cards. Twice per game you may <b>Regroup</b>: send your whole hand to ${TERMS.discard} and draw up to 8 fresh cards—before attacking or while facing damage. Win using 0 Regroups for <b>Gold</b>, 1 for <b>Silver</b>, or 2 for <b>Bronze</b>.</p>` : ''}
   `;
 }
 function phaseSection(phase) {
