@@ -6,7 +6,7 @@
 export const SUITS = ['S', 'H', 'D', 'C'];
 
 const HAND_SIZE = { 1: 8, 2: 7, 3: 6, 4: 5 };
-const JESTERS = { 1: 0, 2: 0, 3: 1, 4: 2 };
+const JESTERS = { 1: 1, 2: 1, 3: 2, 4: 2 };
 export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, health: 30 }, K: { attack: 20, health: 40 } };
 
 export function cardValue(c) {
@@ -58,7 +58,7 @@ export function newGame(playerNames, opts = {}) {
     tavern.push({ r: 'A', s });
     for (let r = 2; r <= 10; r++) tavern.push({ r, s });
   }
-  const jesters = n === 1 ? 0 : JESTERS[n];
+  const jesters = JESTERS[n];
   for (let i = 0; i < jesters; i++) tavern.push({ r: 'X', s: null });
   shuffle(tavern, rng);
 
@@ -68,7 +68,12 @@ export function newGame(playerNames, opts = {}) {
     solo: n === 1,
     soloJesters: n === 1 ? 2 : 0,
     soloJestersUsed: 0,
-    players: playerNames.map(name => ({ name, hand: [], yielded: false })),
+    players: playerNames.map(name => ({
+      name,
+      hand: [],
+      yielded: false,
+      regroupsRemaining: n === 2 ? 1 : 0,
+    })),
     castle,
     tavern,
     discard: [],
@@ -134,6 +139,12 @@ function handValue(player) {
   return player.hand.reduce((s, c) => s + cardValue(c), 0);
 }
 
+function regroupsRemaining(state, playerIdx) {
+  if (state.solo) return state.soloJesters;
+  if (state.playerCount === 2) return state.players[playerIdx]?.regroupsRemaining ?? 0;
+  return 0;
+}
+
 function removeFromHand(player, cards) {
   for (const c of cards) {
     const i = player.hand.findIndex(h => sameCard(h, c));
@@ -167,16 +178,16 @@ export function validatePlay(state, playerIdx, cards) {
   if (cards.length === 1) return null;
   const companions = cards.filter(c => c.r === 'A').length;
   if (companions > 0) {
-    if (cards.length === 2) return null; // Sans-Culotte + any one non-jester card (or two Sans-Culottes)
+    if (cards.length === 2) return null; // Sans-Culotte + any one card (or two Sans-Culottes)
     return 'A Sans-Culotte may join only one other card.';
   }
-  // combo: 2-4 of the same numeric rank, total ≤ 10
+  // Combo: 2-4 of the same numeric rank, with a combined value of at most 20.
   const r = cards[0].r;
   if (typeof r !== 'number') return 'Only numbered cards form a combo.';
   if (!cards.every(c => c.r === r)) return 'Combos must share the same number.';
-  if (cards.length > 4) return 'At most four cards in a combo.';
-  const total = cards.reduce((s, c) => s + cardValue(c), 0);
-  if (total > 10) return 'A combo may total at most 10.';
+  if (cards.length > 4) return 'At most four numbered cards may form a combo.';
+  const total = cards.reduce((sum, card) => sum + cardValue(card), 0);
+  if (total > 20) return 'A combo may total at most 20.';
   return null;
 }
 
@@ -228,13 +239,26 @@ export function playCards(state, playerIdx, cards) {
   const enemySuit = state.enemy.card.s;
   const active = s => s !== enemySuit || state.enemy.immunityCancelled;
 
+  // Step 1: apply the attack. Clubs modifies the blow itself, so its power is
+  // accounted for while calculating damage; every other suit resolves below.
+  const doubled = suits.includes('C') && active('C');
+  const damage = doubled ? value * 2 : value;
+  state.enemy.damage += damage;
+  log(state, `${player.name} attacks for ${damage} damage${doubled ? ' (the mob doubles the blow!)' : ''}.`);
+
+  // Step 2: resolve card powers before deciding whether anyone dies. This is
+  // especially important for Rally: cards drawn here must count when checking
+  // whether the attacker can withstand a surviving enemy's counterattack.
+  let healedCount = 0;
+  let drawnCount = 0;
+
   // Raid before Rally so recovered cards are safely under Le Peuple before
   // recruitment begins.
   if (suits.includes('D') && active('D')) {
     shuffle(state.discard, state._rng);
     const healed = state.discard.splice(0, Math.min(value, state.discard.length));
     state.tavern.unshift(...healed); // under the deck, no peeking
-    state._lastHealed = healed.length;
+    healedCount = healed.length;
     if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} prisoner${healed.length === 1 ? '' : 's'} return beneath Le Peuple.`);
   }
   if (suits.includes('H') && active('H')) {
@@ -253,27 +277,23 @@ export function playCards(state, playerIdx, cards) {
       i++;
     }
     const drawn = value - toDraw;
-    state._lastDrawn = drawn;
+    drawnCount = drawn;
     if (drawn) log(state, `${player.name} rallies the people — the citoyens recruit ${drawn} card${drawn === 1 ? '' : 's'}.`);
   }
 
-  const healedCount = state._lastHealed ?? 0;
-  const drawnCount = state._lastDrawn ?? 0;
   if (healedCount || drawnCount) state.lastEffects = { healed: healedCount, drawn: drawnCount };
-  state._lastHealed = state._lastDrawn = 0;
-
-  const doubled = suits.includes('C') && active('C');
-  const damage = doubled ? value * 2 : value;
-  state.enemy.damage += damage;
-  log(state, `${player.name} attacks for ${damage} damage${doubled ? ' (the mob doubles the blow!)' : ''}.`);
   if (suits.includes('S') && active('S')) {
     log(state, `Barricades rise — the enemy's attack is reduced by ${value}.`);
   }
 
+  // Step 3: only now decide whether the attack defeated the enemy.
   if (state.enemy.damage >= enemyHealth(state)) {
     defeatEnemy(state, playerIdx);
     return state;
   }
+
+  // Step 4: a survivor counterattacks. beginSuffering reads the attacker's
+  // post-Rally hand, so a heart draw can prevent a premature loss.
   beginSuffering(state, playerIdx);
   return state;
 }
@@ -318,7 +338,7 @@ function beginSuffering(state, playerIdx) {
     return;
   }
   const player = state.players[playerIdx];
-  if (handValue(player) < atk) {
+  if (handValue(player) < atk && regroupsRemaining(state, playerIdx) === 0) {
     state.phase = 'lost';
     state.result = { reason: `${player.name} could not withstand ${atk} damage. The Revolution is crushed.` };
     state.lastEvent = { type: 'loss' };
@@ -417,7 +437,7 @@ function advanceTurn(state) {
 function checkTurnStart(state) {
   const p = state.players[state.current];
   if (p.hand.length === 0 && !canYield(state, state.current)) {
-    if (state.solo && state.soloJesters > 0) return; // Regroup can still save them
+    if (regroupsRemaining(state, state.current) > 0) return; // Regroup can still save them
     state.phase = 'lost';
     state.result = { reason: `${p.name} has no cards and cannot lie low. The Revolution is crushed.` };
     state.lastEvent = { type: 'loss' };
@@ -425,23 +445,29 @@ function checkTurnStart(state) {
   }
 }
 
-// ---- solo: Regroup (flip a set-aside Pamphleteer) --------------------------
-// Allowed at the start of Step 1 (phase 'play') or before taking damage
-// (phase 'discard'). Does NOT cancel enemy immunity.
-export function soloRegroup(state) {
-  if (!state.solo) throw new Error('Solo only.');
-  if (state.soloJesters <= 0) throw new Error('No Pamphleteers remain.');
+// ---- Regroup (flip a set-aside Pamphleteer) --------------------------------
+// Solo has two shared uses; in a two-player game each citoyen has one personal
+// use. Only the acting player's hand changes. Does NOT cancel enemy immunity.
+export function regroup(state, playerIdx = state.current) {
+  if (state.playerCount > 2) throw new Error('Regroup is available only with one or two players.');
+  if (playerIdx !== state.current) throw new Error('It is not your turn.');
+  if (regroupsRemaining(state, playerIdx) <= 0) throw new Error('No Regroups remain.');
   if (state.phase !== 'play' && state.phase !== 'discard') throw new Error('Not now.');
-  const p = state.players[0];
+  const p = state.players[playerIdx];
   state.discard.push(...p.hand);
   p.hand = [];
   drawTo(state, p);
-  state.soloJesters--;
-  state.soloJestersUsed++;
+  if (state.solo) {
+    state.soloJesters--;
+    state.soloJestersUsed++;
+  } else {
+    p.regroupsRemaining--;
+  }
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
-  log(state, `Regroup! You discard everything and rally ${p.hand.length} fresh cards. (${state.soloJesters} left)`);
+  const remaining = regroupsRemaining(state, playerIdx);
+  log(state, `Regroup! ${p.name} discards their hand and rallies ${p.hand.length} fresh card${p.hand.length === 1 ? '' : 's'}. (${remaining} left)`);
   if (state.phase === 'discard' && handValue(p) < state.pendingDamage) {
     state.phase = 'lost';
     state.result = { reason: `Even regrouped, you could not withstand ${state.pendingDamage} damage. The Revolution is crushed.` };
@@ -475,7 +501,11 @@ export function viewFor(state, playerIdx) {
       yielded: p.yielded,
       you: i === playerIdx,
     })),
-    you: playerIdx != null ? { index: playerIdx, hand: state.players[playerIdx].hand } : null,
+    you: playerIdx != null ? {
+      index: playerIdx,
+      hand: state.players[playerIdx].hand,
+      regroupsRemaining: regroupsRemaining(state, playerIdx),
+    } : null,
     castleCount: state.castle.length,
     tavernCount: state.tavern.length,
     discardCount: state.discard.length,

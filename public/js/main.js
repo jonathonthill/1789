@@ -158,7 +158,7 @@ function sendAction(action, cb) {
       if (action.type === 'play') engine.playCards(s, 0, action.cards);
       else if (action.type === 'yield') engine.yieldTurn(s, 0);
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
-      else if (action.type === 'regroup') engine.soloRegroup(s);
+      else if (action.type === 'regroup') engine.regroup(s, 0);
       else if (action.type === 'surrender') engine.surrenderGame(s, 0);
       onView(engine.viewFor(s, 0));
       cb?.({ ok: true });
@@ -250,6 +250,10 @@ function routeView(v) {
           audio.sfx('guillotine');
           showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
         }), () => renderEnd(v));
+      } else if (v.phase === 'lost' && v.lastEffects) {
+        // Rally/Raid still happened before the fatal counterattack. Show those
+        // resolved powers before replacing the board with the loss screen.
+        withAnim(done => animateEffects(v, done), () => renderEnd(v));
       } else {
         renderEnd(v);
       }
@@ -556,8 +560,9 @@ function renderActions(v) {
     yield_.hidden = true;
   }
 
-  regroup.hidden = !(v.solo && v.soloJesters > 0 && myTurn && (v.phase === 'play' || v.phase === 'discard'));
-  regroup.textContent = `Regroup (${v.soloJesters})`;
+  const regroupsRemaining = v.you?.regroupsRemaining ?? 0;
+  regroup.hidden = !(regroupsRemaining > 0 && myTurn && (v.phase === 'play' || v.phase === 'discard'));
+  regroup.textContent = `Regroup (${regroupsRemaining})`;
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
 }

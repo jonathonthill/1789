@@ -68,9 +68,9 @@ export function cardInfo(card, view) {
       <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;
   } else if (card.r === 'A') {
     html = `<h3>${miniLabel(card)} Sans-Culotte</h3>
-      <p>Worth <b>1</b>. May fight alone, or <b>join one other card</b> (even another Sans-Culotte — never the Pamphleteer). The pair's total value fuels <b>both</b> suit powers.</p>
+      <p>Worth <b>1</b>. May fight alone or join exactly one other non-Pamphleteer card (even another Sans-Culotte). The pair's full value fuels every suit power.</p>
       <p>${suitPowerLine(card.s)}</p>
-      <p>Cannot join combos of 2s–5s.</p>`;
+      <p>Cannot join a same-number combo.</p>`;
   } else if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
     const meta = enemyMeta(card);
     html = `<h3>${miniLabel(card)} ${meta.name}</h3>
@@ -79,7 +79,7 @@ export function cardInfo(card, view) {
       <p>${suitPowerLine(card.s)}</p>`;
   } else {
     html = `<h3>${miniLabel(card)} — value ${v}</h3><p>${suitPowerLine(card.s)}</p>`;
-    if (card.r >= 2 && card.r <= 5) html += `<p>May combo with other <b>${card.r}s</b> (2–4 cards, total ≤ 10); all suit powers fire at the combined value.</p>`;
+    if (typeof card.r === 'number') html += `<p>May combo with other <b>${card.r}s</b> (2–4 matching numbered cards totaling at most 20); all suit powers fire at the full value.</p>`;
   }
   if (e && card.s && card.s === e.card.s && !e.immunityCancelled) {
     html += `<p class="warn">⚠ ${enemyName(view)} is immune to ${SUIT_META[card.s].symbol} ${SUIT_META[card.s].power} — the damage still counts, but the power will not fire. A Pamphleteer would change that.</p>`;
@@ -170,10 +170,10 @@ export function helpHTML(view) {
 
     <h3 class="${here('turn')}">Your Turn</h3>
     <div class="help-turn-flow">
-      <div><b>1</b><span><strong>Stage an attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> You may instead <em>Lay Low</em>.</span></div>
+      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em>.</span></div>
       <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
-      <div><b>3</b><span><strong>Deal damage</strong>Reduce the royal's endurance. Rise en Masse doubles the damage; an exact defeat wins the royal over.</span></div>
-      <div><b>4</b><span><strong>Survive the counterattack</strong>If the royal remains, sacrifice cards totaling at least their attack after barricades. A defeated royal never strikes back.</span></div>
+      <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine.</span></div>
+      <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
     </div>
 
     <h3>Suit Powers</h3>
@@ -189,19 +189,19 @@ export function helpHTML(view) {
       <div class="help-example-cards" aria-hidden="true">
         ${helpCard({ r: 3, s: 'H' }, '3♥')}${helpCard({ r: 3, s: 'D' }, '3♦')}${helpCard({ r: 3, s: 'C' }, '3♣')}
       </div>
-      <p><b>Same-number combo:</b> play 2–4 matching number cards when their total is ≤ 10. This trio has value 9: Hearts and Diamonds resolve at 9, then Clubs doubles the damage to 18.</p>
+      <p><b>Same-number combo:</b> play 2–4 matching number cards totaling at most 20. All four copies of ranks 2–5 can therefore fight together. This trio has value 9: Hearts and Diamonds resolve at 9, then Clubs doubles the damage to 18.</p>
     </div>
     <div class="help-example-row">
       <div class="help-example-cards help-pair" aria-hidden="true">
         ${helpCard({ r: 'A', s: 'S' }, 'Sans-Culotte')}${helpCard({ r: 8, s: 'H' }, '8♥')}
       </div>
-      <p><b>Sans-Culotte pair:</b> a Sans-Culotte may fight alone or join exactly one non-Pamphleteer card—including another Sans-Culotte. Add 1 to the value and fire both powers.</p>
+      <p><b>Sans-Culotte:</b> may fight alone or pair with one non-Pamphleteer card (including another Sans-Culotte), but cannot join a combo. Add 1 to the pair's value and fire every represented suit power.</p>
     </div>
 
     <h3 class="${here('jester')}">The Pamphleteer</h3>
     <div class="help-example-row">
       <div class="help-example-cards help-single" aria-hidden="true">${helpCard({ r: 'X', s: null }, 'Pamphleteer')}</div>
-      <p>Play alone for attack 0. The Pamphleteer shatters immunity, skips the counterattack, and lets you choose any citoyen—including yourself—to act next. Earlier barricades begin working; earlier mob attacks are not doubled retroactively.</p>
+      <p>Play alone for attack 0. The Pamphleteer shatters immunity, skips the counterattack, and lets you choose any citoyen—including yourself—to act next. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. One is shuffled into Le Peuple with 1–2 players; three- and four-player games use two. Set-aside Regroups remain separate.</p>
     </div>
 
     <h3>Defeating a Royal</h3>
@@ -228,6 +228,8 @@ export function helpHTML(view) {
 
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
     <p>You fight alone with 8 cards. Twice per game you may <b>Regroup</b>: send your whole hand to ${TERMS.discard} and draw up to 8 fresh cards—before attacking or while facing damage. Win using 0 Regroups for <b>Gold</b>, 1 for <b>Silver</b>, or 2 for <b>Bronze</b>.</p>` : ''}
+    ${view?.playerCount === 2 ? `<h3>Two-Player Regroup</h3>
+    <p>Each citoyen may <b>Regroup once per game</b> on their own turn, before attacking or while facing damage. Only that citoyen discards and refills their hand; their partner's hand is untouched. Regroup does not shatter royal immunity.</p>` : ''}
   `;
 }
 function phaseSection(phase) {

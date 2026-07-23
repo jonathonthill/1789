@@ -1,4 +1,28 @@
+# Repository and local-machine state
+.git
+.gitignore
+.DS_Store
+**/.DS_Store
+.claude
+.idea
+.vscode
+
+# Dependencies, tests, and generated caches
 node_modules
 test
+coverage
+__pycache__
+**/__pycache__
+*.py[cod]
+
+# Source-only assets and tooling not needed by the production server
 *.pdf
-.claude
+scripts
+midi_loop_analyze.py
+Do You Hear The People Sing - verse and chorus 61-bar loop.mid
+
+# Browser-only visual QA tools
+public/card-check.html
+public/guillotine-lab.html
+public/css/guillotine-lab.css
+public/js/guillotine-lab.js

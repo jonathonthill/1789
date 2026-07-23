@@ -165,6 +165,7 @@ io.on('connection', socket => {
         case 'play': engine.playCards(s, idx, msg.cards ?? []); break;
         case 'yield': engine.yieldTurn(s, idx); break;
         case 'discard': engine.discardForDamage(s, idx, msg.cards ?? []); break;
+        case 'regroup': engine.regroup(s, idx); break;
         case 'chooseNext': engine.chooseNext(s, idx, msg.target); break;
         case 'surrender': engine.surrenderGame(s, idx); break;
         default: return cb?.({ ok: false, error: 'Unknown action.' });

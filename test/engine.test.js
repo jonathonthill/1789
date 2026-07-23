@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newGame, playCards, yieldTurn, discardForDamage, chooseNext, soloRegroup,
+  newGame, playCards, yieldTurn, discardForDamage, chooseNext, regroup,
   surrenderGame,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
   currentShield, effectiveEnemyAttack, cardValue,
@@ -24,7 +24,7 @@ function rig(state, { hands, enemy, tavernTop, discard } = {}) {
 }
 
 test('deck composition per player count', () => {
-  for (const [n, jesters, hand] of [[1, 0, 8], [2, 0, 7], [3, 1, 6], [4, 2, 5]]) {
+  for (const [n, jesters, hand] of [[1, 1, 8], [2, 1, 7], [3, 2, 6], [4, 2, 5]]) {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
     assert.equal(all.filter(c => c.r === 'X').length, jesters, `${n}p jesters`);
@@ -44,10 +44,15 @@ test('combo legality', () => {
   const s = newGame(names2, { seed: 2 });
   rig(s, { hands: [[
     { r: 2, s: 'S' }, { r: 2, s: 'H' }, { r: 2, s: 'D' }, { r: 2, s: 'C' },
-    { r: 5, s: 'S' }, { r: 5, s: 'H' }, { r: 6, s: 'S' },
+    { r: 5, s: 'S' }, { r: 5, s: 'H' }, { r: 5, s: 'D' }, { r: 5, s: 'C' },
+    { r: 10, s: 'S' }, { r: 10, s: 'H' }, { r: 10, s: 'D' }, { r: 10, s: 'C' },
+    { r: 7, s: 'S' }, { r: 7, s: 'H' }, { r: 7, s: 'D' }, { r: 6, s: 'S' },
   ], []] });
   assert.equal(validatePlay(s, 0, s.players[0].hand.slice(0, 4)), null, 'quad 2s ok');
-  assert.equal(validatePlay(s, 0, [{ r: 5, s: 'S' }, { r: 5, s: 'H' }]), null, 'pair 5s ok');
+  assert.equal(validatePlay(s, 0, s.players[0].hand.slice(4, 8)), null, 'quad 5s reaches the cap at 20');
+  assert.equal(validatePlay(s, 0, s.players[0].hand.slice(8, 10)), null, 'pair 10s reaches the cap at 20');
+  assert.match(validatePlay(s, 0, s.players[0].hand.slice(12, 15)), /at most 20/, 'three 7s exceed the cap');
+  assert.match(validatePlay(s, 0, s.players[0].hand.slice(8, 12)), /at most 20/, 'quad 10s exceed the cap');
   assert.ok(validatePlay(s, 0, [{ r: 6, s: 'S' }, { r: 5, s: 'S' }]), 'mixed ranks rejected');
   assert.ok(validatePlay(s, 0, [{ r: 6, s: 'S' }, { r: 6, s: 'S' }]), 'card not held twice rejected');
 });
@@ -55,12 +60,19 @@ test('combo legality', () => {
 test('companion pairing rules', () => {
   const s = newGame(names2, { seed: 3 });
   rig(s, { hands: [[
-    { r: 'A', s: 'C' }, { r: 'A', s: 'D' }, { r: 8, s: 'D' }, { r: 2, s: 'S' }, { r: 2, s: 'H' },
+    { r: 'A', s: 'C' }, { r: 'A', s: 'D' }, { r: 8, s: 'D' },
+    { r: 2, s: 'S' }, { r: 2, s: 'H' },
+    { r: 5, s: 'S' }, { r: 5, s: 'H' }, { r: 5, s: 'D' }, { r: 5, s: 'C' },
+    { r: 7, s: 'S' }, { r: 7, s: 'H' }, { r: 7, s: 'D' }, { r: 6, s: 'S' },
   ], []] });
   assert.equal(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 8, s: 'D' }]), null, 'A + card ok');
   assert.equal(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 'A', s: 'D' }]), null, 'A + A ok');
   assert.equal(validatePlay(s, 0, [{ r: 'A', s: 'C' }]), null, 'A alone ok');
-  assert.ok(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 2, s: 'S' }, { r: 2, s: 'H' }]), 'A in combo rejected');
+  assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 2, s: 'S' }, { r: 2, s: 'H' }]), /only one other card/, 'A cannot join a combo');
+  assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 5, s: 'S' }, { r: 5, s: 'H' }, { r: 5, s: 'D' }, { r: 5, s: 'C' }]), /only one other card/, 'A cannot be a fifth combo card');
+  assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 7, s: 'S' }, { r: 7, s: 'H' }, { r: 7, s: 'D' }]), /only one other card/, 'A cannot join an over-cap combo');
+  assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 'A', s: 'D' }, { r: 5, s: 'S' }]), /only one other card/, 'two As cannot join another card');
+  assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 5, s: 'S' }, { r: 6, s: 'S' }]), /only one other card/, 'A cannot make mixed ranks legal');
 });
 
 test('Rally recruits cards; companion adds value and both suit powers apply (8H + A-of-clubs = 18 dmg, 9 draws)', () => {
@@ -74,6 +86,31 @@ test('Rally recruits cards; companion adds value and both suit powers apply (8H 
   assert.equal(s.enemy.damage, 18, 'clubs doubles the combined value 9');
   const after = s.players[0].hand.length + s.players[1].hand.length;
   assert.equal(after - before, Math.min(9, 9), 'drew up to 9 (capped by hand size/tavern)');
+});
+
+test('Rally resolves before counterattack survivability is checked', () => {
+  const s = newGame(names2, { seed: 41 });
+  rig(s, {
+    hands: [
+      [{ r: 2, s: 'H' }, { r: 2, s: 'C' }],
+      [
+        { r: 3, s: 'S' }, { r: 4, s: 'S' }, { r: 5, s: 'S' },
+        { r: 6, s: 'S' }, { r: 7, s: 'S' }, { r: 8, s: 'S' }, { r: 9, s: 'S' },
+      ],
+    ],
+    enemy: { r: 'J', s: 'S' },
+    tavernTop: [{ r: 3, s: 'D' }, { r: 10, s: 'C' }],
+  });
+
+  playCards(s, 0, [{ r: 2, s: 'H' }]);
+
+  assert.equal(s.phase, 'discard', 'the post-Rally hand survives and may resist');
+  assert.equal(s.pendingDamage, 10);
+  assert.deepEqual(s.lastEffects, { healed: 0, drawn: 2 });
+  assert.equal(s.players[0].hand.reduce((sum, card) => sum + cardValue(card), 0), 15);
+  assert.match(s.log.at(-3), /attacks for 2 damage/, 'attack resolves first');
+  assert.match(s.log.at(-2), /rallies the people/, 'card power resolves second');
+  assert.match(s.log.at(-1), /strikes Danton for 10/, 'counterattack resolves last');
 });
 
 test('Raid returns prisoners under Le Peuple before Rally recruits', () => {
@@ -238,6 +275,7 @@ test('a captured royal in hand attacks at 10/15/20 with live suit power', () => 
 
 test('loss when a player cannot satisfy damage', () => {
   const s = newGame(names2, { seed: 13 });
+  s.players[0].regroupsRemaining = 0;
   rig(s, {
     hands: [[{ r: 2, s: 'H' }, { r: 3, s: 'C' }], [{ r: 4, s: 'H' }]],
     enemy: { r: 'K', s: 'H' },
@@ -257,6 +295,7 @@ test('empty-handed player who yields into unblocked damage loses the game', () =
     enemy: { r: 'J', s: 'H' },
   });
   s.tavern = [];
+  s.players[1].regroupsRemaining = 0;
   s.players[1].yielded = true; // other player just yielded → player 1... p0 played though
   playCards(s, 0, [{ r: 5, s: 'S' }]); // shield 5, suffer 5
   discardForDamage(s, 0, [{ r: 5, s: 'C' }]);
@@ -272,7 +311,7 @@ test('solo: regroup discards hand, refills to 8, tracks medals; cannot yield twi
   const s = newGame(['Citoyen'], { seed: 16 });
   assert.equal(s.players[0].hand.length, 8);
   rig(s, { enemy: { r: 'J', s: 'H' } });
-  soloRegroup(s);
+  regroup(s, 0);
   assert.equal(s.players[0].hand.length, 8);
   assert.equal(s.soloJesters, 1);
   assert.equal(s.soloJestersUsed, 1);
@@ -287,6 +326,32 @@ test('solo: regroup discards hand, refills to 8, tracks medals; cannot yield twi
     discardForDamage(s, 0, chosen);
     assert.equal(canYield(s, 0), false, 'no yielding twice in a row solo');
   }
+});
+
+test('two-player: each citoyen may Regroup once and only their own hand changes', () => {
+  const s = newGame(names2, { seed: 42 });
+  const partnerHand = [{ r: 9, s: 'H' }, { r: 8, s: 'D' }];
+  rig(s, {
+    hands: [[{ r: 2, s: 'C' }], partnerHand],
+    enemy: { r: 'J', s: 'H' },
+  });
+  s.tavern = [
+    { r: 2, s: 'S' }, { r: 3, s: 'S' }, { r: 4, s: 'S' },
+    { r: 5, s: 'S' }, { r: 6, s: 'S' }, { r: 7, s: 'S' }, { r: 8, s: 'S' },
+  ];
+
+  yieldTurn(s, 0);
+  assert.equal(s.phase, 'discard', 'the personal Regroup may rescue an otherwise fatal hand');
+  regroup(s, 0);
+
+  assert.equal(s.players[0].hand.length, 7, 'acting citoyen refills to the two-player hand limit');
+  assert.deepEqual(s.players[1].hand, partnerHand, 'partner hand is untouched');
+  assert.deepEqual(s.discard, [{ r: 2, s: 'C' }], 'only the acting hand is discarded');
+  assert.equal(s.players[0].regroupsRemaining, 0);
+  assert.equal(s.players[1].regroupsRemaining, 1);
+  assert.equal(viewFor(s, 0).you.regroupsRemaining, 0);
+  assert.equal(viewFor(s, 1).you.regroupsRemaining, 1);
+  assert.throws(() => regroup(s, 0), /No Regroups remain/);
 });
 
 test('jester rejected in combos; jester value 0 as discard', () => {
@@ -330,6 +395,11 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
       playCards(s, s.current, [best]);
     } else if (s.phase === 'discard') {
       const p = s.players[s.current];
+      const totalHand = p.hand.reduce((sum, card) => sum + cardValue(card), 0);
+      if (totalHand < s.pendingDamage && viewFor(s, s.current).you.regroupsRemaining > 0) {
+        regroup(s, s.current);
+        continue;
+      }
       const sorted = [...p.hand].sort((a, b) => cardValue(b) - cardValue(a));
       const chosen = []; let tot = 0;
       for (const c of sorted) { if (tot >= s.pendingDamage) break; chosen.push(c); tot += cardValue(c); }

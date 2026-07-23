@@ -1,4 +1,40 @@
+# Dependencies
 node_modules/
-.DS_Store
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and runtime state
+*.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+
+# Tests and tool caches
+coverage/
+.nyc_output/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 __pycache__/
+*.py[cod]
+.venv/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Machine-local assistant settings; shared launch configuration stays tracked.
+.claude/settings.local.json
