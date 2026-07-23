@@ -159,6 +159,11 @@ export function helpHTML(view) {
   const here = id => (id === phaseSection(phase) ? 'here' : '');
   return `
     <h2>How to Play — 1789</h2>
+    <button class="help-walkthrough-link" type="button">
+      <span class="help-walkthrough-icon" aria-hidden="true">▶</span>
+      <span><b>Watch the animated walkthrough</b><small>A guided review of the complete rules</small></span>
+      <span aria-hidden="true">›</span>
+    </button>
     <div class="help-intro">
       <div class="help-royal-line" aria-hidden="true">
         ${helpCard({ r: 'J', s: 'S' }, 'Officer', { subtitle: true })}
@@ -236,10 +241,140 @@ function phaseSection(phase) {
   return { play: 'turn', discard: 'discard', jesterChoose: 'jester' }[phase] ?? 'turn';
 }
 
-// ── first-game coach marks ─────────────────────────────────────────────────
-export const COACH_STEPS = [
-  { el: '#enemy-zone', text: 'This royal must fall. Their endurance, attack, and immunity live here — long-press anything on this screen for details.' },
-  { el: '#hand-zone', text: 'Your hand. Tap cards to stage an attack — the app only allows legal plays, and shows you what the play will do before you commit.' },
-  { el: '#action-bar', text: 'Confirm your attack here, or Lay Low to skip straight to the enemy\'s counterattack. Nothing happens until you press the button.' },
-  { el: '#status-strip', text: 'When in doubt, read this strip — it always says what is happening and what you can do. Bonne chance, citoyen!' },
-];
+// ── animated walkthrough ───────────────────────────────────────────────────
+function walkCard(card, label, className = '') {
+  return `<span class="walk-card ${className}">${cardSVG(card)}<small>${label}</small></span>`;
+}
+
+export function walkthroughSteps(view) {
+  const regroupCopy = view?.solo
+    ? 'In solo play you hold 8 cards and may Regroup twice. Your medal records whether you used 0 (Gold), 1 (Silver), or 2 (Bronze).'
+    : view?.playerCount === 2
+      ? 'In a two-citizen game, each player may Regroup once on their own turn or while suffering damage.'
+      : 'Solo players may Regroup twice; in a two-citizen game, each player may Regroup once. Regroup is unavailable with 3–4 citizens.';
+
+  return [
+    {
+      eyebrow: 'The cause',
+      title: 'Overthrow the Ancien Régime',
+      body: `<p>Your Revolution faces <b>twelve royals</b>: four Officers, four Queens, then four Kings. Defeat every one to win.</p>
+        <p>Officers strike for 10 and endure 20; Queens are 15 / 30; Kings are 20 / 40. If even one citoyen cannot survive a blow, <b>everyone loses</b>.</p>`,
+      stage: `<div class="walk-royal-march">
+        ${walkCard({ r: 'J', s: 'S' }, '10 attack · 20 endurance', 'royal-one')}
+        ${walkCard({ r: 'Q', s: 'H' }, '15 attack · 30 endurance', 'royal-two')}
+        ${walkCard({ r: 'K', s: 'C' }, '20 attack · 40 endurance', 'royal-three')}
+      </div><div class="walk-goal"><span>4 Officers</span><i>→</i><span>4 Queens</span><i>→</i><span>4 Kings</span></div>`,
+    },
+    {
+      eyebrow: 'Know the table',
+      title: 'Three decks, one royal, your hand',
+      body: `<p><b>Le Régime</b> holds the royals still to come. <b>Le Peuple</b> is the face-down recruit deck. Played, sacrificed, and overkilled cards collect in <b>La Prison</b>.</p>
+        <p>The royal panel shows remaining endurance, counterattack, barricades, and suit immunity. Your hand and action buttons sit below the always-current status strip.</p>`,
+      stage: `<div class="walk-board-viewport">
+        <div class="walk-board-demo">
+          <div class="walk-demo-topbar"><b>⚜ 1789</b><span>solo</span><i></i><span>?</span></div>
+          <div class="walk-demo-board">
+            <div class="walk-demo-seat"><span class="walk-demo-fan">${cardBackSVG()}${cardBackSVG()}${cardBackSVG()}</span><b>Citoyen</b><small>8 cards</small></div>
+            <div class="walk-demo-center">
+              <div class="walk-demo-deck walk-demo-regime">${cardBackSVG()}<b>11</b><span>Régime</span><em>royals ahead</em></div>
+              <div class="walk-demo-enemy">${walkCard({ r: 'J', s: 'D' }, '')}<div><strong>Marquis de Launay</strong><small>Officer of the Crown · ♦</small><span class="walk-demo-hp"><i></i>20 / 20</span><small>⚔ Strikes for 10</small><mark>Immune: ♦</mark></div></div>
+              <div class="walk-demo-deck-col">
+                <div class="walk-demo-deck walk-demo-people">${cardBackSVG()}<b>33</b><span>Peuple</span><em>recruits</em></div>
+                <div class="walk-demo-deck walk-demo-prison"><span class="walk-demo-empty"></span><b>0</b><span>La Prison</span><em>discard</em></div>
+              </div>
+            </div>
+          </div>
+          <div class="walk-demo-status">Your turn, citoyen. Tap cards to stage an attack.</div>
+          <div class="walk-demo-hand">${[2, 5, 8, 10].map((r, i) => walkCard({ r, s: ['H','S','D','C'][i] }, '')).join('')}</div>
+          <div class="walk-demo-actions"><span>Regroup (2)</span><span>Lay Low</span><b>Attaquez!</b></div>
+        </div>
+      </div>`,
+    },
+    {
+      eyebrow: 'The turn at a glance',
+      title: 'Every turn has four phases',
+      body: `<p>Choose one legal play and press <b>Attaquez!</b> All represented suit powers are mandatory and use the play's <b>total value</b>. Raid resolves before Rally.</p>
+        <p>Then judge the royal: a defeated royal cannot strike back, while a survivor counterattacks after barricades. We will review each phase in order. <b>Next: Phase 1 — Attack.</b></p>`,
+      stage: `<div class="walk-flow">
+        <div><b>1</b><span>Attack<small>stage cards</small></span></div><i>→</i>
+        <div><b>2</b><span>Powers<small>resolve all</small></span></div><i>→</i>
+        <div><b>3</b><span>Judge<small>royal falls?</small></span></div><i>→</i>
+        <div><b>4</b><span>Respond<small>next royal or hit</small></span></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Phase 1 of 4 · Attack',
+      title: 'Phase 1: Choose one legal attack',
+      body: `<p>Play any single card. Or combine <b>2–4 numbered cards of the same rank</b> if their total is at most 20. Every suit in a combo fires at the full total.</p>
+        <p>A <b>Sans-Culotte</b> is worth 1 and may pair with exactly one non-Pamphleteer card—even another Sans-Culotte—but never joins a numbered combo. Stage your choice and press <b>Attaquez!</b> <b>Next: Phase 2 — Resolve Powers.</b></p>`,
+      stage: `<div class="walk-play-examples">
+        <div><span>single</span><div>${walkCard({ r: 8, s: 'S' }, 'value 8')}</div></div>
+        <div><span>same-rank combo</span><div>${walkCard({ r: 3, s: 'H' }, '')}${walkCard({ r: 3, s: 'D' }, '')}${walkCard({ r: 3, s: 'C' }, 'total 9')}</div></div>
+        <div><span>Sans-Culotte pair</span><div>${walkCard({ r: 'A', s: 'S' }, '1')}${walkCard({ r: 8, s: 'H' }, '8 · total 9')}</div></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Phase 2 of 4 · Resolve powers',
+      title: 'Phase 2: Apply every suit power',
+      body: `<p><b>♥ Rally Le Peuple</b> draws up to the play's value, starting with you and circling past full hands. An empty deck is not a defeat. <b>♦ Raid La Prison</b> returns that many shuffled prisoners beneath Le Peuple.</p>
+        <p><b>♣ Rise en Masse</b> doubles the play's damage. <b>♠ Build Barricades</b> permanently reduces this royal's counterattack by the play's value. Before resolving a power, check the royal's immunity on the next slide.</p>`,
+      stage: `<div class="walk-suits">
+        <div class="hearts">${walkCard({ r: 5, s: 'H' }, '')}<span>♥ <b>Draw 5</b><small>Rally Le Peuple</small></span></div>
+        <div class="diamonds">${walkCard({ r: 5, s: 'D' }, '')}<span>♦ <b>Return 5</b><small>Raid La Prison</small></span></div>
+        <div class="clubs">${walkCard({ r: 5, s: 'C' }, '')}<span>♣ <b>Deal 10</b><small>Rise en Masse</small></span></div>
+        <div class="spades">${walkCard({ r: 5, s: 'S' }, '')}<span>♠ <b>Block 5</b><small>Build Barricades</small></span></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Phase 2 continued · Immunity',
+      title: 'Phase 2: Check the royal’s immunity',
+      body: `<p>A royal is immune to the <b>power</b> of cards matching their suit, but those cards still deal their normal damage.</p>
+        <p>The <b>Pamphleteer</b> must be played alone for 0. It permanently shatters that royal's immunity, skips the counterattack, and lets its player choose who acts next. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Games use one with 1–2 players and two with 3–4. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
+      stage: `<div class="walk-immunity">
+        <div class="walk-immune-royal">${walkCard({ r: 'Q', s: 'H' }, 'immune to ♥')}</div>
+        <div class="walk-immune-card">${walkCard({ r: 6, s: 'H' }, '6 damage · no draw')}<span class="walk-block">×</span></div>
+        <div class="walk-pamphlet">${walkCard({ r: 'X', s: null }, 'played alone')}<span class="walk-rip">immunity shattered</span></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Phase 3 of 4 · Judge the royal',
+      title: 'Phase 3: Compare damage to endurance',
+      body: `<p>Deal <b>exactly</b> the remaining endurance and the royal joins the Revolution on top of Le Peuple, ready to be drawn and used at full value with its suit power.</p>
+        <p>Deal too much and the royal goes to La Prison. Either way, the slayer immediately faces the next royal and keeps the turn. If the royal survives, continue to <b>Phase 4 — Respond.</b></p>`,
+      stage: `<div class="walk-outcomes">
+        <div><strong>Exact</strong><div>${walkCard({ r: 10, s: 'C' }, '')}<i>×2</i>${walkCard({ r: 'J', s: 'H' }, '')}<i>→</i><span class="walk-mini-deck people">Le Peuple</span></div><small>20 damage for 20</small></div>
+        <div><strong>Overkill</strong><div>${walkCard({ r: 10, s: 'C' }, '')}<i>+</i>${walkCard({ r: 2, s: 'S' }, '')}<i>→</i><span class="walk-mini-deck prison">La Prison</span></div><small>22 damage for 20</small></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Phase 4 of 4 · Respond',
+      title: 'Phase 4: Survive the counterattack',
+      body: `<p>Subtract all active Spade barricades from the royal's attack. Sacrifice cards from your hand totaling <b>at least</b> the damage left: Sans-Culottes are 1, Pamphleteers 0, and recruited royals 10 / 15 / 20.</p>
+        <p>You may <b>Lay Low</b> instead of attacking, but you still take the counterattack. Multiplayer forbids it after every other citoyen just laid low; solo forbids doing it twice in a row. Once you survive, the next turn begins again at <b>Phase 1 — Attack.</b></p>`,
+      stage: `<div class="walk-damage-math"><span class="hit">10 attack</span><i>−</i><span class="shield">4 barricade</span><i>=</i><span class="damage">6 damage</span></div>
+        <div class="walk-sacrifice">${walkCard({ r: 2, s: 'H' }, '')}${walkCard({ r: 4, s: 'D' }, '')}<span>6 sacrificed ✓</span></div>
+        <div class="walk-lay-low">Lay Low <small>skip your attack · take the hit</small></div>`,
+    },
+    {
+      eyebrow: 'Fight together',
+      title: 'Share plans, never share cards',
+      body: `<p>You may discuss public information—whose turn it is, hand sizes, damage, deck counts, or whether Le Peuple is running low.</p>
+        <p>Never reveal or hint at what you hold. After a Pamphleteer, each citoyen may only say whether they would like the next turn; the Pamphleteer's player chooses.</p>`,
+      stage: `<div class="walk-talk">
+        <div class="allowed"><b>Public facts</b><span>“I have two cards.”</span><span>“Le Peuple runs low.”</span><span>“I would like the floor.”</span></div>
+        <div class="forbidden"><b>Keep hands secret</b><span class="secret-hand">${walkCard({ r: 7, s: 'H' }, '')}${walkCard({ r: 7, s: 'C' }, '')}</span><span>Never name or hint at these.</span></div>
+      </div>`,
+    },
+    {
+      eyebrow: 'Your safety net',
+      title: 'Regroup, read the status, ask for help',
+      body: `<p>${regroupCopy} Regroup discards your whole hand and refills it, and can be used before attacking or while suffering damage. It does not shatter immunity.</p>
+        <p>The status strip always tells you what happens next. Tap cards to preview an attack; long-press cards, royals, or decks for details. Reopen this walkthrough any time from <b>? Help</b>.</p>`,
+      stage: `<div class="walk-regroup">
+        <div class="walk-regroup-hand old-hand"><div class="walk-regroup-cards">${walkCard({ r: 2, s: 'D' }, '')}${walkCard({ r: 'A', s: 'C' }, '')}</div><strong>Whole hand</strong><small>to La Prison</small></div>
+        <div class="walk-regroup-arrow"><span>↻</span><b>Regroup</b></div>
+        <div class="walk-regroup-hand new-hand"><div class="walk-regroup-cards">${walkCard({ r: 8, s: 'S' }, '')}${walkCard({ r: 10, s: 'H' }, '')}</div><strong>Fresh hand</strong><small>draw to your limit</small></div>
+      </div><div class="walk-ready-status"><i></i><span>Your turn, citoyen. Tap cards to stage an attack.</span></div>`,
+    },
+  ];
+}

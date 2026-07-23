@@ -281,7 +281,7 @@ function routeView(v) {
       return;
     } else {
       audio.sfx('enemy');
-      withAnim(done => showEntrance(v.enemy, done), maybeCoach);
+      withAnim(done => showEntrance(v.enemy, done), maybeWalkthrough);
       if (seq === 1) { // fresh game: the decks get their shuffle
         setTimeout(() => {
           audio.sfx('shuffle');
@@ -657,13 +657,20 @@ for (const kind of ['castle', 'tavern', 'discard']) {
 attachPress($('#enemy-zone'), () => view && openSheet(help.enemyInfo(view)), () => view && openSheet(help.enemyInfo(view)));
 
 function openHelp(v) {
-  $('#help-content').innerHTML = help.helpHTML(v ?? view);
+  activeHelpView = v ?? view;
+  $('#help-content').innerHTML = help.helpHTML(activeHelpView);
   $('#help-panel').hidden = false;
   const here = $('#help-content .here');
   if (here) here.scrollIntoView({ block: 'start' });
 }
+let activeHelpView = null;
 $('#btn-help').onclick = () => openHelp(view);
 $('#help-close').onclick = () => { $('#help-panel').hidden = true; };
+$('#help-content').addEventListener('click', e => {
+  if (!e.target.closest('.help-walkthrough-link')) return;
+  $('#help-panel').hidden = true;
+  openWalkthrough(activeHelpView);
+});
 
 // ── long-press helper ───────────────────────────────────────────────────────
 function attachPress(el, onTap, onLong) {
@@ -679,35 +686,76 @@ function attachPress(el, onTap, onLong) {
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// ── coach marks (first game only) ───────────────────────────────────────────
-let coachStep = -1;
-function maybeCoach() {
-  if (load('r1789_coach') || coachStep >= 0) return;
-  coachStep = 0;
-  showCoach();
+// ── animated walkthrough (automatic on the first game, replayable in Help) ─
+let walkthroughStep = -1;
+let walkthroughPages = [];
+let walkthroughReturnFocus = null;
+
+function maybeWalkthrough() {
+  // Respect the completion flag from the coach marks this replaces, so
+  // returning players are not treated as first-time users again.
+  if (load('r1789_walkthrough_v1') || load('r1789_coach') || walkthroughStep >= 0) return;
+  openWalkthrough(view);
 }
-function showCoach() {
-  const steps = help.COACH_STEPS;
-  $$('.coach-hilite').forEach(el => el.classList.remove('coach-hilite'));
-  if (coachStep >= steps.length) {
-    $('#coach').hidden = true;
-    save('r1789_coach', true);
-    return;
-  }
-  const step = steps[coachStep];
-  const target = $(step.el);
-  target.classList.add('coach-hilite');
-  $('#coach-text').textContent = step.text;
-  $('#coach').hidden = false;
-  const r = target.getBoundingClientRect();
-  const bubble = $('#coach-bubble');
-  const below = r.bottom < window.innerHeight * 0.55;
-  bubble.style.top = below ? `${r.bottom + 10}px` : '';
-  bubble.style.bottom = below ? '' : `${window.innerHeight - r.top + 10}px`;
-  bubble.style.left = `${Math.max(10, Math.min(r.left, window.innerWidth - 290))}px`;
-  $('#coach-next').textContent = coachStep === steps.length - 1 ? 'À la Bastille!' : 'Next';
+
+function openWalkthrough(v) {
+  walkthroughPages = help.walkthroughSteps(v ?? view);
+  walkthroughStep = 0;
+  walkthroughReturnFocus = document.activeElement;
+  document.body.classList.add('walkthrough-open');
+  $('#walkthrough').hidden = false;
+  renderWalkthrough();
+  $('#walkthrough-exit').focus();
 }
-$('#coach-next').onclick = () => { coachStep++; showCoach(); };
+
+function closeWalkthrough() {
+  if (walkthroughStep < 0) return;
+  save('r1789_walkthrough_v1', true);
+  save('r1789_coach', true);
+  walkthroughStep = -1;
+  walkthroughPages = [];
+  $('#walkthrough').hidden = true;
+  document.body.classList.remove('walkthrough-open');
+  if (walkthroughReturnFocus?.isConnected) walkthroughReturnFocus.focus();
+  walkthroughReturnFocus = null;
+}
+
+function renderWalkthrough() {
+  const page = walkthroughPages[walkthroughStep];
+  if (!page) return closeWalkthrough();
+  $('#walkthrough-count').textContent = `${walkthroughStep + 1} of ${walkthroughPages.length}`;
+  $('#walkthrough-stage').innerHTML = page.stage;
+  $('#walkthrough-copy').innerHTML = `<span class="walkthrough-eyebrow">${page.eyebrow}</span><h2 id="walkthrough-title">${page.title}</h2>${page.body}`;
+  $('#walkthrough-back').disabled = walkthroughStep === 0;
+  $('#walkthrough-next').textContent = walkthroughStep === walkthroughPages.length - 1 ? 'Begin the Revolution' : 'Next';
+  $('#walkthrough-dots').innerHTML = walkthroughPages.map((_, i) =>
+    `<button type="button" class="${i === walkthroughStep ? 'active' : ''}" data-walk-step="${i}" aria-label="Go to step ${i + 1}"${i === walkthroughStep ? ' aria-current="step"' : ''}></button>`
+  ).join('');
+}
+
+function moveWalkthrough(delta) {
+  const next = walkthroughStep + delta;
+  if (next >= walkthroughPages.length) return closeWalkthrough();
+  if (next < 0) return;
+  walkthroughStep = next;
+  renderWalkthrough();
+}
+
+$('#walkthrough-exit').onclick = closeWalkthrough;
+$('#walkthrough-back').onclick = () => moveWalkthrough(-1);
+$('#walkthrough-next').onclick = () => moveWalkthrough(1);
+$('#walkthrough-dots').onclick = e => {
+  const dot = e.target.closest('[data-walk-step]');
+  if (!dot) return;
+  walkthroughStep = Number(dot.dataset.walkStep);
+  renderWalkthrough();
+};
+document.addEventListener('keydown', e => {
+  if (walkthroughStep < 0) return;
+  if (e.key === 'Escape') closeWalkthrough();
+  else if (e.key === 'ArrowRight') moveWalkthrough(1);
+  else if (e.key === 'ArrowLeft') moveWalkthrough(-1);
+});
 
 // ── boot ────────────────────────────────────────────────────────────────────
 // Same-tab refresh (sessionStorage) rejoins silently — the phone-lock case.

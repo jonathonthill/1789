@@ -179,10 +179,22 @@
   </div>
 </div>
 
-<div id="coach" class="coach" hidden>
-  <div id="coach-bubble" class="coach-bubble">
-    <p id="coach-text"></p>
-    <button id="coach-next" class="btn small primary">Next</button>
+<div id="walkthrough" class="walkthrough" hidden role="dialog" aria-modal="true" aria-labelledby="walkthrough-title">
+  <div class="walkthrough-shell">
+    <header class="walkthrough-head">
+      <span class="walkthrough-brand">⚜ 1789</span>
+      <span id="walkthrough-count" class="walkthrough-count"></span>
+      <button id="walkthrough-exit" class="walkthrough-exit" type="button" aria-label="Exit walkthrough">Exit <span aria-hidden="true">✕</span></button>
+    </header>
+    <div class="walkthrough-main">
+      <div id="walkthrough-stage" class="walkthrough-stage" aria-hidden="true"></div>
+      <article id="walkthrough-copy" class="walkthrough-copy"></article>
+    </div>
+    <footer class="walkthrough-nav">
+      <button id="walkthrough-back" class="btn small ghost" type="button">Back</button>
+      <div id="walkthrough-dots" class="walkthrough-dots" aria-label="Walkthrough progress"></div>
+      <button id="walkthrough-next" class="btn small primary" type="button">Next</button>
+    </footer>
   </div>
 </div>
 
