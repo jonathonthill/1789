@@ -1,9 +1,15 @@
 // Entrance theatrics and the guillotine.
 import { cardSVG, victimSVG } from '/js/cards.js';
-import { enemyMeta, enemyThreat, SUIT_META, RANK_TITLES, EXCLAIM } from '/shared/theme.js';
+import { enemyMeta, enemyThreat, SUIT_META, EXCLAIM } from '/shared/theme.js';
 
 const $ = sel => document.querySelector(sel);
-const SUIT_NAMES = { H: 'Hearts', D: 'Diamonds', C: 'Clubs', S: 'Spades' };
+
+// Same icons as the enemy stat bars, reused here for the entrance popup.
+const HEART_ICON = `<span class="heart-icon"><svg viewBox="0 0 24 24" focusable="false">` +
+  `<path d="M12,7 C10,3 4,3.5 4,9 C4,14 8,17.5 12,21.5 C16,17.5 20,14 20,9 C20,3.5 14,3 12,7 Z"/></svg></span>`;
+const SWORD_ICON = `<span class="strike-icon"><svg viewBox="0 0 24 24" focusable="false">` +
+  `<polygon points="12,1 13.6,5 13.6,14 10.4,14 10.4,5"/><rect x="5.5" y="13" width="13" height="2.2" rx=".6"/>` +
+  `<rect x="10.8" y="15.2" width="2.4" height="5" rx=".8"/><circle cx="12" cy="21.3" r="1.8"/></svg></span>`;
 
 let entranceTimer = null;
 let typeTimer = null;
@@ -15,12 +21,13 @@ export function showEntrance(enemy, done) {
   const sm = SUIT_META[enemy.card.s];
   $('#entrance-card').innerHTML = cardSVG(enemy.card, { subtitle: true });
   $('#entrance-facts').innerHTML =
-    `<b>${meta.name}</b><br>` +
-    `<span class="entrance-title">${meta.title}</span><br>` +
-    `<span class="entrance-rank">${RANK_TITLES[enemy.card.r]} · ${SUIT_NAMES[enemy.card.s]} ${sm.symbol}</span><br>` +
-    `<span class="entrance-stat">♥ ${enemy.health} health</span>` +
-    `<span class="entrance-stat">⚔ ${enemy.effectiveAttack} / ${enemy.attack} strike</span><br>` +
-    `<span class="badge">Immune to ${sm.symbol} ${sm.power}</span>`;
+    `<div class="entrance-name">${meta.name}</div>` +
+    `<div class="entrance-title">${meta.title}</div>` +
+    `<div class="entrance-stats">` +
+      `<span class="entrance-stat">${HEART_ICON}${enemy.health}</span>` +
+      `<span class="entrance-stat">${SWORD_ICON}${enemy.effectiveAttack}</span>` +
+    `</div>` +
+    `<div class="badge">Immune to ${sm.symbol} ${sm.power}</div>`;
   const textEl = $('#entrance-threat');
   textEl.textContent = '';
   textEl.classList.remove('done');

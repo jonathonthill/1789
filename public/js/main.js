@@ -48,9 +48,12 @@ function saveSession(v) {
 }
 
 // ── screens ─────────────────────────────────────────────────────────────────
-const SCREENS = ['home', 'lobby', 'game', 'end'];
+const SCREENS = ['home', 'lobby', 'begin', 'game', 'victory', 'end'];
 function show(name) {
   for (const s of SCREENS) $(`#screen-${s}`).hidden = s !== name;
+  // The cutscenes are a brief overlay on top of the game itself, not a scene
+  // of their own — leave whatever music was already playing running.
+  if (name === 'begin' || name === 'victory') return;
   audio.setScene(name === 'game' ? 'game' : (name === 'home' || name === 'lobby' ? 'intro' : null));
 }
 
@@ -107,6 +110,10 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSoundMe
 syncAudioButtons();
 document.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true });
 document.addEventListener('keydown', () => audio.unlock(), { once: true, capture: true });
+// The browser can suspend an already-unlocked AudioContext on its own after a
+// quiet stretch; unlike the one-time listeners above, this stays attached for
+// the whole session so later taps can nudge it back on.
+document.addEventListener('pointerdown', () => audio.nudge(), { capture: true });
 
 // ── pseudo-state: lets the client reuse engine validation on a partial view ──
 function pseudoState(v) {
@@ -245,57 +252,74 @@ function routeView(v) {
       endHandled = true;
       staged = [];
       if (v.phase === 'won' && v.lastEvent?.type === 'victory') {
-        // A killing Heart/Diamond still resolves before the royal falls.
+        // A killing Heart/Diamond still resolves before the royal falls, then
+        // the victory cutscene plays before the end screen itself.
         withAnim(done => animateEffects(v, () => {
           animatePlayedToPrison(v.lastEvent, () => {
             audio.sfx('guillotine');
             showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
           });
-        }), () => renderEnd(v));
+        }), () => playCutscene('victory', () => renderEnd(v)));
       } else if (v.phase === 'lost' && v.lastEffects) {
         // Rally/Raid still happened before the fatal counterattack. Show those
         // resolved powers before replacing the board with the loss screen.
         withAnim(done => animateEffects(v, done), () => renderEnd(v));
       } else {
+        // A reconnect/refresh straight into an already-decided game — no
+        // fresh event to animate, and no need to replay the cutscene either.
         renderEnd(v);
       }
     }
     return;
   }
   endHandled = false;
-  show('game');
-  const phaseKey = `${v.phase}:${v.current}`;
-  if (phaseKey !== lastPhaseKey) { staged = []; lastPhaseKey = phaseKey; }
   const seq = v.enemy?.revealSeq ?? 0;
-  if (seq && seq !== lastAnimSeq) {
-    lastAnimSeq = seq;
-    staged = [];
-    const ev = v.lastEvent;
-    if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
-      renderGame(v);
-      withAnim(done => animateEffects(v, () => {
-        animatePlayedToPrison(ev, () => {
-          audio.sfx('guillotine');
-          showGuillotine(ev.card, ev.exact, () => {
-            audio.sfx('enemy');
-            showEntrance(v.enemy, done);
+  const freshGame = seq === 1 && seq !== lastAnimSeq;
+
+  // Everything that used to run unconditionally now runs as a continuation,
+  // so a brand-new game can hold on the begin cutscene first instead of
+  // flashing the board underneath it.
+  const proceed = () => {
+    show('game');
+    const phaseKey = `${v.phase}:${v.current}`;
+    if (phaseKey !== lastPhaseKey) { staged = []; lastPhaseKey = phaseKey; }
+    if (seq && seq !== lastAnimSeq) {
+      lastAnimSeq = seq;
+      staged = [];
+      const ev = v.lastEvent;
+      if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
+        renderGame(v);
+        withAnim(done => animateEffects(v, () => {
+          animatePlayedToPrison(ev, () => {
+            audio.sfx('guillotine');
+            showGuillotine(ev.card, ev.exact, () => {
+              audio.sfx('enemy');
+              showEntrance(v.enemy, done);
+            });
           });
-        });
-      }));
-      return;
-    } else {
-      audio.sfx('enemy');
-      withAnim(done => showEntrance(v.enemy, done), maybeWalkthrough);
-      if (seq === 1) { // fresh game: the decks get their shuffle
-        setTimeout(() => {
-          audio.sfx('shuffle');
-          riffleDeck($('#stack-tavern')); riffleDeck($('#stack-castle'));
-        }, 300);
+        }));
+        return;
+      } else {
+        audio.sfx('enemy');
+        withAnim(done => showEntrance(v.enemy, done), maybeWalkthrough);
+        if (seq === 1) { // fresh game: the decks get their shuffle
+          setTimeout(() => {
+            audio.sfx('shuffle');
+            riffleDeck($('#stack-tavern')); riffleDeck($('#stack-castle'));
+          }, 300);
+        }
       }
     }
+    renderGame(v);
+    animateEffects(v);
+  };
+
+  if (freshGame) {
+    audio.setScene('game'); // let the music carry straight through the cutscene
+    withAnim(done => playCutscene('begin', done), proceed);
+  } else {
+    proceed();
   }
-  renderGame(v);
-  animateEffects(v);
 }
 
 // Suit-power side effects become table motion: a diamond raid returns the
@@ -534,29 +558,22 @@ function renderHand(v) {
   requestAnimationFrame(() => layoutHand(v.you.hand.length));
 }
 
-// Keep every hand visible. Cards overlap by at most one third; once that is no
-// longer enough, the whole hand scales down continuously with the viewport.
+// Set every card from the viewport, not the number of cards currently held.
+// Eight cards can always fit with no more than one-third overlap, so deck and
+// opponent-card sizes stay steady as hands are drawn or played.
 function layoutHand(count = view?.you?.hand.length ?? 0) {
   const zone = $('#hand-zone');
-  if (!count || !zone.clientWidth) return;
-  const compactMultiplayer = mode === 'mp' && window.innerWidth <= 480 && window.innerHeight <= 760;
-  const target = window.matchMedia('(min-width: 800px)').matches ? 124 : (compactMultiplayer ? 76 : 96);
+  if (!zone.clientWidth) return;
+  const target = window.matchMedia('(min-width: 800px)').matches ? 124 : 96;
   const available = Math.max(1, zone.clientWidth - 28);
   const naturalGap = 9;
-  let width = target;
-  let gap = naturalGap;
-
-  if (count > 1 && count * target + (count - 1) * naturalGap > available) {
-    const fittedGap = (available - count * target) / (count - 1);
-    if (fittedGap >= -target / 3) {
-      gap = fittedGap;
-    } else {
-      width = Math.min(target, available / (1 + (count - 1) * 2 / 3));
-      gap = -width / 3;
-    }
-  }
+  const width = Math.min(target, available / (8 - 7 / 3));
+  const gap = count > 1
+    ? Math.max(-width / 3, Math.min(naturalGap, (available - count * width) / (count - 1)))
+    : naturalGap;
 
   zone.style.setProperty('--hand-card-w', `${width.toFixed(2)}px`);
+  zone.style.setProperty('--hand-card-h', `${(width * 1.4).toFixed(2)}px`);
   zone.style.setProperty('--hand-gap', `${gap.toFixed(2)}px`);
   $('#screen-game').style.setProperty('--deck-w', `${width.toFixed(2)}px`);
   layoutDecks(width);
@@ -587,7 +604,7 @@ function renderActions(v) {
   if (v.phase === 'play' && myTurn) {
     confirm.textContent = 'Attaquez!';
     confirm.disabled = staged.length === 0 || engine.validatePlay(ps, you.index, staged) !== null;
-    yield_.hidden = false;
+    yield_.hidden = !!v.solo;
     yield_.disabled = !v.canYield;
   } else if (v.phase === 'discard' && myTurn) {
     confirm.textContent = 'Sacrifice';
@@ -633,12 +650,44 @@ $('#btn-confirm').onclick = () => {
 $('#btn-yield').onclick = () => { audio.sfx('yield'); staged = []; sendAction({ type: 'yield' }, flashError); };
 $('#btn-regroup').onclick = () => { audio.sfx('shuffle'); staged = []; sendAction({ type: 'regroup' }, flashError); };
 
+// ── cutscenes (game-start and victory) ────────────────────────────────────
+const CUTSCENE_FADE_MS = 500;
+// name is 'begin' or 'victory' — each maps to #screen-{name} / #{name}-video.
+function playCutscene(name, next) {
+  const screen = $(`#screen-${name}`);
+  const video = $(`#${name}-video`);
+  screen.classList.remove('fading');
+  show(name);
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    video.pause();
+    video.removeEventListener('ended', finish);
+    screen.removeEventListener('click', finish);
+    // Fade the stage out before cutting to what comes next, rather than
+    // hard-switching between two very differently lit screens.
+    screen.classList.add('fading');
+    setTimeout(next, CUTSCENE_FADE_MS);
+  };
+  video.currentTime = 0;
+  video.muted = !audio.sfxEnabled();
+  video.addEventListener('ended', finish, { once: true });
+  screen.addEventListener('click', finish, { once: true });
+  const playing = video.play();
+  // Autoplay-with-sound can be refused even mid-session; fall back to muted
+  // playback rather than leaving the cutscene frozen on its first frame.
+  if (playing?.catch) playing.catch(() => { video.muted = true; video.play().catch(() => finish()); });
+}
+
 // ── end screen ──────────────────────────────────────────────────────────────
 function renderEnd(v) {
   show('end');
   const won = v.phase === 'won';
   audio.sfx(won ? 'win' : 'lose');
-  $('#end-emblem').textContent = won ? '🇫🇷' : '⚰️';
+  $('#end-emblem').innerHTML = won
+    ? `<img class="end-banner" src="/img/specials/victory-banner.png" alt="Citoyens triumphant on the barricade">`
+    : '⚰️';
   $('#end-title').textContent = won ? EXCLAIM.win : EXCLAIM.lose;
   let detail = '';
   if (won && v.solo) detail = `A ${v.result?.medal ?? 'Bronze'} victory — ${v.soloJestersUsed} Regroup${v.soloJestersUsed === 1 ? '' : 's'} used.`;
@@ -882,18 +931,32 @@ document.addEventListener('keydown', e => {
 });
 
 // ── boot ────────────────────────────────────────────────────────────────────
-// Same-tab refresh (sessionStorage) rejoins silently — the phone-lock case.
-// A brand-new tab only OFFERS to resume the seat found in localStorage, so a
-// second player on the same browser can't accidentally hijack it.
-const tabSession = (() => { try { return JSON.parse(sessionStorage.getItem('r1789_session')); } catch { return null; } })();
-if (tabSession?.code) {
-  tryRejoin(false);
+// Dev shortcuts: /?win jumps straight to the victory cutscene and end screen,
+// /?begin plays the game-start cutscene on its own — both skip an actual game
+// so either sequence can be previewed on demand. Neither touches real game
+// state; /?win just fakes the view shape renderEnd reads.
+const debugParams = new URLSearchParams(location.search);
+if (debugParams.has('win')) {
+  mode = 'solo';
+  const debugView = { phase: 'won', solo: true, result: { medal: 'Gold' }, soloJestersUsed: 1 };
+  view = debugView;
+  playCutscene('victory', () => renderEnd(debugView));
+} else if (debugParams.has('begin')) {
+  playCutscene('begin', () => show('home'));
 } else {
-  show('home');
-  if (session?.code) {
-    const btn = $('#btn-resume');
-    btn.innerHTML = `Rejoin salon ${esc(session.code)} <small>as ${esc(session.name ?? 'Citoyen')}</small>`;
-    btn.hidden = false;
-    btn.onclick = () => tryRejoin(false);
+  // Same-tab refresh (sessionStorage) rejoins silently — the phone-lock case.
+  // A brand-new tab only OFFERS to resume the seat found in localStorage, so a
+  // second player on the same browser can't accidentally hijack it.
+  const tabSession = (() => { try { return JSON.parse(sessionStorage.getItem('r1789_session')); } catch { return null; } })();
+  if (tabSession?.code) {
+    tryRejoin(false);
+  } else {
+    show('home');
+    if (session?.code) {
+      const btn = $('#btn-resume');
+      btn.innerHTML = `Rejoin salon ${esc(session.code)} <small>as ${esc(session.name ?? 'Citoyen')}</small>`;
+      btn.hidden = false;
+      btn.onclick = () => tryRejoin(false);
+    }
   }
 }

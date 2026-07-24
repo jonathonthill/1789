@@ -31,6 +31,10 @@ let muted = (() => {
 
 export function isSupported() { return !!AudioContextClass; }
 export function isMuted() { return muted; }
+// Whether one-shot effects should be audible right now — distinct from the
+// music bus, so callers outside the WebAudio graph (e.g. the victory clip's
+// own soundtrack) can match the sfx setting instead of the global mute.
+export function sfxEnabled() { return !muted && sfxVol > 0; }
 
 // User-set volumes (0..1) layered on top of the per-scene music level and the
 // effects bus. Persisted so a player's mix survives reloads.
@@ -83,6 +87,17 @@ function ensureContext() {
   const data = noiseBuffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 }
+
+// Browsers can suspend a running AudioContext on their own after a stretch of
+// silence, well past the one-time first-gesture unlock below — with nothing
+// re-resuming it, every later scene/effect call would silently no-op forever.
+// Any subsequent user interaction nudges it back instead.
+function tryResume() {
+  if (ctx && !muted && ctx.state !== 'running') {
+    ctx.resume().then(startMusic).catch(() => {});
+  }
+}
+export function nudge() { tryResume(); }
 
 export async function unlock() {
   if (muted || !AudioContextClass) return false;
@@ -175,7 +190,8 @@ export function setScene(scene) {
 }
 
 function startMusic() {
-  if (!ctx || muted || !desiredScene || !midiScore || ctx.state !== 'running') return;
+  if (!ctx || muted || !desiredScene || !midiScore) return;
+  if (ctx.state !== 'running') { tryResume(); return; }
   if (activeScene !== desiredScene) {
     activeScene = desiredScene;
   }
@@ -328,7 +344,8 @@ function playSample(name, time, volume = 1, offset = 0, duration = null) {
 }
 
 export function sfx(kind) {
-  if (!ctx || muted || ctx.state !== 'running') return;
+  if (!ctx || muted) return;
+  if (ctx.state !== 'running') { tryResume(); return; }
   const t = ctx.currentTime + .006;
   switch (kind) {
     case 'select':

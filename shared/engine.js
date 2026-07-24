@@ -355,7 +355,9 @@ function beginSuffering(state, playerIdx) {
 
 export function canYield(state, playerIdx) {
   if (state.phase !== 'play' || playerIdx !== state.current) return false;
-  if (state.solo) return !state.players[0].yielded; // may not lie low twice in a row
+  // Lying low only ever helps by passing the turn to someone else — with no
+  // other citoyen to pass to, solo play gets nothing from it but a free hit.
+  if (state.solo) return false;
   const others = state.players.filter((_, i) => i !== playerIdx);
   return !others.every(p => p.yielded);
 }

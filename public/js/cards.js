@@ -5,6 +5,7 @@ import { enemyMeta } from '/shared/theme.js';
 
 const RED = '#9e2235', INK = '#26211a', FACE = '#f7f0df';
 const GOLD = '#b08d2c', GOLD_HI = '#d9bc63', BLUE = '#1b2a5e', BLUE_DEEP = '#101c40';
+const CRIMSON_DEEP = '#741526';
 const SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣' };
 const SERIF = `'Cinzel', Georgia, serif`;
 
@@ -38,9 +39,11 @@ export function fleur(x, y, size, fill, opacity = 1) {
 }
 
 // ── card back ───────────────────────────────────────────────────────────────
+// Deep crimson (not the royal blue used on card faces) so a fanned opponent
+// hand reads clearly against the board instead of blending into it.
 export function cardBackSVG() {
   return `<svg viewBox="0 0 240 336" xmlns="http://www.w3.org/2000/svg">
-    <rect x="3" y="3" width="234" height="330" rx="16" fill="${BLUE}" stroke="${BLUE_DEEP}" stroke-width="3"/>
+    <rect x="3" y="3" width="234" height="330" rx="16" fill="${RED}" stroke="${CRIMSON_DEEP}" stroke-width="3"/>
     <rect x="12" y="12" width="216" height="312" rx="10" fill="none" stroke="${GOLD}" stroke-width="2.5"/>
     <rect x="19" y="19" width="202" height="298" rx="7" fill="none" stroke="${GOLD}" stroke-width="1" opacity=".55"/>
     ${fleur(28, 28, 26, GOLD, .5)}${fleur(186, 28, 26, GOLD, .5)}

@@ -53,6 +53,14 @@
   </div>
 </section>
 
+<!-- ═══ BEGIN CUTSCENE ═══ -->
+<section id="screen-begin" class="screen cutscene-screen" hidden>
+  <div class="cutscene-frame">
+    <video id="begin-video" class="cutscene-video" src="/video/begin.mp4" playsinline preload="none"></video>
+  </div>
+  <div class="cutscene-skip">Tap to skip</div>
+</section>
+
 <!-- ═══ GAME ═══ -->
 <section id="screen-game" class="screen" hidden>
   <header class="topbar">
@@ -84,12 +92,23 @@
           <div class="enemy-facts">
             <div class="enemy-stat hp-wrap">
               <div id="hp-bar" class="enemy-stat-fill hp-bar"></div>
-              <span class="enemy-stat-icon" aria-hidden="true">♥</span>
+              <span class="enemy-stat-icon heart-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12,7 C10,3 4,3.5 4,9 C4,14 8,17.5 12,21.5 C16,17.5 20,14 20,9 C20,3.5 14,3 12,7 Z"/>
+                </svg>
+              </span>
               <span id="hp-text" class="enemy-stat-text"></span>
             </div>
             <div class="enemy-stat strike-wrap">
               <div id="strike-bar" class="enemy-stat-fill strike-bar"></div>
-              <span class="enemy-stat-icon" aria-hidden="true">⚔</span>
+              <span class="enemy-stat-icon strike-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <polygon points="12,1 13.6,5 13.6,14 10.4,14 10.4,5"/>
+                  <rect x="5.5" y="13" width="13" height="2.2" rx=".6"/>
+                  <rect x="10.8" y="15.2" width="2.4" height="5" rx=".8"/>
+                  <circle cx="12" cy="21.3" r="1.8"/>
+                </svg>
+              </span>
               <span id="strike-text" class="enemy-stat-text"></span>
             </div>
           </div>
@@ -131,6 +150,14 @@
   </div>
 
   <div id="pause-banner" class="pause-banner" hidden></div>
+</section>
+
+<!-- ═══ VICTORY CUTSCENE ═══ -->
+<section id="screen-victory" class="screen cutscene-screen" hidden>
+  <div class="cutscene-frame">
+    <video id="victory-video" class="cutscene-video" src="/video/victory.mp4" playsinline preload="none"></video>
+  </div>
+  <div class="cutscene-skip">Tap to skip</div>
 </section>
 
 <!-- ═══ END ═══ -->

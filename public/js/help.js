@@ -43,13 +43,15 @@ export function statusText(view, stagedCount) {
 
   if (view.phase === 'play') {
     if (!yourTurn) return `Waiting for <span class="em">${cur.name}</span> to attack or Lay Low.`;
-    if (view.you.hand.length === 0) return `You hold no cards. ${view.canYield ? 'You must <span class="em">Lay Low</span>.' : '<span class="em">You cannot act…</span>'}`;
+    if (view.you.hand.length === 0) {
+      if (view.canYield) return `You hold no cards. You must <span class="em">Lay Low</span>.`;
+      if (view.players.length === 1) return `You hold no cards. <span class="em">Regroup</span> to reshuffle Le Peuple back into play.`;
+      return `You hold no cards. <span class="em">You cannot act…</span>`;
+    }
     if (stagedCount > 0) return `Attack staged. Review the preview, then press <span class="em">Attaquez!</span>`;
+    if (view.players.length === 1) return `Your turn, citoyen. Stage an attack.`;
     if (view.canYield) return `Your turn, citoyen. Tap cards to stage an attack, or choose <span class="em">Lay Low</span>.`;
-    const reason = view.players.length === 1
-      ? 'You cannot Lay Low twice in a row.'
-      : 'Lay Low is unavailable because every other citoyen just used it.';
-    return `Your turn, citoyen. Stage an attack. ${reason}`;
+    return `Your turn, citoyen. Stage an attack. Lay Low is unavailable because every other citoyen just used it.`;
   }
   return '';
 }
@@ -194,7 +196,7 @@ export function helpHTML(view) {
 
     <h3 class="${here('discard')}">Suffering Damage</h3>
     <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Sans-Culottes are worth 1, Pamphleteers 0, and captured royals 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
-    <p><b>Lay Low:</b> skip your attack and take the royal's counterattack after barricades. In multiplayer you cannot Lay Low if every other citoyen just did; solo, you cannot do it twice in a row.</p>
+    <p><b>Lay Low:</b> skip your attack and take the royal's counterattack after barricades. A multiplayer option only — you cannot Lay Low if every other citoyen just did, and it's off entirely in solo, since skipping your turn only ever helps a fellow citoyen.</p>
 
     <h3>Combos & Sans-Culottes</h3>
     <div class="help-example-row">
@@ -362,7 +364,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 4 of 4 · Respond',
       title: 'Phase 4: Survive the counterattack',
       body: `<p>Subtract all active Spade barricades from the royal's attack. Sacrifice cards from your hand totaling <b>at least</b> the damage left: Sans-Culottes are 1, Pamphleteers 0, and recruited royals 10 / 15 / 20.</p>
-        <p>You may <b>Lay Low</b> instead of attacking, but you still take the counterattack. Multiplayer forbids it after every other citoyen just laid low; solo forbids doing it twice in a row. Once you survive, the next turn begins again at <b>Phase 1 — Attack.</b></p>`,
+        <p>You may <b>Lay Low</b> instead of attacking, but you still take the counterattack. Multiplayer forbids it after every other citoyen just laid low, and it isn't offered in solo at all — there's no one else for it to pass the turn to. Once you survive, the next turn begins again at <b>Phase 1 — Attack.</b></p>`,
       stage: `<div class="walk-damage-math"><span class="hit">10 attack</span><i>−</i><span class="shield">4 barricade</span><i>=</i><span class="damage">6 damage</span></div>
         <div class="walk-sacrifice">${walkCard({ r: 2, s: 'H' }, '')}${walkCard({ r: 4, s: 'D' }, '')}<span>6 sacrificed ✓</span></div>
         <div class="walk-lay-low">Lay Low <small>skip your attack · take the hit</small></div>`,

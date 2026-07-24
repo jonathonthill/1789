@@ -308,7 +308,7 @@ test('empty-handed player who yields into unblocked damage loses the game', () =
   assert.equal(s.phase, 'lost');
 });
 
-test('solo: regroup discards hand, refills to 8, tracks medals; cannot yield twice in a row', () => {
+test('solo: regroup discards hand, refills to 8, tracks medals; Lay Low is never available', () => {
   const s = newGame(['Citoyen'], { seed: 16 });
   assert.equal(s.players[0].hand.length, 8);
   rig(s, { enemy: { r: 'J', s: 'H' } });
@@ -316,17 +316,9 @@ test('solo: regroup discards hand, refills to 8, tracks medals; cannot yield twi
   assert.equal(s.players[0].hand.length, 8);
   assert.equal(s.soloJesters, 1);
   assert.equal(s.soloJestersUsed, 1);
-  // yield once ok, twice in a row not
-  const hv = s.players[0].hand.reduce((t, c) => t + cardValue(c), 0);
-  if (hv >= 10) {
-    yieldTurn(s, 0);
-    const low = [...s.players[0].hand].sort((a, b) => cardValue(b) - cardValue(a));
-    const chosen = [];
-    let tot = 0;
-    for (const c of low) { if (tot >= 10) break; chosen.push(c); tot += cardValue(c); }
-    discardForDamage(s, 0, chosen);
-    assert.equal(canYield(s, 0), false, 'no yielding twice in a row solo');
-  }
+  // Lying low only ever helps by passing the turn to someone else, so solo never offers it.
+  assert.equal(canYield(s, 0), false, 'solo can never lie low — there is no one else to pass the turn to');
+  assert.throws(() => yieldTurn(s, 0), /cannot lie low/);
 });
 
 test('two-player: each citoyen may Regroup once and only their own hand changes', () => {
