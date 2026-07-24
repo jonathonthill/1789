@@ -108,6 +108,15 @@ export function pileInfo(kind, view) {
       <p><b>${view.discardCount}</b> prisoners — spent attacks, sacrifices, and guillotined royals. ♦ Raid La Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
+  if (kind === 'played') {
+    const cards = view.playedCombos.flatMap(combo => combo.cards);
+    const spread = cards.map(card =>
+      `<span class="sheet-played-card">${cardSVG(card)}</span>`
+    ).join('') || '<p><i>No cards have been played against this royal yet.</i></p>';
+    return `<h3>⚔ In Play</h3>
+      ${cards.length ? `<p><b>${cards.length}</b> card${cards.length === 1 ? '' : 's'} committed against the current royal.</p>` : ''}
+      <div class="sheet-played-cards">${spread}</div>`;
+  }
   if (kind === 'enemy') return enemyInfo(view);
   return '';
 }
@@ -270,20 +279,25 @@ export function walkthroughSteps(view) {
         <p>Beneath the royal, the heart bar shows remaining health and the swords bar shows current strike versus full strike. Barricades reduce the first number. Your hand and actions sit below the status strip.</p>`,
       stage: `<div class="walk-board-viewport">
         <div class="walk-board-demo">
-          <div class="walk-demo-topbar"><b>⚜ 1789</b><span>solo</span><i></i><span>?</span></div>
+          <div class="walk-demo-topbar"><b>⚜ 1789</b><span>salon</span><i></i><span>?</span></div>
           <div class="walk-demo-board">
-            <div class="walk-demo-seat"><span class="walk-demo-fan">${cardBackSVG()}${cardBackSVG()}${cardBackSVG()}</span><b>Citoyen</b><small>8 cards</small></div>
             <div class="walk-demo-center">
-              <div class="walk-demo-deck walk-demo-regime">${cardBackSVG()}<b>11</b><span>Régime</span><em>royals ahead</em></div>
-              <div class="walk-demo-enemy">${walkCard({ r: 'J', s: 'D' }, '')}<div><span class="walk-demo-stat walk-demo-hp"><i></i><b>♥</b>20 / 20</span><span class="walk-demo-stat walk-demo-strike"><i></i><b>⚔</b>6 / 10</span></div></div>
-              <div class="walk-demo-deck-col">
+              <div class="walk-demo-deck-col walk-demo-left">
+                <div class="walk-demo-deck walk-demo-regime">${cardBackSVG()}<b>11</b><span>Régime</span><em>royals ahead</em></div>
                 <div class="walk-demo-deck walk-demo-people">${cardBackSVG()}<b>33</b><span>Peuple</span><em>recruits</em></div>
+              </div>
+              <div class="walk-demo-enemy">${walkCard({ r: 'J', s: 'D' }, '')}<div><span class="walk-demo-stat walk-demo-hp"><i></i><b>♥</b>20 / 20</span><span class="walk-demo-stat walk-demo-strike"><i></i><b>⚔</b>6 / 10</span></div></div>
+              <div class="walk-demo-deck-col walk-demo-right">
                 <div class="walk-demo-deck walk-demo-prison"><span class="walk-demo-empty"></span><b>0</b><span>La Prison</span><em>discard</em></div>
+                <div class="walk-demo-deck walk-demo-played">${cardSVG({ r: 5, s: 'S' })}<b>1</b><span>In Play</span><em>current royal</em></div>
               </div>
             </div>
           </div>
-          <div class="walk-demo-status">Your turn, citoyen. Tap cards to stage an attack.</div>
-          <div class="walk-demo-hand">${[2, 5, 8, 10].map((r, i) => walkCard({ r, s: ['H','S','D','C'][i] }, '')).join('')}</div>
+          <div class="walk-demo-opponent-rail"><small>In a salon</small><span class="walk-demo-fan">${cardBackSVG()}${cardBackSVG()}${cardBackSVG()}</span><b>Citoyen · 8</b></div>
+          <div class="walk-demo-turn-area">
+            <div class="walk-demo-status">Your turn, citoyen. Tap cards to stage an attack.</div>
+            <div class="walk-demo-hand">${[2, 5, 8, 10].map((r, i) => walkCard({ r, s: ['H','S','D','C'][i] }, '')).join('')}</div>
+          </div>
           <div class="walk-demo-actions"><span>Regroup (2)</span><span>Lay Low</span><b>Attaquez!</b></div>
         </div>
       </div>`,

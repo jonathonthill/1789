@@ -247,8 +247,10 @@ function routeView(v) {
       if (v.phase === 'won' && v.lastEvent?.type === 'victory') {
         // A killing Heart/Diamond still resolves before the royal falls.
         withAnim(done => animateEffects(v, () => {
-          audio.sfx('guillotine');
-          showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+          animatePlayedToPrison(v.lastEvent, () => {
+            audio.sfx('guillotine');
+            showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+          });
         }), () => renderEnd(v));
       } else if (v.phase === 'lost' && v.lastEffects) {
         // Rally/Raid still happened before the fatal counterattack. Show those
@@ -272,10 +274,12 @@ function routeView(v) {
     if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
       renderGame(v);
       withAnim(done => animateEffects(v, () => {
-        audio.sfx('guillotine');
-        showGuillotine(ev.card, ev.exact, () => {
-          audio.sfx('enemy');
-          showEntrance(v.enemy, done);
+        animatePlayedToPrison(ev, () => {
+          audio.sfx('guillotine');
+          showGuillotine(ev.card, ev.exact, () => {
+            audio.sfx('enemy');
+            showEntrance(v.enemy, done);
+          });
         });
       }));
       return;
@@ -297,6 +301,21 @@ function routeView(v) {
 // Suit-power side effects become table motion: a diamond raid returns the
 // Prisoners under Le Peuple, then a heart rally recruits cards into hands.
 let lastActionSeq = -1;
+function animatePlayedToPrison(event, done) {
+  const cards = event?.playedCards ?? [];
+  if (!cards.length) { done?.(); return; }
+  audio.sfx('shuffle');
+  // The resolved state has already cleared In Play, but its stack remains the
+  // visual origin while the face-up committed cards fly into La Prison.
+  flyCards(
+    $('#stack-played'),
+    $('#stack-discard'),
+    cards.length,
+    cards.slice(-5).map(card => cardSVG(card)),
+    () => { riffleDeck($('#stack-discard')); done?.(); }
+  );
+}
+
 function animateEffects(v, done) {
   if (v.actionSeq === lastActionSeq) { done?.(); return; }
   const first = lastActionSeq === -1 && v.actionSeq > 1;
@@ -377,14 +396,18 @@ function renderGame(v) {
   renderDeck($('#stack-castle'), v.castleCount, null);
   renderDeck($('#stack-tavern'), v.tavernCount, null);
   renderDeck($('#stack-discard'), v.discardCount, v.discardTop);
+  const playedCards = v.playedCombos.flatMap(combo => combo.cards);
+  const playedTop = playedCards[playedCards.length - 1] ?? null;
+  renderDeck($('#stack-played'), playedCards.length, playedTop);
   $('#count-castle').textContent = v.castleCount;
   $('#count-tavern').textContent = v.tavernCount;
   $('#count-discard').textContent = v.discardCount;
-
-  // cards played against the current enemy, on the table
-  $('#played-row').innerHTML = v.playedCombos.map(c =>
-    `<span class="table-combo">${c.cards.map(card =>
-      `<span class="table-card">${cardSVG(card)}</span>`).join('')}</span>`).join('');
+  $('#count-played').textContent = playedCards.length;
+  const playedLabel = playedCards.length
+    ? `${playedCards.length} card${playedCards.length === 1 ? '' : 's'} in play. Open the stack.`
+    : 'No cards in play. Open the stack.';
+  $('#pile-played').setAttribute('aria-label', playedLabel);
+  $('#pile-played').title = playedLabel;
 
   renderSeats(v);
 
@@ -539,17 +562,18 @@ function layoutHand(count = view?.you?.hand.length ?? 0) {
   layoutDecks(width);
 }
 
-// Match deck scale to the hand. The right rail holds two decks, so it switches
-// to a vertical stack only when that hand-sized pair will not fit beside the
-// centered royal.
+// Match deck scale to the hand. Each side rail holds a pair and switches to a
+// vertical stack only when two hand-sized piles no longer fit beside the royal.
 function layoutDecks(deckWidth) {
   const center = $('.board-center');
   const royal = $('#enemy-zone');
-  const pair = $('.deck-col');
-  if (!center || !royal || !pair) return;
-  const gap = parseFloat(getComputedStyle(pair).columnGap) || 0;
+  const pairs = $$('.deck-col');
+  if (!center || !royal || !pairs.length) return;
   const railWidth = Math.max(0, (center.clientWidth - royal.getBoundingClientRect().width) / 2);
-  pair.classList.toggle('stacked', deckWidth * 2 + gap > railWidth);
+  pairs.forEach(pair => {
+    const gap = parseFloat(getComputedStyle(pair).columnGap) || 0;
+    pair.classList.toggle('stacked', deckWidth * 2 + gap > railWidth);
+  });
 }
 
 window.addEventListener('resize', () => layoutHand());
@@ -665,13 +689,93 @@ $('#btn-home').onclick = () => {
 };
 
 // ── sheets and help panel ───────────────────────────────────────────────────
+const sheet = $('#sheet');
+const sheetPanel = $('.sheet-panel');
+const sheetGrip = $('#sheet-grip');
+let sheetCloseTimer = null;
+let sheetDrag = null;
+let sheetGripDragged = false;
+
+function resetSheetPanel() {
+  clearTimeout(sheetCloseTimer);
+  sheetPanel.classList.remove('dragging', 'settling');
+  sheetPanel.style.transform = '';
+}
+
 function openSheet(html) {
   $('#sheet-content').innerHTML = html;
-  $('#sheet').hidden = false;
+  resetSheetPanel();
+  sheet.hidden = false;
 }
-$('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') $('#sheet').hidden = true; });
 
-for (const kind of ['castle', 'tavern', 'discard']) {
+function closeSheet(animated = true) {
+  if (sheet.hidden) return;
+  clearTimeout(sheetCloseTimer);
+  if (!animated) {
+    sheet.hidden = true;
+    resetSheetPanel();
+    return;
+  }
+  sheetPanel.classList.remove('dragging');
+  sheetPanel.classList.add('settling');
+  sheetPanel.style.transform = 'translateY(100%)';
+  sheetCloseTimer = setTimeout(() => {
+    sheet.hidden = true;
+    resetSheetPanel();
+  }, 190);
+}
+
+sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+
+sheetGrip.addEventListener('pointerdown', e => {
+  if (e.button !== undefined && e.button !== 0) return;
+  sheetDrag = { id: e.pointerId, startY: e.clientY, distance: 0 };
+  sheetGripDragged = false;
+  sheetPanel.classList.remove('settling');
+  sheetPanel.classList.add('dragging');
+  sheetGrip.setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+});
+window.addEventListener('pointermove', e => {
+  if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+  sheetDrag.distance = Math.max(0, e.clientY - sheetDrag.startY);
+  if (sheetDrag.distance > 5) sheetGripDragged = true;
+  sheetPanel.style.transform = `translateY(${sheetDrag.distance}px)`;
+  e.preventDefault();
+}, { passive: false });
+function finishSheetDrag(e, allowClose = true) {
+  if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+  const shouldClose = allowClose && sheetDrag.distance >= Math.min(110, sheetPanel.clientHeight * .18);
+  sheetDrag = null;
+  sheetPanel.classList.remove('dragging');
+  if (shouldClose) {
+    closeSheet();
+  } else {
+    sheetPanel.classList.add('settling');
+    sheetPanel.style.transform = '';
+    sheetCloseTimer = setTimeout(() => sheetPanel.classList.remove('settling'), 190);
+  }
+  e.preventDefault();
+}
+window.addEventListener('pointerup', e => finishSheetDrag(e));
+window.addEventListener('pointercancel', e => finishSheetDrag(e, false));
+sheetGrip.addEventListener('click', () => {
+  if (sheetGripDragged) {
+    sheetGripDragged = false;
+    return;
+  }
+  closeSheet();
+});
+sheetGrip.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  closeSheet();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !sheet.hidden) closeSheet();
+});
+
+for (const kind of ['castle', 'tavern', 'discard', 'played']) {
   $(`#pile-${kind}`).onclick = () => view && openSheet(help.pileInfo(kind, view));
 }
 attachPress($('#enemy-zone'), () => view && openSheet(help.enemyInfo(view)), () => view && openSheet(help.enemyInfo(view)));

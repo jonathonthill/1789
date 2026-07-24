@@ -67,11 +67,18 @@
   <div class="board-wrap">
     <div class="board">
       <div class="board-center">
-        <button class="deck" id="pile-castle" data-info="castle">
-          <span class="deck-stack" id="stack-castle"></span>
-          <span class="deck-count" id="count-castle"></span>
-          <span class="deck-label">Régime</span>
-        </button>
+        <div class="deck-col deck-col-left">
+          <button class="deck" id="pile-castle" data-info="castle">
+            <span class="deck-stack" id="stack-castle"></span>
+            <span class="deck-count" id="count-castle"></span>
+            <span class="deck-label">Régime</span>
+          </button>
+          <button class="deck" id="pile-tavern" data-info="tavern">
+            <span class="deck-stack" id="stack-tavern"></span>
+            <span class="deck-count" id="count-tavern"></span>
+            <span class="deck-label">Peuple</span>
+          </button>
+        </div>
         <div id="enemy-zone" class="enemy-zone" data-info="enemy">
           <div id="enemy-card" class="enemy-card"></div>
           <div class="enemy-facts">
@@ -87,20 +94,19 @@
             </div>
           </div>
         </div>
-        <div class="deck-col">
-          <button class="deck" id="pile-tavern" data-info="tavern">
-            <span class="deck-stack" id="stack-tavern"></span>
-            <span class="deck-count" id="count-tavern"></span>
-            <span class="deck-label">Peuple</span>
-          </button>
+        <div class="deck-col deck-col-right">
           <button class="deck" id="pile-discard" data-info="discard">
             <span class="deck-stack" id="stack-discard"></span>
             <span class="deck-count" id="count-discard"></span>
             <span class="deck-label">La Prison</span>
           </button>
+          <button class="deck" id="pile-played" data-info="played" aria-label="No cards in play">
+            <span class="deck-stack empty-deck" id="stack-played"></span>
+            <span class="deck-count" id="count-played">0</span>
+            <span class="deck-label">In Play</span>
+          </button>
         </div>
       </div>
-      <div id="played-row" class="played-row"></div>
     </div>
   </div>
 
@@ -162,8 +168,8 @@
 </div>
 
 <div id="sheet" class="sheet" hidden>
-  <div class="sheet-panel">
-    <div class="sheet-grip"></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true">
+    <div id="sheet-grip" class="sheet-grip" role="button" tabindex="0" aria-label="Drag down or tap to close"></div>
     <div id="sheet-content"></div>
   </div>
 </div>

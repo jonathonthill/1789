@@ -70,7 +70,7 @@ export function flyCards(fromEl, toEl, count, svg, then) {
   for (let i = 0; i < n; i++) {
     const ghost = document.createElement('div');
     ghost.className = 'fly-card';
-    ghost.innerHTML = svg;
+    ghost.innerHTML = Array.isArray(svg) ? svg[Math.min(i, svg.length - 1)] : svg;
     ghost.style.left = `${x0}px`;
     ghost.style.top = `${y0}px`;
     document.body.appendChild(ghost);

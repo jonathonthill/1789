@@ -228,6 +228,7 @@ test('exact kill places the royal on top of the tavern; overkill goes to discard
   assert.equal(s.phase, 'play');
   assert.equal(s.enemy.damage, 0);
   assert.equal(currentShield(s), 0, 'played cards cleared');
+  assert.deepEqual(s.lastEvent.playedCards, [{ r: 10, s: 'C' }], 'defeat event retains the public In Play cards for the client animation');
   // the played 10C went to discard
   assert.ok(s.discard.some(c => c.r === 10 && c.s === 'C'));
 });

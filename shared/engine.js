@@ -301,6 +301,9 @@ export function playCards(state, playerIdx, cards) {
 function defeatEnemy(state, playerIdx) {
   const exact = state.enemy.damage === enemyHealth(state);
   const enemyCard = state.enemy.card;
+  // The client keeps this public history long enough to animate the committed
+  // cards from In Play into La Prison after the royal falls.
+  const playedCards = state.playedCombos.flatMap(combo => combo.cards);
   if (exact) {
     state.tavern.push(enemyCard); // facedown on top — the royal is won over to the Revolution
   } else {
@@ -318,12 +321,12 @@ function defeatEnemy(state, playerIdx) {
       const medals = ['Gold', 'Silver', 'Bronze'];
       state.result = { medal: medals[state.soloJestersUsed] ?? 'Bronze' };
     }
-    state.lastEvent = { type: 'victory', exact, card: enemyCard };
+    state.lastEvent = { type: 'victory', exact, card: enemyCard, playedCards };
     log(state, 'The last King is dead. Vive la République!');
     return;
   }
   revealEnemy(state);
-  state.lastEvent = { type: 'defeatAndReveal', exact, seq: state.revealSeq, card: enemyCard };
+  state.lastEvent = { type: 'defeatAndReveal', exact, seq: state.revealSeq, card: enemyCard, playedCards };
   // Slayer skips Step 4 and opens a new turn against the newcomer.
   state.current = playerIdx;
   state.phase = 'play';
