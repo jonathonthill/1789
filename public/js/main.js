@@ -23,6 +23,7 @@ let lastPhaseKey = '';
 let endHandled = false;
 let animBusy = false;
 let pendingView = null;
+let lastHandCount = 0;       // "your" hand size as of the last processed view
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
@@ -246,6 +247,11 @@ function onView(v) {
 }
 
 function routeView(v) {
+  // Captured before anything renders this view, so animateEffects can tell
+  // how many of "your" hand cards are new arrivals from a Rally draw — those
+  // get held back from the hand until the fly-in ghosts actually deliver them.
+  const prevHandCount = lastHandCount;
+  lastHandCount = v.you?.hand.length ?? lastHandCount;
   if (v.phase === 'won' || v.phase === 'lost') {
     if (!endHandled) {
       endHandled = true;
@@ -257,7 +263,7 @@ function routeView(v) {
         // victory cutscene plays.
         withAnim(done => animateKillingBlow(v, () => {
           renderGame(v);
-          animateEffects(v, () => {
+          animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(v.lastEvent, () => {
               audio.sfx('guillotine');
               showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
@@ -268,12 +274,12 @@ function routeView(v) {
         // The sacrifice itself succeeded, but it immediately doomed the next
         // citoyen (no cards, can't lie low) — let the cards make their trip
         // to La Prison before the loss screen replaces the board.
-        withAnim(done => animateSacrifice(v, () => animateEffects(v, done)), () => renderEnd(v));
+        withAnim(done => animateSacrifice(v, () => animateEffects(v, prevHandCount, done)), () => renderEnd(v));
       } else if (v.phase === 'lost' && v.lastEffects) {
         // Rally/Raid still happened before the fatal counterattack. Show those
         // resolved powers before replacing the board with the loss screen.
         renderGame(v);
-        withAnim(done => animateEffects(v, done), () => renderEnd(v));
+        withAnim(done => animateEffects(v, prevHandCount, done), () => renderEnd(v));
       } else {
         // A reconnect/refresh straight into an already-decided game — no
         // fresh event to animate, and no need to replay the cutscene either.
@@ -306,7 +312,7 @@ function routeView(v) {
         // right before the guillotine covers the screen anyway.
         withAnim(done => animateKillingBlow(v, () => {
           renderGame(v);
-          animateEffects(v, () => {
+          animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(ev, () => {
               audio.sfx('guillotine');
               showGuillotine(ev.card, ev.exact, () => {
@@ -332,12 +338,21 @@ function routeView(v) {
     const isNewAction = v.actionSeq !== lastPlayActionSeq && !(firstPlayView && v.actionSeq > 1);
     lastPlayActionSeq = v.actionSeq;
     if (isNewAction && v.lastPlay) {
-      withAnim(done => animatePlay(v, done), () => animateEffects(v));
+      // Any Rally/Raid on this same play runs alongside the play animation,
+      // not after it — otherwise La Prison/Le Peuple would sit at their
+      // already-resolved state through the whole ~2s play animation before
+      // their own fly-in ever caught up to explain the change.
+      withAnim(done => {
+        let pending = 2;
+        const finish = () => { if (--pending === 0) done(); };
+        animatePlay(v, finish);
+        animateEffects(v, prevHandCount, finish);
+      });
     } else if (isNewAction && v.lastSacrifice) {
-      withAnim(done => animateSacrifice(v, done), () => animateEffects(v));
+      withAnim(done => animateSacrifice(v, done), () => animateEffects(v, prevHandCount));
     } else {
       renderGame(v);
-      animateEffects(v);
+      animateEffects(v, prevHandCount);
     }
   };
 
@@ -367,16 +382,30 @@ function animatePlayedToPrison(event, done) {
   );
 }
 
-function animateEffects(v, done) {
+function animateEffects(v, prevHandCount, done) {
   if (v.actionSeq === lastActionSeq) { done?.(); return; }
   const first = lastActionSeq === -1 && v.actionSeq > 1;
   lastActionSeq = v.actionSeq;
   if (first || !v.lastEffects) { done?.(); return; } // don't replay history on rejoin
   const { healed = 0, drawn = 0 } = v.lastEffects;
+
+  // Hold back whichever of "your" hand cards are new arrivals from this
+  // Rally, so the hand doesn't expand to make room for them until the
+  // fly-in ghosts actually deliver them. Whatever just rendered the hand at
+  // its final state (renderGame, synchronously, just before this runs) never
+  // gets painted — nothing yields the JS thread between the two — so there's
+  // no flash of the already-expanded hand before the cards visibly arrive.
+  const removedThisAction = (v.you && v.lastPlay?.playerIdx === v.you.index) ? v.lastPlay.cards.length : 0;
+  const yourDrawCount = v.you ? Math.max(0, v.you.hand.length - (prevHandCount - removedThisAction)) : 0;
+  if (yourDrawCount > 0) renderHand(v, yourDrawCount);
+
   const draw = () => {
     if (drawn <= 0) { done?.(); return; }
     audio.sfx('draw');
-    flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), done);
+    flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), () => {
+      if (yourDrawCount > 0) renderHand(v); // the ghosts have landed — release the held-back cards
+      done?.();
+    });
   };
   if (healed > 0) {
     audio.sfx('shuffle');
@@ -658,9 +687,14 @@ function renderSeats(v) {
 
 function isStaged(c) { return staged.some(s => engine.sameCard(s, c)); }
 
-function renderHand(v) {
+// holdBack omits that many cards off the end of the hand — used while a Rally
+// draw's fly-in ghosts are still travelling, so the newly drawn cards (always
+// appended last) don't appear, or make the rest of the hand reflow to fit
+// them, until they've actually landed.
+function renderHand(v, holdBack = 0) {
   const zone = $('#hand-zone');
   if (!v.you) { zone.innerHTML = ''; return; }
+  const hand = holdBack > 0 ? v.you.hand.slice(0, v.you.hand.length - holdBack) : v.you.hand;
   const ps = pseudoState(v);
   const myTurn = v.current === v.you.index;
   const canStage = myTurn && (v.phase === 'play' || v.phase === 'discard');
@@ -668,8 +702,8 @@ function renderHand(v) {
   // it), so a matching-suit card still deals damage but its power won't fire.
   const immuneSuit = (v.enemy && !v.enemy.immunityCancelled) ? v.enemy.card.s : null;
 
-  zone.innerHTML = v.you.hand.length ? '' : '<div class="hand-empty">Empty-handed — but not out of the fight.</div>';
-  v.you.hand.forEach((card, i) => {
+  zone.innerHTML = hand.length ? '' : '<div class="hand-empty">Empty-handed — but not out of the fight.</div>';
+  hand.forEach((card, i) => {
     const el = document.createElement('div');
     el.className = 'hand-card';
     el.innerHTML = cardSVG(card);
@@ -706,7 +740,7 @@ function renderHand(v) {
     );
     zone.appendChild(el);
   });
-  requestAnimationFrame(() => layoutHand(v.you.hand.length));
+  requestAnimationFrame(() => layoutHand(hand.length));
 }
 
 // Set every card from the viewport, not the number of cards currently held.

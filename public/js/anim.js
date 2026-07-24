@@ -71,12 +71,16 @@ export function flyCards(fromEl, toEl, count, svg, then) {
   const f = fromEl.getBoundingClientRect(), t = toEl.getBoundingClientRect();
   const n = Math.min(count, 5);
   if (n === 0) { then?.(); return; }
-  const x0 = f.left + f.width / 2 - 22, y0 = f.top + f.height / 2 - 31;
+  // Ghosts match the source pile's own on-screen size (the deck piles are all
+  // sized to the same width as a hand card) instead of a fixed small size, so
+  // nothing looks like it shrinks mid-flight.
+  const x0 = f.left, y0 = f.top;
   const dx = (t.left + t.width / 2) - (f.left + f.width / 2);
   const dy = (t.top + t.height / 2) - (f.top + f.height / 2);
   for (let i = 0; i < n; i++) {
     const ghost = document.createElement('div');
     ghost.className = 'fly-card';
+    ghost.style.width = `${f.width}px`;
     ghost.innerHTML = Array.isArray(svg) ? svg[Math.min(i, svg.length - 1)] : svg;
     ghost.style.left = `${x0}px`;
     ghost.style.top = `${y0}px`;
