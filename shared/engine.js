@@ -85,6 +85,8 @@ export function newGame(playerNames, opts = {}) {
     revealSeq: 0,
     actionSeq: 0,
     lastEffects: null,    // { healed, drawn } from the most recent play, for client animation
+    lastPlay: null,       // { playerIdx, cards, healthBefore/After, attackBefore/After } — client animation
+    lastSacrifice: null,  // { playerIdx, cards } from the most recent discard-for-damage — client animation
     log: [],
     lastEvent: null,      // { type: 'reveal'|'defeat', ... } for client animation
     result: null,         // on loss: { reason }; on win: { medal? }
@@ -218,11 +220,17 @@ export function playCards(state, playerIdx, cards) {
   const err = validatePlay(state, playerIdx, cards);
   if (err) throw new Error(err);
   const player = state.players[playerIdx];
+  // Snapshot before this combo's effects land, so the client can animate the
+  // health/strike bars draining from the old value to the new one.
+  const healthBefore = Math.max(0, enemyHealth(state) - state.enemy.damage);
+  const attackBefore = effectiveEnemyAttack(state);
   removeFromHand(player, cards);
   player.yielded = false;
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
+  state.lastPlay = { playerIdx, cards, healthBefore, attackBefore, healthAfter: healthBefore, attackAfter: attackBefore };
+  state.lastSacrifice = null;
 
   if (cards[0].r === 'X') {
     state.playedCombos.push({ cards, value: 0, suits: [] });
@@ -285,6 +293,8 @@ export function playCards(state, playerIdx, cards) {
   if (suits.includes('S') && active('S')) {
     log(state, `Barricades rise — the enemy's attack is reduced by ${value}.`);
   }
+  state.lastPlay.healthAfter = Math.max(0, enemyHealth(state) - state.enemy.damage);
+  state.lastPlay.attackAfter = effectiveEnemyAttack(state);
 
   // Step 3: only now decide whether the attack defeated the enemy.
   if (state.enemy.damage >= enemyHealth(state)) {
@@ -370,6 +380,8 @@ export function yieldTurn(state, playerIdx) {
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = null;
   log(state, `${player.name} lies low.`);
   beginSuffering(state, playerIdx);
   return state;
@@ -398,6 +410,8 @@ export function discardForDamage(state, playerIdx, cards) {
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = { playerIdx, cards };
   log(state, `${player.name} sacrifices ${cards.length} card${cards.length === 1 ? '' : 's'} to survive.`);
   state.pendingDamage = 0;
   advanceTurn(state);
@@ -411,6 +425,8 @@ export function surrenderGame(state, playerIdx) {
   state.phase = 'lost';
   state.pendingDamage = 0;
   state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = null;
   state.actionSeq++;
   state.result = { reason: `${player.name} surrendered. The Revolution is over.` };
   state.lastEvent = { type: 'loss' };
@@ -427,6 +443,8 @@ export function chooseNext(state, playerIdx, targetIdx) {
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = null;
   log(state, `${state.players[targetIdx].name} takes the floor.`);
   checkTurnStart(state);
   return state;
@@ -471,6 +489,8 @@ export function regroup(state, playerIdx = state.current) {
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = null;
   const remaining = regroupsRemaining(state, playerIdx);
   log(state, `Regroup! ${p.name} discards their hand and rallies ${p.hand.length} fresh card${p.hand.length === 1 ? '' : 's'}. (${remaining} left)`);
   if (state.phase === 'discard' && handValue(p) < state.pendingDamage) {
@@ -533,6 +553,8 @@ export function viewFor(state, playerIdx) {
     pendingDamage: state.pendingDamage,
     actionSeq: state.actionSeq,
     lastEffects: state.lastEffects,
+    lastPlay: state.lastPlay,
+    lastSacrifice: state.lastSacrifice,
     canYield: playerIdx != null ? canYield(state, playerIdx) : canYield(state, state.current),
     lastEvent: state.lastEvent,
     result: state.result,

@@ -89,6 +89,91 @@ export function flyCards(fromEl, toEl, count, svg, then) {
   }
 }
 
+// A played combo's journey: rise from the hand (or, for players who never
+// held the cards, fade in) to rest under the enemy long enough to read, then
+// continue on into `destinationEl` — the In Play pile for an attack, or La
+// Prison for a sacrifice. `onArrived` fires the moment the cards settle
+// under the enemy — the caller uses it to release the health/strike bars
+// from their pre-hit values, so the drain reads as caused by the hit (a
+// sacrifice, which doesn't touch the bars, just omits that callback).
+export function animatePlayedCards({ cards, origin, destinationEl, onArrived, onDone }) {
+  const enemyZone = document.querySelector('#enemy-zone');
+  if (!cards.length || !enemyZone || !destinationEl) { onArrived?.(); onDone?.(); return; }
+
+  const n = Math.min(cards.length, 5);
+  const shown = cards.slice(0, n);
+  const ez = enemyZone.getBoundingClientRect();
+  const restCenterX = ez.left + ez.width / 2;
+  const restY = ez.bottom + 16;
+
+  // Cards keep their actual hand size for the whole trip — including once
+  // they reach In Play, since the deck piles are already sized to match — so
+  // nothing appears to shrink the instant it's played.
+  const handZone = document.querySelector('#hand-zone');
+  const cardW = origin?.cardWidth
+    || parseFloat(getComputedStyle(handZone).getPropertyValue('--hand-card-w'))
+    || 96;
+  const cardH = cardW * 1.4;
+  const halfW = cardW / 2, halfH = cardH / 2;
+  const restX = i => restCenterX - halfW + (i - (n - 1) / 2) * (cardW * 0.4);
+
+  const RISE_MS = 620, FADE_MS = 420, HOLD_MS = 900, FLY_MS = 560, STAGGER = 110, FLY_STAGGER = 70;
+
+  const ghosts = shown.map(card => {
+    const ghost = document.createElement('div');
+    ghost.className = 'fly-card';
+    ghost.style.width = `${cardW}px`;
+    ghost.innerHTML = cardSVG(card);
+    document.body.appendChild(ghost);
+    return ghost;
+  });
+
+  ghosts.forEach((ghost, i) => {
+    const rx = restX(i);
+    if (origin) {
+      ghost.style.left = `${origin.centerX - halfW}px`;
+      ghost.style.top = `${origin.centerY - halfH}px`;
+      ghost.style.opacity = '1';
+      requestAnimationFrame(() => {
+        ghost.style.transition = `left ${RISE_MS}ms cubic-bezier(.22,.7,.3,1) ${i * STAGGER}ms, `
+          + `top ${RISE_MS}ms cubic-bezier(.22,.7,.3,1) ${i * STAGGER}ms`;
+        ghost.style.left = `${rx}px`;
+        ghost.style.top = `${restY}px`;
+      });
+    } else {
+      ghost.style.left = `${rx}px`;
+      ghost.style.top = `${restY}px`;
+      ghost.style.opacity = '0';
+      requestAnimationFrame(() => {
+        ghost.style.transition = `opacity ${FADE_MS}ms ease-out ${i * STAGGER}ms`;
+        ghost.style.opacity = '1';
+      });
+    }
+  });
+
+  const arriveDelay = (origin ? RISE_MS : FADE_MS) + (n - 1) * STAGGER + 40;
+  setTimeout(() => {
+    onArrived?.();
+    setTimeout(() => {
+      const t = destinationEl.getBoundingClientRect();
+      const tx = t.left + t.width / 2 - halfW, ty = t.top + t.height / 2 - halfH;
+      ghosts.forEach((ghost, i) => {
+        ghost.style.transition = `left ${FLY_MS}ms cubic-bezier(.3,.7,.4,1) ${i * FLY_STAGGER}ms, `
+          + `top ${FLY_MS}ms cubic-bezier(.3,.7,.4,1) ${i * FLY_STAGGER}ms, `
+          + `opacity ${FLY_MS}ms ease ${i * FLY_STAGGER}ms`;
+        ghost.style.left = `${tx}px`;
+        ghost.style.top = `${ty}px`;
+        ghost.style.opacity = '.85';
+        ghost.style.transform = `rotate(${(i % 2 ? 1 : -1) * 14}deg)`;
+      });
+      setTimeout(() => {
+        ghosts.forEach(g => g.remove());
+        onDone?.();
+      }, FLY_MS + (n - 1) * FLY_STAGGER + 40);
+    }, HOLD_MS);
+  }, arriveDelay);
+}
+
 // Once the blade parts the card, each half falls as its own scrap of card
 // stock. Instead of a fixed keyframe (which only ever jiggles the same way),
 // we integrate the motion frame-by-frame: gravity pulls each half down toward a

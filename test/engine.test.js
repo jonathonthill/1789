@@ -177,6 +177,48 @@ test('discard must meet the pending damage', () => {
   assert.equal(s.current, 1);
 });
 
+test('lastPlay snapshots the enemy before/after a hit for client animation, and clears on the next action', () => {
+  const s = newGame(names2, { seed: 9 });
+  rig(s, {
+    hands: [[{ r: 6, s: 'C' }, { r: 10, s: 'S' }], []],
+    enemy: { r: 'J', s: 'H' },
+  });
+  playCards(s, 0, [{ r: 6, s: 'C' }]);
+  assert.equal(s.lastPlay.playerIdx, 0);
+  assert.deepEqual(s.lastPlay.cards, [{ r: 6, s: 'C' }]);
+  assert.equal(s.lastPlay.healthBefore, 20);
+  assert.equal(s.lastPlay.healthAfter, 8, 'clubs double the 6 damage to 12');
+  assert.equal(s.lastPlay.attackBefore, 10);
+  assert.equal(s.lastPlay.attackAfter, 10, 'no spades played — strike unchanged');
+
+  assert.equal(s.phase, 'discard');
+  discardForDamage(s, 0, [{ r: 10, s: 'S' }]);
+  assert.equal(s.lastPlay, null, 'a non-play action clears the play snapshot');
+  assert.deepEqual(s.lastSacrifice, { playerIdx: 0, cards: [{ r: 10, s: 'S' }] });
+
+  // and a play clears the sacrifice snapshot right back
+  assert.equal(s.current, 1);
+  rig(s, { hands: [[], [{ r: 2, s: 'H' }]] });
+  playCards(s, 1, [{ r: 2, s: 'H' }]);
+  assert.equal(s.lastSacrifice, null, 'a play action clears the sacrifice snapshot');
+});
+
+test('a sacrifice that immediately dooms the next citoyen still leaves lastSacrifice set, for client animation', () => {
+  const s = newGame(names2, { seed: 12 });
+  rig(s, {
+    hands: [[{ r: 10, s: 'S' }], []], // player 1 already holds nothing
+    enemy: { r: 'J', s: 'H' },
+  });
+  s.players[1].regroupsRemaining = 0; // no safety net when their turn comes up
+  yieldTurn(s, 0); // player 0 lies low, so player 1 can't lie low in turn either
+  assert.equal(s.phase, 'discard');
+  assert.equal(s.pendingDamage, 10);
+  discardForDamage(s, 0, [{ r: 10, s: 'S' }]);
+  assert.equal(s.phase, 'lost', 'player 1 has no cards and cannot lie low');
+  assert.deepEqual(s.lastSacrifice, { playerIdx: 0, cards: [{ r: 10, s: 'S' }] },
+    'the snapshot survives the loss so the client can still animate the sacrifice before the loss screen');
+});
+
 test('Pamphleteer cancels immunity and lets the player choose who goes next (even self)', () => {
   const s = newGame(names3, { seed: 9 });
   rig(s, {

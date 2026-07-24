@@ -3,7 +3,7 @@
 import * as engine from '/shared/engine.js';
 import { enemyMeta, SUIT_META, EXCLAIM } from '/shared/theme.js';
 import { cardSVG, cardBackSVG } from '/js/cards.js';
-import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards } from '/js/anim.js';
+import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
 
@@ -247,28 +247,41 @@ function onView(v) {
 
 function routeView(v) {
   if (v.phase === 'won' || v.phase === 'lost') {
-    renderGame(v);
     if (!endHandled) {
       endHandled = true;
       staged = [];
       if (v.phase === 'won' && v.lastEvent?.type === 'victory') {
-        // A killing Heart/Diamond still resolves before the royal falls, then
-        // the victory cutscene plays before the end screen itself.
-        withAnim(done => animateEffects(v, () => {
-          animatePlayedToPrison(v.lastEvent, () => {
-            audio.sfx('guillotine');
-            showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+        // The board is left showing the about-to-fall royal (no renderGame
+        // yet) so the killing combo can make the same hand-to-enemy trip a
+        // survived hit gets, before a killing Heart/Diamond resolves and the
+        // victory cutscene plays.
+        withAnim(done => animateKillingBlow(v, () => {
+          renderGame(v);
+          animateEffects(v, () => {
+            animatePlayedToPrison(v.lastEvent, () => {
+              audio.sfx('guillotine');
+              showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+            });
           });
         }), () => playCutscene('victory', () => renderEnd(v)));
+      } else if (v.phase === 'lost' && v.lastSacrifice) {
+        // The sacrifice itself succeeded, but it immediately doomed the next
+        // citoyen (no cards, can't lie low) — let the cards make their trip
+        // to La Prison before the loss screen replaces the board.
+        withAnim(done => animateSacrifice(v, () => animateEffects(v, done)), () => renderEnd(v));
       } else if (v.phase === 'lost' && v.lastEffects) {
         // Rally/Raid still happened before the fatal counterattack. Show those
         // resolved powers before replacing the board with the loss screen.
+        renderGame(v);
         withAnim(done => animateEffects(v, done), () => renderEnd(v));
       } else {
         // A reconnect/refresh straight into an already-decided game — no
         // fresh event to animate, and no need to replay the cutscene either.
+        renderGame(v);
         renderEnd(v);
       }
+    } else {
+      renderGame(v);
     }
     return;
   }
@@ -288,13 +301,18 @@ function routeView(v) {
       staged = [];
       const ev = v.lastEvent;
       if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
-        renderGame(v);
-        withAnim(done => animateEffects(v, () => {
-          animatePlayedToPrison(ev, () => {
-            audio.sfx('guillotine');
-            showGuillotine(ev.card, ev.exact, () => {
-              audio.sfx('enemy');
-              showEntrance(v.enemy, done);
+        // Board stays on the about-to-fall royal until the killing combo has
+        // made its trip; only then does the new enemy actually swap in,
+        // right before the guillotine covers the screen anyway.
+        withAnim(done => animateKillingBlow(v, () => {
+          renderGame(v);
+          animateEffects(v, () => {
+            animatePlayedToPrison(ev, () => {
+              audio.sfx('guillotine');
+              showGuillotine(ev.card, ev.exact, () => {
+                audio.sfx('enemy');
+                showEntrance(v.enemy, done);
+              });
             });
           });
         }));
@@ -310,8 +328,17 @@ function routeView(v) {
         }
       }
     }
-    renderGame(v);
-    animateEffects(v);
+    const firstPlayView = lastPlayActionSeq === -1;
+    const isNewAction = v.actionSeq !== lastPlayActionSeq && !(firstPlayView && v.actionSeq > 1);
+    lastPlayActionSeq = v.actionSeq;
+    if (isNewAction && v.lastPlay) {
+      withAnim(done => animatePlay(v, done), () => animateEffects(v));
+    } else if (isNewAction && v.lastSacrifice) {
+      withAnim(done => animateSacrifice(v, done), () => animateEffects(v));
+    } else {
+      renderGame(v);
+      animateEffects(v);
+    }
   };
 
   if (freshGame) {
@@ -365,6 +392,119 @@ function animateEffects(v, done) {
   }
 }
 
+// A just-played combo: the cards rise from the hand (acting player) or fade
+// in (everyone else) under the enemy, hold there while the health/strike
+// bars react, then continue on into the In Play pile.
+let lastPlayActionSeq = -1;
+// The combo's shared rise-from point: centered on the group of played cards,
+// but sized to a single card — a bounding box spanning all of them would be
+// far wider than any one card once more than one is played.
+function findPlayedCardsOrigin(cards) {
+  const zone = $('#hand-zone');
+  const els = cards.map(c => zone.querySelector(`[data-card="${engine.cardId(c)}"]`)).filter(Boolean);
+  if (!els.length) return null;
+  const rects = els.map(el => el.getBoundingClientRect());
+  const left = Math.min(...rects.map(r => r.left));
+  const top = Math.min(...rects.map(r => r.top));
+  const right = Math.max(...rects.map(r => r.right));
+  const bottom = Math.max(...rects.map(r => r.bottom));
+  return {
+    centerX: (left + right) / 2,
+    centerY: (top + bottom) / 2,
+    cardWidth: rects[0].width,
+    cardHeight: rects[0].height,
+  };
+}
+
+function animatePlay(v, done) {
+  const lp = v.lastPlay;
+  const isYou = v.you && lp.playerIdx === v.you.index;
+  const origin = isYou ? findPlayedCardsOrigin(lp.cards) : null;
+
+  renderGame(v);
+  // Hold the enemy bars and In Play pile at their pre-hit values — the
+  // animation below releases each one at the moment it should visibly land.
+  if (v.enemy) renderEnemyStats(v.enemy, lp.healthBefore, lp.attackBefore);
+  renderPlayedPile(v.playedCombos.slice(0, -1));
+
+  animatePlayedCards({
+    cards: lp.cards,
+    origin,
+    destinationEl: $('#stack-played'),
+    onArrived: () => { if (v.enemy) renderEnemyStats(v.enemy, lp.healthAfter, lp.attackAfter); },
+    onDone: () => { renderPlayedPile(v.playedCombos); done(); },
+  });
+}
+
+// A killing blow: by the time this view arrives, the server has already
+// moved on (a new enemy is revealed, or the game is won), so v.enemy/
+// v.playedCombos no longer describe the royal that was just struck. The
+// board is left showing that royal — untouched since the previous render —
+// while the killing combo makes the same trip a survived hit would, using
+// the fallen royal's own card (from the event) for the bars. The caller
+// renders the real new state once this settles, right before the guillotine
+// takes over the screen anyway.
+function setEnemyBarsForCard(card, hp, atk) {
+  const stats = engine.ENEMY_STATS[card.r];
+  const hpRatio = hp / stats.health;
+  const hpWrap = $('.hp-wrap');
+  $('#hp-bar').style.width = `${hpRatio * 100}%`;
+  $('#hp-text').textContent = `${hp} / ${stats.health}`;
+  hpWrap.classList.toggle('low', hpRatio <= .5);
+  hpWrap.classList.toggle('critical', hpRatio <= .25);
+  const atkRatio = stats.attack > 0 ? atk / stats.attack : 0;
+  $('#strike-bar').style.width = `${atkRatio * 100}%`;
+  $('#strike-text').textContent = `${atk} / ${stats.attack}`;
+}
+
+function animateKillingBlow(v, done) {
+  const lp = v.lastPlay;
+  const ev = v.lastEvent;
+  if (!lp) { done(); return; } // safety net — never hang the sequence
+  const isYou = v.you && lp.playerIdx === v.you.index;
+  const origin = isYou ? findPlayedCardsOrigin(lp.cards) : null;
+
+  setEnemyBarsForCard(ev.card, lp.healthBefore, lp.attackBefore);
+
+  animatePlayedCards({
+    cards: lp.cards,
+    origin,
+    destinationEl: $('#stack-played'),
+    onArrived: () => setEnemyBarsForCard(ev.card, lp.healthAfter, lp.attackAfter),
+    onDone: () => {
+      renderDeck($('#stack-played'), ev.playedCards.length, ev.playedCards.at(-1));
+      done();
+    },
+  });
+}
+
+// A sacrifice: cards rise from hand (or fade in, for other players) the same
+// way a play does, but continue on into La Prison instead of In Play — no
+// enemy bars to release along the way, since discarding for damage doesn't
+// touch the enemy at all.
+function animateSacrifice(v, done) {
+  const ls = v.lastSacrifice;
+  const isYou = v.you && ls.playerIdx === v.you.index;
+  const origin = isYou ? findPlayedCardsOrigin(ls.cards) : null;
+
+  renderGame(v);
+  // Hold La Prison at its pre-sacrifice state until the cards actually land.
+  const before = v.discardPile.slice(0, Math.max(0, v.discardPile.length - ls.cards.length));
+  renderDeck($('#stack-discard'), before.length, before[before.length - 1] ?? null);
+  $('#count-discard').textContent = before.length;
+
+  animatePlayedCards({
+    cards: ls.cards,
+    origin,
+    destinationEl: $('#stack-discard'),
+    onDone: () => {
+      renderDeck($('#stack-discard'), v.discardCount, v.discardTop);
+      $('#count-discard').textContent = v.discardCount;
+      done();
+    },
+  });
+}
+
 function withAnim(run, after) {
   animBusy = true;
   run(() => {
@@ -379,6 +519,52 @@ $('#entrance-overlay').addEventListener('click', dismissEntrance);
 // ── game rendering ──────────────────────────────────────────────────────────
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+// Split out from renderGame so the play animation can hold these at their
+// pre-hit values and release them once the flying cards actually arrive,
+// rather than the bars/pile jumping to the new state before the cards do.
+function renderEnemyStats(e, hpOverride, atkOverride) {
+  const meta = enemyMeta(e.card), sm = SUIT_META[e.card.s];
+  $('#enemy-card').innerHTML = cardSVG(e.card);
+  const hp = hpOverride ?? Math.max(0, e.health - e.damage);
+  const effectiveAttack = atkOverride ?? e.effectiveAttack;
+  const hpRatio = hp / e.health;
+  const hpWrap = $('.hp-wrap');
+  $('#hp-bar').style.width = `${hpRatio * 100}%`;
+  $('#hp-text').textContent = `${hp} / ${e.health}`;
+  hpWrap.classList.toggle('low', hpRatio <= .5);
+  hpWrap.classList.toggle('critical', hpRatio <= .25);
+  hpWrap.setAttribute('role', 'progressbar');
+  hpWrap.setAttribute('aria-label', `${meta.name} health`);
+  hpWrap.setAttribute('aria-valuemin', '0');
+  hpWrap.setAttribute('aria-valuemax', String(e.health));
+  hpWrap.setAttribute('aria-valuenow', String(hp));
+  const strikeRatio = e.attack > 0 ? effectiveAttack / e.attack : 0;
+  const strikeWrap = $('.strike-wrap');
+  $('#strike-bar').style.width = `${strikeRatio * 100}%`;
+  $('#strike-text').textContent = `${effectiveAttack} / ${e.attack}`;
+  strikeWrap.setAttribute('role', 'progressbar');
+  strikeWrap.setAttribute('aria-label', `${meta.name} strike after barricades`);
+  strikeWrap.setAttribute('aria-valuemin', '0');
+  strikeWrap.setAttribute('aria-valuemax', String(e.attack));
+  strikeWrap.setAttribute('aria-valuenow', String(effectiveAttack));
+  $('#enemy-zone').setAttribute(
+    'aria-label',
+    `${meta.name}. ${hp} of ${e.health} health. ${effectiveAttack} of ${e.attack} strike.${e.immunityCancelled ? ' Immunity shattered.' : ` Immune to ${sm.power}.`}`
+  );
+}
+
+function renderPlayedPile(combos) {
+  const playedCards = combos.flatMap(combo => combo.cards);
+  const playedTop = playedCards[playedCards.length - 1] ?? null;
+  renderDeck($('#stack-played'), playedCards.length, playedTop);
+  $('#count-played').textContent = playedCards.length;
+  const playedLabel = playedCards.length
+    ? `${playedCards.length} card${playedCards.length === 1 ? '' : 's'} in play. Open the stack.`
+    : 'No cards in play. Open the stack.';
+  $('#pile-played').setAttribute('aria-label', playedLabel);
+  $('#pile-played').title = playedLabel;
+}
+
 function renderGame(v) {
   const gameScreen = $('#screen-game');
   if (gameScreen.hidden && v.phase !== 'won' && v.phase !== 'lost') show('game');
@@ -386,52 +572,16 @@ function renderGame(v) {
   $('#topbar-room').textContent = mode === 'mp' ? `salon ${v.roomCode}` : 'solo';
 
   // enemy
-  if (v.enemy) {
-    const e = v.enemy, meta = enemyMeta(e.card), sm = SUIT_META[e.card.s];
-    $('#enemy-card').innerHTML = cardSVG(e.card);
-    const hp = Math.max(0, e.health - e.damage);
-    const hpRatio = hp / e.health;
-    const hpWrap = $('.hp-wrap');
-    $('#hp-bar').style.width = `${hpRatio * 100}%`;
-    $('#hp-text').textContent = `${hp} / ${e.health}`;
-    hpWrap.classList.toggle('low', hpRatio <= .5);
-    hpWrap.classList.toggle('critical', hpRatio <= .25);
-    hpWrap.setAttribute('role', 'progressbar');
-    hpWrap.setAttribute('aria-label', `${meta.name} health`);
-    hpWrap.setAttribute('aria-valuemin', '0');
-    hpWrap.setAttribute('aria-valuemax', String(e.health));
-    hpWrap.setAttribute('aria-valuenow', String(hp));
-    const strikeRatio = e.attack > 0 ? e.effectiveAttack / e.attack : 0;
-    const strikeWrap = $('.strike-wrap');
-    $('#strike-bar').style.width = `${strikeRatio * 100}%`;
-    $('#strike-text').textContent = `${e.effectiveAttack} / ${e.attack}`;
-    strikeWrap.setAttribute('role', 'progressbar');
-    strikeWrap.setAttribute('aria-label', `${meta.name} strike after barricades`);
-    strikeWrap.setAttribute('aria-valuemin', '0');
-    strikeWrap.setAttribute('aria-valuemax', String(e.attack));
-    strikeWrap.setAttribute('aria-valuenow', String(e.effectiveAttack));
-    $('#enemy-zone').setAttribute(
-      'aria-label',
-      `${meta.name}. ${hp} of ${e.health} health. ${e.effectiveAttack} of ${e.attack} strike.${e.immunityCancelled ? ' Immunity shattered.' : ` Immune to ${sm.power}.`}`
-    );
-  }
+  if (v.enemy) renderEnemyStats(v.enemy);
 
   // decks
   renderDeck($('#stack-castle'), v.castleCount, null);
   renderDeck($('#stack-tavern'), v.tavernCount, null);
   renderDeck($('#stack-discard'), v.discardCount, v.discardTop);
-  const playedCards = v.playedCombos.flatMap(combo => combo.cards);
-  const playedTop = playedCards[playedCards.length - 1] ?? null;
-  renderDeck($('#stack-played'), playedCards.length, playedTop);
+  renderPlayedPile(v.playedCombos);
   $('#count-castle').textContent = v.castleCount;
   $('#count-tavern').textContent = v.tavernCount;
   $('#count-discard').textContent = v.discardCount;
-  $('#count-played').textContent = playedCards.length;
-  const playedLabel = playedCards.length
-    ? `${playedCards.length} card${playedCards.length === 1 ? '' : 's'} in play. Open the stack.`
-    : 'No cards in play. Open the stack.';
-  $('#pile-played').setAttribute('aria-label', playedLabel);
-  $('#pile-played').title = playedLabel;
 
   renderSeats(v);
 
@@ -523,6 +673,7 @@ function renderHand(v) {
     const el = document.createElement('div');
     el.className = 'hand-card';
     el.innerHTML = cardSVG(card);
+    el.dataset.card = engine.cardId(card); // lets the play animation find this card's on-screen origin
     if (card.s && card.s === immuneSuit) {
       el.classList.add('power-off');
       el.title = "This suit's power is blocked — the enemy is immune.";
