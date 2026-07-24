@@ -26,7 +26,6 @@ function powerGuide(suit) {
 export function statusText(view, stagedCount) {
   const cur = view.players[view.current];
   const yourTurn = view.you && view.current === view.you.index;
-  const e = view.enemy;
 
   if (view.phase === 'won') return `<span class="em">Vive la République!</span> The last King is dead.`;
   if (view.phase === 'lost') return `<span class="em">The Revolution is crushed.</span>`;
@@ -38,20 +37,19 @@ export function statusText(view, stagedCount) {
   }
 
   if (view.phase === 'discard') {
-    if (!yourTurn) return `${enemyName(view)} strikes ${cur.name} for <span class="em">${view.pendingDamage}</span>. They must sacrifice cards to survive.`;
-    return `${enemyName(view)} strikes you for <span class="em">${view.pendingDamage}</span>! Tap cards totaling <span class="em">${view.pendingDamage}+</span> to sacrifice, then confirm.`;
+    if (!yourTurn) return `${enemyName(view)} strikes ${cur.name} for <span class="em">${view.pendingDamage}</span>. They must sacrifice enough cards to survive.`;
+    return `The royal strikes for <span class="em">${view.pendingDamage}</span>. Sacrifice cards totaling <span class="em">${view.pendingDamage}</span> or more, then confirm.`;
   }
 
   if (view.phase === 'play') {
-    if (!yourTurn) return `Awaiting <span class="em">${cur.name}</span>… (they attack ${enemyName(view)} or lay low)`;
-    const bits = [`Your turn, citoyen. Tap cards to stage an attack on <span class="em">${enemyName(view)}</span>`];
-    if (stagedCount > 0) bits.push(`then press <span class="em">Attaquez!</span>`);
-    else if (view.canYield) bits.push(`or <span class="em">Lay Low</span> and take the hit`);
-    else bits.push(`— you <span class="em">cannot lay low</span> (everyone else just did)`);
+    if (!yourTurn) return `Waiting for <span class="em">${cur.name}</span> to attack or Lay Low.`;
     if (view.you.hand.length === 0) return `You hold no cards. ${view.canYield ? 'You must <span class="em">Lay Low</span>.' : '<span class="em">You cannot act…</span>'}`;
-    const eff = e.effectiveAttack;
-    bits.push(`&nbsp;⚔️ Strikes back for <span class="em">${eff}</span>${e.shield ? ` (${e.attack}−${e.shield} barricade)` : ''}.`);
-    return bits.join(', ').replace(', &nbsp;', ' &nbsp;').replace(', —', ' —');
+    if (stagedCount > 0) return `Attack staged. Review the preview, then press <span class="em">Attaquez!</span>`;
+    if (view.canYield) return `Your turn, citoyen. Tap cards to stage an attack, or choose <span class="em">Lay Low</span>.`;
+    const reason = view.players.length === 1
+      ? 'You cannot Lay Low twice in a row.'
+      : 'Lay Low is unavailable because every other citoyen just used it.';
+    return `Your turn, citoyen. Stage an attack. ${reason}`;
   }
   return '';
 }
@@ -269,7 +267,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Know the table',
       title: 'Three decks, one royal, your hand',
       body: `<p><b>Le Régime</b> holds the royals still to come. <b>Le Peuple</b> is the face-down recruit deck. Played, sacrificed, and overkilled cards collect in <b>La Prison</b>.</p>
-        <p>The royal panel shows remaining endurance, counterattack, barricades, and suit immunity. Your hand and action buttons sit below the always-current status strip.</p>`,
+        <p>Beneath the royal, the heart bar shows remaining health and the swords bar shows current strike versus full strike. Barricades reduce the first number. Your hand and actions sit below the status strip.</p>`,
       stage: `<div class="walk-board-viewport">
         <div class="walk-board-demo">
           <div class="walk-demo-topbar"><b>⚜ 1789</b><span>solo</span><i></i><span>?</span></div>
@@ -277,7 +275,7 @@ export function walkthroughSteps(view) {
             <div class="walk-demo-seat"><span class="walk-demo-fan">${cardBackSVG()}${cardBackSVG()}${cardBackSVG()}</span><b>Citoyen</b><small>8 cards</small></div>
             <div class="walk-demo-center">
               <div class="walk-demo-deck walk-demo-regime">${cardBackSVG()}<b>11</b><span>Régime</span><em>royals ahead</em></div>
-              <div class="walk-demo-enemy">${walkCard({ r: 'J', s: 'D' }, '')}<div><strong>Marquis de Launay</strong><small>Officer of the Crown · ♦</small><span class="walk-demo-hp"><i></i>20 / 20</span><small>⚔ Strikes for 10</small><mark>Immune: ♦</mark></div></div>
+              <div class="walk-demo-enemy">${walkCard({ r: 'J', s: 'D' }, '')}<div><span class="walk-demo-stat walk-demo-hp"><i></i><b>♥</b>20 / 20</span><span class="walk-demo-stat walk-demo-strike"><i></i><b>⚔</b>6 / 10</span></div></div>
               <div class="walk-demo-deck-col">
                 <div class="walk-demo-deck walk-demo-people">${cardBackSVG()}<b>33</b><span>Peuple</span><em>recruits</em></div>
                 <div class="walk-demo-deck walk-demo-prison"><span class="walk-demo-empty"></span><b>0</b><span>La Prison</span><em>discard</em></div>

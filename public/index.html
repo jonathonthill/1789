@@ -66,7 +66,6 @@
 
   <div class="board-wrap">
     <div class="board">
-      <div id="seats" class="seats"></div>
       <div class="board-center">
         <button class="deck" id="pile-castle" data-info="castle">
           <span class="deck-stack" id="stack-castle"></span>
@@ -76,11 +75,16 @@
         <div id="enemy-zone" class="enemy-zone" data-info="enemy">
           <div id="enemy-card" class="enemy-card"></div>
           <div class="enemy-facts">
-            <div id="enemy-name" class="enemy-name"></div>
-            <div id="enemy-title" class="enemy-title"></div>
-            <div class="hp-wrap"><div id="hp-bar" class="hp-bar"></div><span id="hp-text" class="hp-text"></span></div>
-            <div id="enemy-attack" class="enemy-attack"></div>
-            <div id="enemy-immunity" class="enemy-immunity"></div>
+            <div class="enemy-stat hp-wrap">
+              <div id="hp-bar" class="enemy-stat-fill hp-bar"></div>
+              <span class="enemy-stat-icon" aria-hidden="true">♥</span>
+              <span id="hp-text" class="enemy-stat-text"></span>
+            </div>
+            <div class="enemy-stat strike-wrap">
+              <div id="strike-bar" class="enemy-stat-fill strike-bar"></div>
+              <span class="enemy-stat-icon" aria-hidden="true">⚔</span>
+              <span id="strike-text" class="enemy-stat-text"></span>
+            </div>
           </div>
         </div>
         <div class="deck-col">
@@ -100,9 +104,16 @@
     </div>
   </div>
 
-  <div id="status-strip" class="status-strip" data-info="status"></div>
+  <div id="opponent-rail" class="opponent-rail" hidden>
+    <div id="seats" class="seats"></div>
+  </div>
 
-  <div id="hand-zone" class="hand-zone"></div>
+  <div class="turn-area">
+    <div class="status-zone">
+      <div id="status-strip" class="status-strip" data-info="status"></div>
+    </div>
+    <div id="hand-zone" class="hand-zone"></div>
+  </div>
 
   <div id="action-bar" class="action-bar">
     <div id="projection" class="projection"></div>

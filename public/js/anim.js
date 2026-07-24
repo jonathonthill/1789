@@ -3,6 +3,7 @@ import { cardSVG, victimSVG } from '/js/cards.js';
 import { enemyMeta, enemyThreat, SUIT_META, RANK_TITLES, EXCLAIM } from '/shared/theme.js';
 
 const $ = sel => document.querySelector(sel);
+const SUIT_NAMES = { H: 'Hearts', D: 'Diamonds', C: 'Clubs', S: 'Spades' };
 
 let entranceTimer = null;
 let typeTimer = null;
@@ -14,8 +15,11 @@ export function showEntrance(enemy, done) {
   const sm = SUIT_META[enemy.card.s];
   $('#entrance-card').innerHTML = cardSVG(enemy.card, { subtitle: true });
   $('#entrance-facts').innerHTML =
-    `<b>${meta.name}</b> — ${RANK_TITLES[enemy.card.r]} of ${sm.symbol}<br>` +
-    `⚔️ Attack ${enemy.attack} · 🛡️ Endurance ${enemy.health - enemy.damage}<br>` +
+    `<b>${meta.name}</b><br>` +
+    `<span class="entrance-title">${meta.title}</span><br>` +
+    `<span class="entrance-rank">${RANK_TITLES[enemy.card.r]} · ${SUIT_NAMES[enemy.card.s]} ${sm.symbol}</span><br>` +
+    `<span class="entrance-stat">♥ ${enemy.health} health</span>` +
+    `<span class="entrance-stat">⚔ ${enemy.effectiveAttack} / ${enemy.attack} strike</span><br>` +
     `<span class="badge">Immune to ${sm.symbol} ${sm.power}</span>`;
   const textEl = $('#entrance-threat');
   textEl.textContent = '';
@@ -33,7 +37,7 @@ export function showEntrance(enemy, done) {
   }, 26);
 
   clearTimeout(entranceTimer);
-  entranceTimer = setTimeout(dismissEntrance, 2200 + threat.length * 26 + 2600);
+  entranceTimer = setTimeout(dismissEntrance, 2200 + threat.length * 26 + 7600);
 }
 
 export function dismissEntrance() {

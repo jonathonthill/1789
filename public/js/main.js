@@ -346,13 +346,11 @@ function renderGame(v) {
   if (v.enemy) {
     const e = v.enemy, meta = enemyMeta(e.card), sm = SUIT_META[e.card.s];
     $('#enemy-card').innerHTML = cardSVG(e.card);
-    $('#enemy-name').textContent = meta.name;
-    $('#enemy-title').textContent = `${meta.title} · ${sm.symbol}`;
     const hp = Math.max(0, e.health - e.damage);
     const hpRatio = hp / e.health;
     const hpWrap = $('.hp-wrap');
     $('#hp-bar').style.width = `${hpRatio * 100}%`;
-    $('#hp-text').textContent = `${hpRatio <= .25 ? '♥ ' : ''}${hp} / ${e.health}`;
+    $('#hp-text').textContent = `${hp} / ${e.health}`;
     hpWrap.classList.toggle('low', hpRatio <= .5);
     hpWrap.classList.toggle('critical', hpRatio <= .25);
     hpWrap.setAttribute('role', 'progressbar');
@@ -360,11 +358,19 @@ function renderGame(v) {
     hpWrap.setAttribute('aria-valuemin', '0');
     hpWrap.setAttribute('aria-valuemax', String(e.health));
     hpWrap.setAttribute('aria-valuenow', String(hp));
-    $('#enemy-attack').innerHTML = `⚔️ Strikes for <b>${e.effectiveAttack}</b>` +
-      (e.shield ? ` <span class="shielded">(${e.attack} − ${e.shield} 🛡️)</span>` : '');
-    $('#enemy-immunity').innerHTML = e.immunityCancelled
-      ? `<span class="badge cancelled">Immunity shattered 🪶</span>`
-      : `<span class="badge">Immune: ${sm.symbol} ${sm.power}</span>`;
+    const strikeRatio = e.attack > 0 ? e.effectiveAttack / e.attack : 0;
+    const strikeWrap = $('.strike-wrap');
+    $('#strike-bar').style.width = `${strikeRatio * 100}%`;
+    $('#strike-text').textContent = `${e.effectiveAttack} / ${e.attack}`;
+    strikeWrap.setAttribute('role', 'progressbar');
+    strikeWrap.setAttribute('aria-label', `${meta.name} strike after barricades`);
+    strikeWrap.setAttribute('aria-valuemin', '0');
+    strikeWrap.setAttribute('aria-valuemax', String(e.attack));
+    strikeWrap.setAttribute('aria-valuenow', String(e.effectiveAttack));
+    $('#enemy-zone').setAttribute(
+      'aria-label',
+      `${meta.name}. ${hp} of ${e.health} health. ${e.effectiveAttack} of ${e.attack} strike.${e.immunityCancelled ? ' Immunity shattered.' : ` Immune to ${sm.power}.`}`
+    );
   }
 
   // decks
@@ -417,23 +423,22 @@ function renderDeck(stackEl, count, topFaceCard) {
   stackEl.innerHTML = html;
 }
 
-// Fellow citoyens seated around the table with their facedown hands.
-const SEAT_POS = { 1: ['top'], 2: ['left', 'right'], 3: ['left', 'top', 'right'] };
+// Fellow citoyens' facedown hands sit in the blue rail beneath the table.
 function renderSeats(v) {
   const seats = $('#seats');
-  const board = document.querySelector('.board');
+  const rail = $('#opponent-rail');
   const you = v.you?.index ?? -1;
   const others = v.players.map((p, i) => ({ p, i })).filter(o => o.i !== you);
-  board.classList.toggle('side-seats', others.length >= 2);
   const choosing = v.phase === 'jesterChoose' && v.you && v.current === v.you.index;
   const narrow = window.innerWidth <= 480;
-  const fanW = narrow ? 96 : 128, cw = narrow ? 24 : 30;
+  const fanW = narrow ? 82 : 128, cw = narrow ? 22 : 30;
 
   seats.innerHTML = '';
-  others.forEach((o, k) => {
-    const pos = (SEAT_POS[others.length] ?? SEAT_POS[3])[k] ?? 'top';
+  rail.hidden = others.length === 0;
+  seats.style.setProperty('--opponent-count', Math.max(1, others.length));
+  others.forEach(o => {
     const el = document.createElement('button');
-    el.className = ['seat', `pos-${pos}`,
+    el.className = ['seat',
       o.i === v.current ? 'current' : '',
       (v.connections && v.connections[o.i] === false) ? 'disconnected' : '',
       choosing ? 'choosable' : ''].join(' ');
@@ -530,6 +535,21 @@ function layoutHand(count = view?.you?.hand.length ?? 0) {
 
   zone.style.setProperty('--hand-card-w', `${width.toFixed(2)}px`);
   zone.style.setProperty('--hand-gap', `${gap.toFixed(2)}px`);
+  $('#screen-game').style.setProperty('--deck-w', `${width.toFixed(2)}px`);
+  layoutDecks(width);
+}
+
+// Match deck scale to the hand. The right rail holds two decks, so it switches
+// to a vertical stack only when that hand-sized pair will not fit beside the
+// centered royal.
+function layoutDecks(deckWidth) {
+  const center = $('.board-center');
+  const royal = $('#enemy-zone');
+  const pair = $('.deck-col');
+  if (!center || !royal || !pair) return;
+  const gap = parseFloat(getComputedStyle(pair).columnGap) || 0;
+  const railWidth = Math.max(0, (center.clientWidth - royal.getBoundingClientRect().width) / 2);
+  pair.classList.toggle('stacked', deckWidth * 2 + gap > railWidth);
 }
 
 window.addEventListener('resize', () => layoutHand());
