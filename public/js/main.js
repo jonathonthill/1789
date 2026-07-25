@@ -168,6 +168,7 @@ function sendAction(action, cb) {
       else if (action.type === 'yield') engine.yieldTurn(s, 0);
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
       else if (action.type === 'regroup') engine.regroup(s, 0);
+      else if (action.type === 'chooseNext') engine.chooseNext(s, 0, action.target);
       else if (action.type === 'surrender') engine.surrenderGame(s, 0);
       onView(engine.viewFor(s, 0));
       cb?.({ ok: true });
