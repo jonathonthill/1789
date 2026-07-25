@@ -1145,9 +1145,14 @@ function attachHandCard(el, card, zone, onTap, onLong) {
     startX = e.clientX; startY = e.clientY;
     dragging = false; longFired = false;
     timer = setTimeout(() => { longFired = true; onLong(); }, 480);
+    // Without this, touch can hand the gesture to the scroll/pan recognizer
+    // before our own threshold check fires — the browser then sends
+    // pointercancel instead of pointermove, and the drag silently never starts.
+    e.preventDefault();
   });
   el.addEventListener('pointermove', e => {
     if (e.pointerId !== pointerId) return;
+    e.preventDefault();
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!dragging) {
       if (longFired || Math.hypot(dx, dy) <= HAND_DRAG_THRESHOLD) return;
@@ -1165,7 +1170,7 @@ function attachHandCard(el, card, zone, onTap, onLong) {
       maxDx = (order.length - 1 - startIndex) * cardStep;
     }
     updateDrag(e.clientX);
-  });
+  }, { passive: false });
   const release = e => {
     if (e.pointerId !== pointerId) return;
     clearTimeout(timer);
