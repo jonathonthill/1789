@@ -1,4 +1,5 @@
-// Context-dependent help: status strip, long-press explainers, help panel.
+// Context-dependent help: status strip, long-press explainers (royals/decks),
+// the "?" quick-help sheet, and the full help panel.
 import { SUIT_META, TERMS, enemyMeta, suitPowerLine } from '/shared/theme.js';
 import { cardSVG, cardBackSVG, miniLabel } from '/js/cards.js';
 import { cardValue, previewPlay } from '/shared/engine.js';
@@ -10,15 +11,24 @@ function enemyName(view) { return view.enemy ? enemyMeta(view.enemy.card).name :
 function helpCard(card, label, opts = {}) {
   return `<span class="help-card" aria-label="${label}">
     ${cardSVG(card, opts)}
-    <span>${label}</span>
+    ${opts.hideLabel ? '' : `<span>${label}</span>`}
   </span>`;
 }
 
-function powerGuide(suit) {
+// inHand only ever matters for the "?" quick-help tiles, which highlight
+// whichever suits/specials the player is actually holding right now.
+function powerGuide(suit, inHand = false) {
   const meta = SUIT_META[suit];
-  return `<article class="help-power help-power-${suit.toLowerCase()}">
-    ${helpCard({ r: 5, s: suit }, `5${meta.symbol}`)}
+  return `<article class="help-power help-power-${suit.toLowerCase()}${inHand ? ' in-hand' : ''}">
+    ${helpCard({ r: 5, s: suit }, `${meta.symbol} ${meta.power}`, { hideLabel: true })}
     <div><h4>${meta.symbol} ${meta.power}</h4><p>${meta.desc}</p></div>
+  </article>`;
+}
+
+function specialGuide(card, title, desc, inHand = false) {
+  return `<article class="help-power${inHand ? ' in-hand' : ''}">
+    ${helpCard(card, title, { hideLabel: true })}
+    <div><h4>${title}</h4><p>${desc}</p></div>
   </article>`;
 }
 
@@ -137,6 +147,63 @@ export function enemyInfo(view) {
     <p>Defeat with <b>exactly ${e.health - e.damage}</b> more damage and they join the Revolution (top of ${TERMS.tavern}); any more and it's the guillotine.</p>`;
 }
 
+// ── the "?" quick-help sheet: always the same seven card tiles (four suits,
+// Sans-Culotte, Pamphleteer, captured royals) plus the turn phase and all
+// four decks — whatever's actually in the player's hand just gets a
+// brighter border. Replaces hand-card long-press entirely (it was fighting
+// drag-detection for the same gesture, especially on touch); nothing needs
+// to be selected to use it. Always ends with a way into the full rulebook.
+export function contextHelp(view) {
+  const hand = view.you?.hand ?? [];
+  const heldSuits = new Set(hand.filter(c => c.s).map(c => c.s));
+  const hasSansCulotte = hand.some(c => c.r === 'A');
+  const hasPamphleteer = hand.some(c => c.r === 'X');
+  const hasCapturedRoyal = hand.some(c => c.r === 'J' || c.r === 'Q' || c.r === 'K');
+
+  const phaseCopy = {
+    play: `<p>Play one card, a legal same-number combo, or a Sans-Culotte pair, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value. You may <b>Lay Low</b> instead, when it's offered.</p>`,
+    discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Sans-Culottes count 1, the Pamphleteer 0, captured royals 10 / 15 / 20.</p>`,
+    jesterChoose: `<p>A Pamphleteer shattered the royal's immunity and skipped their counterattack. Choose any citoyen — even yourself — to act next.</p>`,
+    won: `<p><b>Vive la République!</b> Every royal has fallen.</p>`,
+    lost: `<p><b>The Revolution has been crushed.</b></p>`,
+  }[view.phase] ?? '';
+
+  // The odd tile out (captured royals) spans the full row instead of
+  // leaving a lonely half-empty row — see .help-power-grid.ref-grid.
+  const cardsSection = `<h3>Card Reference</h3><div class="help-power-grid ref-grid">
+    ${['H', 'D', 'C', 'S'].map(s => powerGuide(s, heldSuits.has(s))).join('')}
+    ${specialGuide({ r: 'A', s: 'S' }, 'Sans-Culotte',
+      `Worth 1. Fights alone or pairs with exactly one other non-Pamphleteer card — even another Sans-Culotte. The pair's full value fires every represented suit power; never joins a same-number combo.`,
+      hasSansCulotte)}
+    ${specialGuide({ r: 'X', s: null }, 'The Pamphleteer',
+      `Played alone for 0. Shatters the royal's immunity, skips their counterattack, and lets you choose who acts next — even yourself.`,
+      hasPamphleteer)}
+    ${specialGuide({ r: 'J', s: 'H' }, 'Captured Royals',
+      `A defeated Officer, Queen, or King you've recruited attacks at a fixed value — 10 / 15 / 20 — with its full suit power, and is worth the same if sacrificed.`,
+      hasCapturedRoyal)}
+  </div>`;
+
+  const playedCount = (view.playedCombos ?? []).reduce((n, combo) => n + combo.cards.length, 0);
+  const decksSection = `<h3>The Four Decks</h3><dl class="help-decks four">
+    <div><dt>${TERMS.castle}</dt><dd>${view.castleCount ?? 0} royal${view.castleCount === 1 ? '' : 's'} still to come.</dd></div>
+    <div><dt>${TERMS.tavern}</dt><dd>${view.tavernCount ?? 0} recruits — ♥ Rally draws from it, ♦ Raid slips prisoners beneath it.</dd></div>
+    <div><dt>${TERMS.discard}</dt><dd>${view.discardCount ?? 0} prisoners — ♦ Raid La Prison can free them.</dd></div>
+    <div><dt>In Play</dt><dd>${playedCount} card${playedCount === 1 ? '' : 's'} committed against the current royal.</dd></div>
+  </dl>`;
+
+  return `
+    <h2>Right now</h2>
+    ${phaseCopy}
+    ${cardsSection}
+    ${decksSection}
+    <button class="help-walkthrough-link" type="button" data-open-full-help>
+      <span class="help-walkthrough-icon" aria-hidden="true">📖</span>
+      <span><b>Full instructions</b><small>The complete rulebook</small></span>
+      <span aria-hidden="true">›</span>
+    </button>
+  `;
+}
+
 // ── projection line under the staged cards ─────────────────────────────────
 export function projectionText(view, staged, pseudoState) {
   if (!view.you) return '';
@@ -192,7 +259,7 @@ export function helpHTML(view) {
     <p class="help-rule-note"><b>Rearranging your hand:</b> drag a card sideways to reorder it. This is just your own view — it changes nothing for the other citoyens.</p>
 
     <h3>Suit Powers</h3>
-    <div class="help-power-grid">${['H', 'D', 'C', 'S'].map(powerGuide).join('')}</div>
+    <div class="help-power-grid">${['H', 'D', 'C', 'S'].map(s => powerGuide(s)).join('')}</div>
     <p class="help-rule-note"><b>Immunity:</b> each royal blocks the power of their own suit—the crossed-out suit on affected cards—but their damage still counts. A Pamphleteer shatters that immunity for the rest of the fight.</p>
 
     <h3 class="${here('discard')}">Suffering Damage</h3>
@@ -384,7 +451,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Your safety net',
       title: 'Regroup, read the status, ask for help',
       body: `<p>${regroupCopy} Regroup discards your whole hand and refills it, and can be used before attacking or while suffering damage. It does not shatter immunity.</p>
-        <p>The status strip always tells you what happens next. Tap cards to preview an attack; long-press cards, royals, or decks for details; drag a card sideways to reorder your hand. Reopen this walkthrough any time from <b>? Help</b>.</p>`,
+        <p>The status strip always tells you what happens next. Tap cards to stage an attack, or drag one sideways to reorder your hand. Long-press a royal or a deck for details, or tap <b>? Help</b> any time for a quick reference on your hand and the current phase — plus a link to these full instructions.</p>`,
       stage: `<div class="walk-regroup">
         <div class="walk-regroup-hand old-hand"><div class="walk-regroup-cards">${walkCard({ r: 2, s: 'D' }, '')}${walkCard({ r: 'A', s: 'C' }, '')}</div><strong>Whole hand</strong><small>to La Prison</small></div>
         <div class="walk-regroup-arrow"><span>↻</span><b>Regroup</b></div>

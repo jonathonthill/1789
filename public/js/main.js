@@ -757,8 +757,7 @@ function renderHand(v, holdBack = 0) {
         }
         else return;
         renderGame(view);
-      },
-      () => openSheet(help.cardInfo(card, v)) // long-press: contextual rules
+      }
     );
     zone.appendChild(el);
   });
@@ -1044,7 +1043,15 @@ function openHelp(v) {
   if (here) here.scrollIntoView({ block: 'start' });
 }
 let activeHelpView = null;
-$('#btn-help').onclick = () => openHelp(view);
+// "?" opens a quick, context-driven cheat sheet (current phase, suits in
+// hand, decks) instead of jumping straight to the full rulebook — it has its
+// own link into that full rulebook for anyone who wants it.
+$('#btn-help').onclick = () => view && openSheet(help.contextHelp(view));
+$('#sheet-content').addEventListener('click', e => {
+  if (!e.target.closest('[data-open-full-help]')) return;
+  closeSheet(false);
+  openHelp(view);
+});
 $('#help-close').onclick = () => { $('#help-panel').hidden = true; };
 $('#help-content').addEventListener('click', e => {
   if (!e.target.closest('.help-walkthrough-link')) return;
@@ -1066,25 +1073,28 @@ function attachPress(el, onTap, onLong) {
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// Same tap/long-press gesture as attachPress, plus drag-to-rearrange: moving
-// the pointer past a small threshold before release cancels both of those
-// and instead picks the card up (the fixed lift/scale is CSS, .hand-card.dragging,
-// matching .staged — JS only ever drives horizontal movement). The dragged
-// card itself is never reparented mid-drag (that was breaking pointer capture,
-// which read as "doesn't let go"); instead its siblings preview the slide by
-// translating out of the way, purely as a function of the current target slot
-// (recomputed fresh every move, so reversing direction just un-shifts them —
-// no accumulated state to get stuck). The target slot is arithmetic (pointer
-// delta / card step) rather than compared against live sibling boxes: hand
-// cards overlap by design, so neighboring midpoints can sit a few pixels
-// apart or cross, which is what made the old approach flicker. The DOM only
-// actually reorders once, on release, at which point the dragged card FLIPs
-// from its held position into its landing slot. Dragging past either end of
-// the row commits immediately into that end slot instead of letting the card
-// dangle past the row's bounds.
+// Tap to stage/unstage, or drag sideways to reorder — no long-press here
+// (card and suit details now live behind the "?" quick-help button instead,
+// since long-press was fighting drag-detection for the same gesture window,
+// especially on touch). Moving the pointer past a small threshold before
+// release cancels the tap and instead picks the card up (the fixed lift/scale
+// is CSS, .hand-card.dragging, matching .staged — JS only ever drives
+// horizontal movement). The dragged card itself is never reparented mid-drag
+// (that was breaking pointer capture, which read as "doesn't let go");
+// instead its siblings preview the slide by translating out of the way,
+// purely as a function of the current target slot (recomputed fresh every
+// move, so reversing direction just un-shifts them — no accumulated state to
+// get stuck). The target slot is arithmetic (pointer delta / card step)
+// rather than compared against live sibling boxes: hand cards overlap by
+// design, so neighboring midpoints can sit a few pixels apart or cross, which
+// is what made an earlier approach flicker. The DOM only actually reorders
+// once, on release, at which point the dragged card FLIPs from its held
+// position into its landing slot. Dragging past either end of the row
+// commits immediately into that end slot instead of letting the card dangle
+// past the row's bounds.
 const HAND_DRAG_THRESHOLD = 6;
-function attachHandCard(el, card, zone, onTap, onLong) {
-  let timer = null, longFired = false, dragging = false, pointerId = null;
+function attachHandCard(el, card, zone, onTap) {
+  let dragging = false, pointerId = null;
   let startX = 0, startY = 0, cardStep = 1, minDx = 0, maxDx = 0;
   let order = [], startIndex = 0, currentTarget = 0;
 
@@ -1103,7 +1113,6 @@ function attachHandCard(el, card, zone, onTap, onLong) {
   function finishDrag(finalIndex) {
     if (!dragging) return;
     dragging = false;
-    clearTimeout(timer);
     try { el.releasePointerCapture(pointerId); } catch {}
     pointerId = null;
 
@@ -1143,8 +1152,7 @@ function attachHandCard(el, card, zone, onTap, onLong) {
     if (e.button != null && e.button !== 0) return; // primary touch/left-click only
     pointerId = e.pointerId;
     startX = e.clientX; startY = e.clientY;
-    dragging = false; longFired = false;
-    timer = setTimeout(() => { longFired = true; onLong(); }, 480);
+    dragging = false;
     // Without this, touch can hand the gesture to the scroll/pan recognizer
     // before our own threshold check fires — the browser then sends
     // pointercancel instead of pointermove, and the drag silently never starts.
@@ -1155,8 +1163,7 @@ function attachHandCard(el, card, zone, onTap, onLong) {
     e.preventDefault();
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!dragging) {
-      if (longFired || Math.hypot(dx, dy) <= HAND_DRAG_THRESHOLD) return;
-      clearTimeout(timer);
+      if (Math.hypot(dx, dy) <= HAND_DRAG_THRESHOLD) return;
       dragging = true;
       el.setPointerCapture(pointerId);
       el.classList.add('dragging');
@@ -1173,17 +1180,15 @@ function attachHandCard(el, card, zone, onTap, onLong) {
   }, { passive: false });
   const release = e => {
     if (e.pointerId !== pointerId) return;
-    clearTimeout(timer);
     if (dragging) {
       finishDrag(currentTarget);
-    } else if (!longFired && e.type === 'pointerup') {
+    } else if (e.type === 'pointerup') {
       onTap();
     }
     pointerId = null;
   };
   el.addEventListener('pointerup', release);
   el.addEventListener('pointercancel', release);
-  el.addEventListener('pointerleave', () => { if (!dragging) clearTimeout(timer); });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 

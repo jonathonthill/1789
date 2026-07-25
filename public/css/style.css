@@ -419,7 +419,7 @@ input {
 .hand-card {
   width: var(--hand-card-w); flex-shrink: 0; position: relative;
   transition: transform .15s ease, translate .2s ease, width .22s ease, margin-left .22s ease;
-  cursor: grab; touch-action: none;
+  cursor: grab; touch-action: none; -webkit-touch-callout: none;
   filter: drop-shadow(0 3px 6px rgba(20,12,6,.4));
 }
 .hand-card + .hand-card { margin-left: var(--hand-gap); }
@@ -718,6 +718,9 @@ input {
 .help-turn-flow strong { display: block; color: var(--ink); font-family: var(--serif-display); margin-bottom: 2px; }
 .help-turn-flow span { color: var(--ink-soft); font-size: .9rem; line-height: 1.38; }
 .help-power-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+/* Spans the last tile full-width when the tile count is odd, so it doesn't
+   leave a lonely half-empty row — works for any odd count, not just 7. */
+.help-power-grid.ref-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .help-power {
   display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: center;
   min-height: 108px; padding: 9px 11px; border-radius: 10px;
@@ -727,6 +730,12 @@ input {
 .help-power h4 { margin: 0 0 3px; font-family: var(--serif-display); font-size: .91rem; }
 .help-power p { margin: 0; font-size: .84rem; line-height: 1.35; color: var(--ink-soft); }
 .help-power-h h4, .help-power-d h4 { color: var(--crimson); }
+/* Quick-help tiles for cards currently in hand — same tile, brighter frame. */
+.help-power.in-hand {
+  border-color: var(--gold-hi);
+  box-shadow: 0 0 0 1.5px var(--gold-hi), 0 3px 10px rgba(176,141,44,.28);
+  background: rgba(255,255,255,.36);
+}
 .help-rule-note { padding: 9px 11px; border-left: 3px solid var(--crimson); background: rgba(158,34,53,.07); }
 .help-example-row {
   display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center;
@@ -752,6 +761,7 @@ input {
 .help-deck { display: inline-flex; width: 49px; flex-direction: column; align-items: center; gap: 4px; font-size: .62rem; text-align: center; }
 .help-deck svg { width: 100%; filter: drop-shadow(0 3px 4px rgba(24,18,8,.22)); }
 .help-decks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.help-decks.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .help-decks > div { padding: 10px; border-top: 3px solid var(--gold); background: rgba(255,255,255,.23); }
 .help-decks dt { color: var(--crimson-deep); font-family: var(--serif-display); font-weight: 700; }
 .help-decks dd { margin: 4px 0 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.35; }
