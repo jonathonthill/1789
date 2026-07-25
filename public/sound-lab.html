@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111a38">
+  <title>Sound Lab · 1789</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/sound-lab.css">
+</head>
+<body class="lab-page">
+  <main class="lab-shell">
+    <header class="lab-header">
+      <div>
+        <p class="lab-kicker">1789 · audio study</p>
+        <h1>Sound Lab</h1>
+        <p>Play every effect and the two cutscene soundtracks, measure how loud each one actually is, and dial in a trim so nothing jumps out of the mix. Nothing here is saved — read the numbers back into <code>audio.js</code> by hand.</p>
+      </div>
+      <a class="lab-back" href="/">Return to game</a>
+    </header>
+
+    <div id="unlock-gate" class="unlock-gate">
+      <button id="btn-enable" class="btn primary" type="button">Enable Audio</button>
+      <p>Browsers require a tap before anything can play.</p>
+    </div>
+
+    <section id="lab-body" class="lab-body" hidden>
+      <div class="sound-toolbar">
+        <button id="measure-all" class="btn primary small" type="button">Measure everything</button>
+        <button id="play-all" class="btn ghost small" type="button">Play all together</button>
+        <button id="apply-suggested" class="btn ghost small" type="button">Apply all suggested trims</button>
+        <button id="reset-trims" class="btn ghost small" type="button">Reset trims to 100%</button>
+        <button id="copy-report" class="copy-button" type="button">Copy report</button>
+        <span id="progress" class="progress" aria-live="polite"></span>
+      </div>
+
+      <p class="target-note">Target: the <strong>quietest</strong> measured sound sets the level — every louder sound gets a suggested trim to come down and meet it, never a boost.</p>
+
+      <table class="sound-table">
+        <thead>
+          <tr><th>Sound</th><th>Level</th><th>Suggested</th><th>Trim</th><th></th></tr>
+        </thead>
+        <tbody id="rows-sfx"></tbody>
+        <tbody id="rows-video"></tbody>
+      </table>
+
+      <div class="control-group music-group">
+        <h3>Background music</h3>
+        <label class="lab-toggle"><input id="toggle-music" type="checkbox"> Playing underneath, for mix context</label>
+        <label class="range-control">
+          <span>Music volume <output id="music-vol-out">50%</output></span>
+          <input id="music-vol" type="range" min="0" max="100" step="1" value="50">
+        </label>
+        <label class="range-control">
+          <span>Effects volume (global) <output id="sfx-vol-out">50%</output></span>
+          <input id="sfx-vol" type="range" min="0" max="100" step="1" value="50">
+        </label>
+        <p class="control-note">These two match the in-game sound menu and persist to this browser — everything else on this page (per-sound trims) is lab-only and resets on reload.</p>
+      </div>
+
+      <pre id="lab-readout" class="lab-readout"></pre>
+    </section>
+  </main>
+
+  <video id="video-begin" src="/video/begin.mp4" preload="none" hidden></video>
+  <video id="video-victory" src="/video/victory.mp4" preload="none" hidden></video>
+
+  <script type="module" src="/js/sound-lab.js"></script>
+</body>
+</html>

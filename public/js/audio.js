@@ -343,41 +343,74 @@ function playSample(name, time, volume = 1, offset = 0, duration = null) {
   return true;
 }
 
-export function sfx(kind) {
+// Every kind sfx() knows how to play, in no particular order — the source of
+// truth for anything (e.g. the sound lab) that wants to enumerate them.
+export const SFX_KINDS = [
+  'select', 'deselect', 'attack', 'sacrifice', 'shuffle', 'draw', 'enemy',
+  'guillotine', 'yield', 'pamphleteer', 'win', 'lose', 'tap',
+];
+
+// trim is an extra gain multiplier on top of a kind's own hardcoded volumes —
+// production code never passes it (defaults to a no-op 1); it exists so the
+// sound lab can preview a kind at a different level using this exact
+// synthesis, without a second, drift-prone copy of it.
+export function sfx(kind, trim = 1) {
   if (!ctx || muted) return;
   if (ctx.state !== 'running') { tryResume(); return; }
   const t = ctx.currentTime + .006;
+  const n = (midi, time, duration, volume, wave, destination, envelope) =>
+    note(midi, time, duration, volume * trim, wave, destination, envelope);
+  const sw = (from, to, time, duration, volume, wave, destination) =>
+    sweep(from, to, time, duration, volume * trim, wave, destination);
+  const ns = (time, duration, volume, highpass, lowpass, destination) =>
+    noise(time, duration, volume * trim, highpass, lowpass, destination);
+  const ps = (name, time, volume, offset, duration) =>
+    playSample(name, time, volume * trim, offset, duration);
   switch (kind) {
     case 'select':
-      note(74, t, .11, .18); note(81, t + .045, .12, .11); break;
+      n(74, t, .11, .18); n(81, t + .045, .12, .11); break;
     case 'deselect':
-      note(69, t, .12, .13); break;
+      n(69, t, .12, .13); break;
     case 'attack':
-      if (!playSample('attack', t, .62)) note(86, t, .16, .13, 'triangle'); break;
+      if (!ps('attack', t, .62)) n(86, t, .16, .13, 'triangle'); break;
     case 'sacrifice':
-      noise(t, .28, .14, 500, 4200); sweep(360, 90, t, .3, .13, 'triangle'); break;
+      ns(t, .28, .14, 500, 4200); sw(360, 90, t, .3, .13, 'triangle'); break;
     case 'shuffle':
-      noise(t, .42, .1, 900, 6200); noise(t + .13, .36, .08, 1200, 7000); break;
+      ns(t, .42, .1, 900, 6200); ns(t + .13, .36, .08, 1200, 7000); break;
     case 'draw':
-      [69, 74, 77].forEach((m, i) => note(m, t + i * .075, .18, .11, 'triangle')); break;
+      [69, 74, 77].forEach((m, i) => n(m, t + i * .075, .18, .11, 'triangle')); break;
     case 'enemy':
-      [38, 45, 50].forEach((m, i) => note(m, t + i * .045, .7, .12, i === 0 ? 'sawtooth' : 'triangle'));
-      noise(t, .22, .08, 60, 900); break;
+      [38, 45, 50].forEach((m, i) => n(m, t + i * .045, .7, .12, i === 0 ? 'sawtooth' : 'triangle'));
+      ns(t, .22, .08, 60, 900); break;
     case 'guillotine':
       // The sample has 128ms of lead-in and peaks near 500ms. The tuned start
       // puts its peak near 950ms, just after the card begins to separate.
-      if (!playSample('guillotine', t + .45, .5)) note(91, t + .95, .08, .1, 'triangle'); break;
+      if (!ps('guillotine', t + .45, .5)) n(91, t + .95, .08, .1, 'triangle'); break;
     case 'yield':
-      note(67, t, .22, .1, 'sine'); note(62, t + .08, .3, .08, 'sine'); break;
+      n(67, t, .22, .1, 'sine'); n(62, t + .08, .3, .08, 'sine'); break;
     case 'pamphleteer':
-      [77, 81, 84, 89].forEach((m, i) => note(m, t + i * .055, .16, .09)); break;
+      [77, 81, 84, 89].forEach((m, i) => n(m, t + i * .055, .16, .09)); break;
     case 'win':
-      [62, 65, 69, 74, 77, 81].forEach((m, i) => note(m, t + i * .1, .5, .13, 'triangle')); break;
+      [62, 65, 69, 74, 77, 81].forEach((m, i) => n(m, t + i * .1, .5, .13, 'triangle')); break;
     case 'lose':
-      [62, 58, 55, 50, 45].forEach((m, i) => note(m, t + i * .14, .45, .11, 'triangle')); break;
+      [62, 58, 55, 50, 45].forEach((m, i) => n(m, t + i * .14, .45, .11, 'triangle')); break;
     case 'tap':
-      note(74, t, .07, .08, 'sine'); break;
+      n(74, t, .07, .08, 'sine'); break;
   }
+}
+
+// A parallel tap on the effects bus (doesn't touch the existing sfxBus →
+// master path) so a caller like the sound lab can meter whatever sfx()
+// actually produces. Requires the context to already exist (after unlock()).
+let sfxAnalyser = null;
+export function getSfxAnalyser() {
+  if (!ctx || !sfxBus) return null;
+  if (!sfxAnalyser) {
+    sfxAnalyser = ctx.createAnalyser();
+    sfxAnalyser.fftSize = 2048;
+    sfxBus.connect(sfxAnalyser);
+  }
+  return sfxAnalyser;
 }
 
 document.addEventListener('visibilitychange', () => {

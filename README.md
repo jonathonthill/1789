@@ -63,9 +63,10 @@ python3 scripts/arrange-background-midi.py \
   public/audio/do-you-hear-the-people-sing.mid
 ```
 
-`/card-check.html` and `/guillotine-lab.html` are local visual-QA tools. They are
-kept in the repository for card and animation tuning, but excluded from the
-production Docker image.
+`/card-check.html`, `/guillotine-lab.html`, and `/sound-lab.html` are local QA
+tools (card art, guillotine animation timing, and sound-effect/video loudness
+respectively). They are kept in the repository for tuning, but excluded from
+the production Docker image.
 
 ### Theme glossary
 
