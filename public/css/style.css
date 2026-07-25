@@ -418,10 +418,21 @@ input {
 }
 .hand-card {
   width: var(--hand-card-w); flex-shrink: 0; position: relative;
-  transition: transform .15s ease, width .22s ease, margin-left .22s ease; cursor: pointer;
+  transition: transform .15s ease, translate .2s ease, width .22s ease, margin-left .22s ease;
+  cursor: grab; touch-action: none;
   filter: drop-shadow(0 3px 6px rgba(20,12,6,.4));
 }
 .hand-card + .hand-card { margin-left: var(--hand-gap); }
+/* Dragging (drag-to-rearrange): the lift/scale is the same fixed transform as
+   .staged below, not pointer-tracked — only horizontal movement (JS-driven,
+   via the separate `translate` property) follows the pointer, so this always
+   composes with the lift instead of fighting or replacing it. Siblings preview
+   the reorder the same way, via translate, leaving transform untouched. */
+.hand-card.dragging {
+  z-index: 50; cursor: grabbing; transition: none;
+  transform: translateY(-18px) scale(1.08); transform-origin: 50% 100%;
+  filter: drop-shadow(0 10px 18px rgba(20,12,6,.55));
+}
 .hand-card svg { width: 100%; height: auto; display: block; pointer-events: none; }
 /* Power blocked: strike through the power-box text when the card's suit matches
    the (still-immune) enemy, so it reads as nullified at a glance. */

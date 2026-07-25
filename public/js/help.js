@@ -189,6 +189,7 @@ export function helpHTML(view) {
       <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine.</span></div>
       <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
     </div>
+    <p class="help-rule-note"><b>Rearranging your hand:</b> drag a card sideways to reorder it. This is just your own view — it changes nothing for the other citoyens.</p>
 
     <h3>Suit Powers</h3>
     <div class="help-power-grid">${['H', 'D', 'C', 'S'].map(powerGuide).join('')}</div>
@@ -383,7 +384,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Your safety net',
       title: 'Regroup, read the status, ask for help',
       body: `<p>${regroupCopy} Regroup discards your whole hand and refills it, and can be used before attacking or while suffering damage. It does not shatter immunity.</p>
-        <p>The status strip always tells you what happens next. Tap cards to preview an attack; long-press cards, royals, or decks for details. Reopen this walkthrough any time from <b>? Help</b>.</p>`,
+        <p>The status strip always tells you what happens next. Tap cards to preview an attack; long-press cards, royals, or decks for details; drag a card sideways to reorder your hand. Reopen this walkthrough any time from <b>? Help</b>.</p>`,
       stage: `<div class="walk-regroup">
         <div class="walk-regroup-hand old-hand"><div class="walk-regroup-cards">${walkCard({ r: 2, s: 'D' }, '')}${walkCard({ r: 'A', s: 'C' }, '')}</div><strong>Whole hand</strong><small>to La Prison</small></div>
         <div class="walk-regroup-arrow"><span>↻</span><b>Regroup</b></div>

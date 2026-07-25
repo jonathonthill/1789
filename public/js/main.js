@@ -17,6 +17,7 @@ let session = loadSession();         // { code, token, name }
 let myIndex = null;
 let view = null;            // last rendered view
 let staged = [];            // cards selected in hand
+let handOrder = [];          // cardIds in the player's own drag-to-rearrange order
 let soloState = null;
 let lastAnimSeq = 0;
 let lastPhaseKey = '';
@@ -210,7 +211,7 @@ $('#btn-join').onclick = () => {
 $('#btn-solo').onclick = () => {
   mode = 'solo';
   soloState = engine.newGame([myName()]);
-  lastAnimSeq = 0; endHandled = false;
+  lastAnimSeq = 0; endHandled = false; handOrder = [];
   onView(engine.viewFor(soloState, 0));
 };
 $('#btn-rules').onclick = () => openHelp({ solo: true, phase: null });
@@ -687,14 +688,35 @@ function renderSeats(v) {
 
 function isStaged(c) { return staged.some(s => engine.sameCard(s, c)); }
 
-// holdBack omits that many cards off the end of the hand — used while a Rally
-// draw's fly-in ghosts are still travelling, so the newly drawn cards (always
-// appended last) don't appear, or make the rest of the hand reflow to fit
-// them, until they've actually landed.
+// The player's own drag-to-rearrange order, reconciled against the real
+// hand: cards no longer held drop out, cards not seen before (a fresh deal,
+// or newly drawn ones — always appended last server-side) join the end in
+// their existing relative order. A plain re-render (someone else's turn,
+// a status update) never touches this, so a custom order survives it.
+function orderedHand(hand) {
+  const byId = new Map(hand.map(c => [engine.cardId(c), c]));
+  const seen = new Set();
+  const kept = [];
+  for (const id of handOrder) {
+    if (byId.has(id) && !seen.has(id)) { kept.push(id); seen.add(id); }
+  }
+  for (const c of hand) {
+    const id = engine.cardId(c);
+    if (!seen.has(id)) { kept.push(id); seen.add(id); }
+  }
+  handOrder = kept;
+  return handOrder.map(id => byId.get(id));
+}
+
+// holdBack omits that many cards off the end of the (ordered) hand — used
+// while a Rally draw's fly-in ghosts are still travelling, so the newly
+// drawn cards don't appear, or make the rest of the hand reflow to fit them,
+// until they've actually landed.
 function renderHand(v, holdBack = 0) {
   const zone = $('#hand-zone');
   if (!v.you) { zone.innerHTML = ''; return; }
-  const hand = holdBack > 0 ? v.you.hand.slice(0, v.you.hand.length - holdBack) : v.you.hand;
+  const ordered = orderedHand(v.you.hand);
+  const hand = holdBack > 0 ? ordered.slice(0, ordered.length - holdBack) : ordered;
   const ps = pseudoState(v);
   const myTurn = v.current === v.you.index;
   const canStage = myTurn && (v.phase === 'play' || v.phase === 'discard');
@@ -723,7 +745,7 @@ function renderHand(v, holdBack = 0) {
     // this player's active turn.
     if (canStage && v.phase === 'play' && !stagedNow && !extendable) el.classList.add('disabled');
 
-    attachPress(el,
+    attachHandCard(el, card, zone,
       () => { // tap: stage/unstage
         if (!canStage) return;
         if (stagedNow) {
@@ -884,7 +906,7 @@ function renderEnd(v) {
 $('#btn-rematch').onclick = () => {
   if (mode === 'solo') {
     soloState = engine.newGame([myName()]);
-    lastAnimSeq = 0; endHandled = false; staged = [];
+    lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
     onView(engine.viewFor(soloState, 0));
   } else {
     net().emit('rematch', {}, flashError);
@@ -893,7 +915,7 @@ $('#btn-rematch').onclick = () => {
 function exitToHome(forgetSession = false) {
   if (mode === 'mp' && forgetSession) { saveSession(null); session = null; }
   if (mode === 'mp') { socket?.disconnect(); socket = null; }
-  mode = null; soloState = null; view = null; staged = [];
+  mode = null; soloState = null; view = null; staged = []; handOrder = [];
   show('home');
 }
 
@@ -1041,6 +1063,122 @@ function attachPress(el, onTap, onLong) {
   el.addEventListener('pointerleave', cancel);
   el.addEventListener('pointercancel', cancel);
   el.addEventListener('pointerup', () => { cancel(); if (!longFired) onTap(); });
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+// Same tap/long-press gesture as attachPress, plus drag-to-rearrange: moving
+// the pointer past a small threshold before release cancels both of those
+// and instead picks the card up (the fixed lift/scale is CSS, .hand-card.dragging,
+// matching .staged — JS only ever drives horizontal movement). The dragged
+// card itself is never reparented mid-drag (that was breaking pointer capture,
+// which read as "doesn't let go"); instead its siblings preview the slide by
+// translating out of the way, purely as a function of the current target slot
+// (recomputed fresh every move, so reversing direction just un-shifts them —
+// no accumulated state to get stuck). The target slot is arithmetic (pointer
+// delta / card step) rather than compared against live sibling boxes: hand
+// cards overlap by design, so neighboring midpoints can sit a few pixels
+// apart or cross, which is what made the old approach flicker. The DOM only
+// actually reorders once, on release, at which point the dragged card FLIPs
+// from its held position into its landing slot. Dragging past either end of
+// the row commits immediately into that end slot instead of letting the card
+// dangle past the row's bounds.
+const HAND_DRAG_THRESHOLD = 6;
+function attachHandCard(el, card, zone, onTap, onLong) {
+  let timer = null, longFired = false, dragging = false, pointerId = null;
+  let startX = 0, startY = 0, cardStep = 1, minDx = 0, maxDx = 0;
+  let order = [], startIndex = 0, currentTarget = 0;
+
+  function applyPreview(targetIndex) {
+    if (targetIndex === currentTarget) return;
+    currentTarget = targetIndex;
+    order.forEach((c, i) => {
+      if (c === el) return;
+      let shift = 0;
+      if (startIndex < targetIndex && i > startIndex && i <= targetIndex) shift = -1;
+      else if (startIndex > targetIndex && i >= targetIndex && i < startIndex) shift = 1;
+      c.style.translate = shift ? `${shift * cardStep}px` : '';
+    });
+  }
+
+  function finishDrag(finalIndex) {
+    if (!dragging) return;
+    dragging = false;
+    clearTimeout(timer);
+    try { el.releasePointerCapture(pointerId); } catch {}
+    pointerId = null;
+
+    applyPreview(finalIndex);
+    const beforeRect = el.getBoundingClientRect();
+
+    if (finalIndex !== startIndex) {
+      const finalOrder = order.slice();
+      finalOrder.splice(startIndex, 1);
+      finalOrder.splice(finalIndex, 0, el);
+      for (const c of finalOrder) zone.appendChild(c);
+    }
+    for (const c of order) if (c !== el) c.style.translate = '';
+
+    el.classList.remove('dragging');
+    el.style.transition = 'none';
+    el.style.translate = '';
+    const afterRect = el.getBoundingClientRect();
+    const dx = beforeRect.left - afterRect.left, dy = beforeRect.top - afterRect.top;
+    el.style.translate = `${dx}px ${dy}px`;
+    void el.offsetWidth; // commit the pre-transition offset before releasing it below
+    el.style.transition = '';
+    el.style.translate = '';
+
+    handOrder = [...zone.children].filter(c => c.classList.contains('hand-card')).map(c => c.dataset.card);
+  }
+
+  function updateDrag(clientX) {
+    const rawDx = clientX - startX;
+    if (rawDx < minDx) { finishDrag(0); return; }
+    if (rawDx > maxDx) { finishDrag(order.length - 1); return; }
+    el.style.translate = `${rawDx}px`;
+    applyPreview(startIndex + Math.round(rawDx / cardStep));
+  }
+
+  el.addEventListener('pointerdown', e => {
+    if (e.button != null && e.button !== 0) return; // primary touch/left-click only
+    pointerId = e.pointerId;
+    startX = e.clientX; startY = e.clientY;
+    dragging = false; longFired = false;
+    timer = setTimeout(() => { longFired = true; onLong(); }, 480);
+  });
+  el.addEventListener('pointermove', e => {
+    if (e.pointerId !== pointerId) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!dragging) {
+      if (longFired || Math.hypot(dx, dy) <= HAND_DRAG_THRESHOLD) return;
+      clearTimeout(timer);
+      dragging = true;
+      el.setPointerCapture(pointerId);
+      el.classList.add('dragging');
+      order = [...zone.children].filter(c => c.classList.contains('hand-card'));
+      startIndex = currentTarget = order.indexOf(el);
+      const zoneStyle = getComputedStyle(zone);
+      const cardW = parseFloat(zoneStyle.getPropertyValue('--hand-card-w')) || el.getBoundingClientRect().width;
+      const gap = parseFloat(zoneStyle.getPropertyValue('--hand-gap')) || 0;
+      cardStep = Math.max(1, cardW + gap);
+      minDx = -startIndex * cardStep;
+      maxDx = (order.length - 1 - startIndex) * cardStep;
+    }
+    updateDrag(e.clientX);
+  });
+  const release = e => {
+    if (e.pointerId !== pointerId) return;
+    clearTimeout(timer);
+    if (dragging) {
+      finishDrag(currentTarget);
+    } else if (!longFired && e.type === 'pointerup') {
+      onTap();
+    }
+    pointerId = null;
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', () => { if (!dragging) clearTimeout(timer); });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
