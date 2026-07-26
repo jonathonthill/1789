@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newGame, playCards, yieldTurn, discardForDamage, chooseNext, regroup,
-  surrenderGame,
+  surrenderGame, callAssembly, castVote, syncAssembly,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
-  currentShield, effectiveEnemyAttack, cardValue,
+  currentShield, effectiveEnemyAttack, cardValue, resolveRules,
 } from '../shared/engine.js';
 
 const names2 = ['Danton', 'Robespierre'];
@@ -24,7 +24,7 @@ function rig(state, { hands, enemy, tavernTop, discard } = {}) {
 }
 
 test('deck composition per player count', () => {
-  for (const [n, jesters, hand] of [[1, 1, 8], [2, 1, 7], [3, 2, 6], [4, 2, 5]]) {
+  for (const [n, jesters, hand] of [[1, 1, 8], [2, 1, 7], [3, 2, 6], [4, 2, 6]]) {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
     assert.equal(all.filter(c => c.r === 'X').length, jesters, `${n}p jesters`);
@@ -36,7 +36,7 @@ test('deck composition per player count', () => {
     // castle order: next 3 are Jacks, then 4 Queens, then 4 Kings (top = end)
     const ranks = [...s.castle].reverse().map(c => c.r);
     assert.deepEqual(ranks, ['J', 'J', 'J', 'Q', 'Q', 'Q', 'Q', 'K', 'K', 'K', 'K']);
-    if (n === 1) assert.equal(s.soloJesters, 2);
+    if (n === 1) assert.equal(s.regroupsRemaining, 2);
   }
 });
 
@@ -209,7 +209,7 @@ test('a sacrifice that immediately dooms the next citoyen still leaves lastSacri
     hands: [[{ r: 10, s: 'S' }], []], // player 1 already holds nothing
     enemy: { r: 'J', s: 'H' },
   });
-  s.players[1].regroupsRemaining = 0; // no safety net when their turn comes up
+  s.regroupsRemaining = 0; // no safety net when their turn comes up
   yieldTurn(s, 0); // player 0 lies low, so player 1 can't lie low in turn either
   assert.equal(s.phase, 'discard');
   assert.equal(s.pendingDamage, 10);
@@ -318,7 +318,7 @@ test('a captured royal in hand attacks at 10/15/20 with live suit power', () => 
 
 test('loss when a player cannot satisfy damage', () => {
   const s = newGame(names2, { seed: 13 });
-  s.players[0].regroupsRemaining = 0;
+  s.regroupsRemaining = 0;
   rig(s, {
     hands: [[{ r: 2, s: 'H' }, { r: 3, s: 'C' }], [{ r: 4, s: 'H' }]],
     enemy: { r: 'K', s: 'H' },
@@ -338,7 +338,7 @@ test('empty-handed player who yields into unblocked damage loses the game', () =
     enemy: { r: 'J', s: 'H' },
   });
   s.tavern = [];
-  s.players[1].regroupsRemaining = 0;
+  s.regroupsRemaining = 0;
   s.players[1].yielded = true; // other player just yielded → player 1... p0 played though
   playCards(s, 0, [{ r: 5, s: 'S' }]); // shield 5, suffer 5
   discardForDamage(s, 0, [{ r: 5, s: 'C' }]);
@@ -350,20 +350,21 @@ test('empty-handed player who yields into unblocked damage loses the game', () =
   assert.equal(s.phase, 'lost');
 });
 
-test('solo: regroup discards hand, refills to 8, tracks medals; Lay Low is never available', () => {
+test('solo: regroup discards hand, refills to 8, spends the pool; Lay Low is never available', () => {
   const s = newGame(['Citoyen'], { seed: 16 });
   assert.equal(s.players[0].hand.length, 8);
   rig(s, { enemy: { r: 'J', s: 'H' } });
   regroup(s, 0);
   assert.equal(s.players[0].hand.length, 8);
-  assert.equal(s.soloJesters, 1);
-  assert.equal(s.soloJestersUsed, 1);
+  assert.equal(s.regroupsRemaining, 1);
+  assert.equal(s.regroupsUsed, 1);
+  assert.throws(() => callAssembly(s, 0), /no Assemblée to convene alone/i);
   // Lying low only ever helps by passing the turn to someone else, so solo never offers it.
   assert.equal(canYield(s, 0), false, 'solo can never lie low — there is no one else to pass the turn to');
   assert.throws(() => yieldTurn(s, 0), /cannot lie low/);
 });
 
-test('two-player: each citoyen may Regroup once and only their own hand changes', () => {
+test('two-player: l’Assemblée carries a Regroup from the shared pool, and only the mover’s hand changes', () => {
   const s = newGame(names2, { seed: 42 });
   const partnerHand = [{ r: 9, s: 'H' }, { r: 8, s: 'D' }];
   rig(s, {
@@ -376,17 +377,86 @@ test('two-player: each citoyen may Regroup once and only their own hand changes'
   ];
 
   yieldTurn(s, 0);
-  assert.equal(s.phase, 'discard', 'the personal Regroup may rescue an otherwise fatal hand');
-  regroup(s, 0);
+  assert.equal(s.phase, 'discard', 'a Regroup may still rescue an otherwise fatal hand');
+  assert.throws(() => regroup(s, 0), /needs l’Assemblée’s consent/, 'no unilateral Regroup at a table');
 
-  assert.equal(s.players[0].hand.length, 7, 'acting citoyen refills to the two-player hand limit');
+  callAssembly(s, 0);
+  assert.equal(s.assembly.caller, 0);
+  assert.deepEqual(s.assembly.voters, [1]);
+  assert.equal(viewFor(s, 1).assembly.youMayVote, true);
+  assert.equal(viewFor(s, 0).assembly.youMayVote, false, 'the mover does not vote on their own motion');
+  assert.throws(() => yieldTurn(s, 0), /Assemblée is in session/, 'the board is frozen while the floor debates');
+  castVote(s, 1, true);
+
+  assert.equal(s.assembly, null);
+  assert.equal(s.players[0].hand.length, 7, 'the mover refills to the two-player hand limit');
   assert.deepEqual(s.players[1].hand, partnerHand, 'partner hand is untouched');
-  assert.deepEqual(s.discard, [{ r: 2, s: 'C' }], 'only the acting hand is discarded');
-  assert.equal(s.players[0].regroupsRemaining, 0);
-  assert.equal(s.players[1].regroupsRemaining, 1);
-  assert.equal(viewFor(s, 0).you.regroupsRemaining, 0);
-  assert.equal(viewFor(s, 1).you.regroupsRemaining, 1);
-  assert.throws(() => regroup(s, 0), /No Regroups remain/);
+  assert.deepEqual(s.discard, [{ r: 2, s: 'C' }], 'only the mover’s hand is discarded');
+  assert.equal(s.regroupsRemaining, 1, 'one spent from the shared pool of two');
+  assert.equal(s.regroupsUsed, 1);
+});
+
+test('a rejected motion spends nothing', () => {
+  const s = newGame(names3, { seed: 43 });
+  rig(s, { hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+  s.regroupsRemaining = 2;
+  const handBefore = [...s.players[0].hand];
+
+  callAssembly(s, 0);
+  castVote(s, 1, false);
+  assert.ok(s.assembly, 'every connected citoyen answers before the tally');
+  castVote(s, 2, false);
+
+  assert.equal(s.assembly, null);
+  assert.equal(s.regroupsRemaining, 2, 'a fallen motion costs nothing');
+  assert.equal(s.regroupsUsed, 0);
+  assert.deepEqual(s.players[0].hand, handBefore);
+});
+
+test('the mover is an automatic aye and needs a strict majority of the connected table', () => {
+  // 3 at the table: mover plus one aye carries it (2 of 3).
+  const three = newGame(names3, { seed: 44 });
+  rig(three, { hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+  three.regroupsRemaining = 1;
+  callAssembly(three, 0);
+  castVote(three, 1, true);
+  castVote(three, 2, false);
+  assert.equal(three.regroupsUsed, 1, '2–1 carries');
+
+  // 4 at the table: mover plus one is only 2 of 4, which is not a majority.
+  const four = newGame(names4, { seed: 45 });
+  rig(four, {
+    hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }], [{ r: 5, s: 'C' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  four.regroupsRemaining = 1;
+  callAssembly(four, 0);
+  castVote(four, 1, true);
+  castVote(four, 2, false);
+  castVote(four, 3, false);
+  assert.equal(four.regroupsUsed, 0, '2–2 is a tie and the motion falls');
+});
+
+test('a citoyen who drops mid-vote leaves the floor entirely, and a lost mover dissolves the motion', () => {
+  const s = newGame(names4, { seed: 46 });
+  rig(s, {
+    hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }], [{ r: 5, s: 'C' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  s.regroupsRemaining = 2;
+
+  callAssembly(s, 0, [0, 1, 2, 3]);
+  castVote(s, 1, true);
+  // Seats 2 and 3 drop: the motion must not hang waiting on them. Mover plus one
+  // aye out of a two-seat floor carries.
+  syncAssembly(s, [0, 1]);
+  assert.equal(s.assembly, null);
+  assert.equal(s.regroupsUsed, 1);
+
+  callAssembly(s, 0, [0, 1, 2]);
+  syncAssembly(s, [1, 2]); // the mover themselves drops
+  assert.equal(s.assembly, null, 'the motion dies with its mover');
+  assert.equal(s.regroupsUsed, 1, 'and spends nothing');
 });
 
 test('jester rejected in combos; jester value 0 as discard', () => {
@@ -431,8 +501,9 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
     } else if (s.phase === 'discard') {
       const p = s.players[s.current];
       const totalHand = p.hand.reduce((sum, card) => sum + cardValue(card), 0);
-      if (totalHand < s.pendingDamage && viewFor(s, s.current).you.regroupsRemaining > 0) {
-        regroup(s, s.current);
+      if (totalHand < s.pendingDamage && viewFor(s, s.current).regroupsRemaining > 0) {
+        callAssembly(s, s.current);
+        castVote(s, (s.current + 1) % s.playerCount, true);
         continue;
       }
       const sorted = [...p.hand].sort((a, b) => cardValue(b) - cardValue(a));
@@ -446,6 +517,184 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
   assert.ok(['won', 'lost'].includes(s.phase), 'game terminates');
   const v = viewFor(s, 0);
   assert.ok(!('log' in v), 'the private game journal is not exposed for lookup');
+});
+
+// ---- La Constitution (house rules) -----------------------------------------
+
+test('rules resolve from partial and hostile input, and default to the rulebook', () => {
+  assert.deepEqual(resolveRules(null, 3), {
+    afterKill: 'slayer', regroups: 0, pamphleteers: 2,
+    pamphleteerCompanion: false, exactKillToHand: false, handSizeDelta: 0,
+  });
+  const wild = resolveRules({ afterKill: 'chaos', regroups: 99, pamphleteers: -5, handSizeDelta: 7 }, 2);
+  assert.equal(wild.afterKill, 'slayer', 'an unknown option falls back to the rulebook');
+  assert.equal(wild.regroups, 4);
+  assert.equal(wild.pamphleteers, 0);
+  assert.equal(wild.handSizeDelta, 1);
+  assert.equal(resolveRules({ handSizeDelta: '-1' }, 2).handSizeDelta, -1, 'numeric strings survive the form');
+  // Alone there is no one else to hand the turn to, so both alternatives collapse.
+  assert.equal(resolveRules({ afterKill: 'next' }, 1).afterKill, 'slayer');
+  assert.equal(resolveRules({ afterKill: 'choose' }, 1).afterKill, 'slayer');
+});
+
+test('hand size shifts by one from the per-count default', () => {
+  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: -1 } }).handSize, 5);
+  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: 1 } }).handSize, 7);
+  const s = newGame(names2, { seed: 50, rules: { handSizeDelta: 1 } });
+  for (const p of s.players) assert.equal(p.hand.length, 8, 'opening hands honour the new limit');
+});
+
+test('the Pamphleteer count sets what is shuffled into Le Peuple; at zero immunity never lifts', () => {
+  for (const n of [0, 1, 3, 4]) {
+    const s = newGame(names3, { seed: 51, rules: { pamphleteers: n } });
+    const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
+    assert.equal(all.filter(c => c.r === 'X').length, n, `${n} Pamphleteers in play`);
+  }
+  const none = newGame(names2, { seed: 52, rules: { pamphleteers: 0 } });
+  rig(none, { hands: [[{ r: 6, s: 'S' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'S' } });
+  playCards(none, 0, [{ r: 6, s: 'S' }]);
+  assert.equal(currentShield(none), 0, 'no Pamphleteer can ever shatter a Spade royal’s immunity');
+});
+
+test('after a kill the turn goes where La Constitution says', () => {
+  const kill = rules => {
+    const s = newGame(names3, { seed: 53, rules });
+    rig(s, {
+      hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }]],
+      enemy: { r: 'J', s: 'H' },
+    });
+    s.enemy.damage = 19;
+    playCards(s, 0, [{ r: 2, s: 'C' }]); // 2 clubs doubled = 4 → overkill
+    return s;
+  };
+  const slayer = kill({ afterKill: 'slayer' });
+  assert.equal(slayer.current, 0);
+  assert.equal(slayer.phase, 'play');
+
+  const next = kill({ afterKill: 'next' });
+  assert.equal(next.current, 1, 'the turn passes on');
+  assert.equal(next.phase, 'play');
+
+  const choose = kill({ afterKill: 'choose' });
+  assert.equal(choose.phase, 'jesterChoose');
+  assert.equal(choose.current, 0, 'the slayer holds the choice');
+  chooseNext(choose, 0, 2);
+  assert.equal(choose.current, 2);
+  assert.equal(choose.phase, 'play');
+});
+
+test('exact kill claims the royal for the slayer’s hand, and Rally draws one short to keep its place', () => {
+  const setup = rules => {
+    const s = newGame(names2, { seed: 54, rules });
+    rig(s, { hands: [[{ r: 10, s: 'H' }], []], enemy: { r: 'J', s: 'S' } });
+    s.players[1].hand = Array.from({ length: s.handSize }, (_, i) => ({ r: 2 + i, s: 'C' }));
+    s.tavern = Array.from({ length: 12 }, (_, i) => ({ r: 2 + (i % 9), s: 'D' }));
+    s.enemy.damage = 10; // 10 hearts lands the last 10 exactly
+    return s;
+  };
+
+  const toHand = setup({ exactKillToHand: true });
+  assert.equal(toHand.handSize, 7);
+  playCards(toHand, 0, [{ r: 10, s: 'H' }]);
+  assert.equal(toHand.players[0].hand.length, 7, 'Rally stops at six so the royal fits');
+  assert.deepEqual(toHand.players[0].hand.at(-1), { r: 'J', s: 'S' }, 'the royal joins the hand');
+  assert.ok(!toHand.tavern.some(c => c.r === 'J'), 'and not the deck');
+
+  const toDeck = setup({ exactKillToHand: false });
+  playCards(toDeck, 0, [{ r: 10, s: 'H' }]);
+  assert.equal(toDeck.players[0].hand.length, 7, 'Rally fills the hand as usual');
+  assert.deepEqual(toDeck.tavern.at(-1), { r: 'J', s: 'S' }, 'the royal waits on top of Le Peuple');
+
+  // An overkill is not an exact kill, so no slot is held back either way.
+  const over = setup({ exactKillToHand: true });
+  over.enemy.damage = 11;
+  playCards(over, 0, [{ r: 10, s: 'H' }]);
+  assert.equal(over.players[0].hand.length, 7, 'a full hand from Rally');
+  assert.deepEqual(over.discard.at(-1), { r: 10, s: 'H' });
+  assert.ok(over.discard.some(c => c.r === 'J'), 'the royal is guillotined');
+});
+
+test('the Pamphleteer may take a partner: it attacks through immunity and draws no reprisal', () => {
+  const s = newGame(names3, { seed: 55, rules: { pamphleteerCompanion: true } });
+  rig(s, {
+    hands: [[{ r: 'X', s: null }, { r: 5, s: 'H' }], [{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }]],
+    enemy: { r: 'J', s: 'H' }, // hearts royal: Rally is dead until the Pamphleteer speaks
+  });
+  s.players[1].hand = [{ r: 2, s: 'C' }];
+  s.tavern = Array.from({ length: 10 }, () => ({ r: 4, s: 'D' }));
+  assert.equal(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'H' }]), null);
+
+  playCards(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'H' }]);
+  assert.equal(s.enemy.damage, 5, 'the partner still strikes');
+  assert.equal(s.enemy.immunityCancelled, true);
+  assert.ok(s.players[1].hand.length > 1, 'Rally fires despite the hearts royal — immunity fell first');
+  assert.equal(s.phase, 'jesterChoose', 'no counterattack; the floor is the Pamphleteer’s to give');
+  assert.equal(s.current, 0);
+});
+
+test('a Pamphleteer partner that lands the kill still chooses who faces the newcomer', () => {
+  const s = newGame(names3, { seed: 56, rules: { pamphleteerCompanion: true, afterKill: 'next' } });
+  rig(s, {
+    hands: [[{ r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  s.enemy.damage = 15;
+  playCards(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]);
+  assert.equal(s.phase, 'jesterChoose', 'the Pamphleteer outranks the after-kill rule');
+  assert.equal(s.current, 0);
+  assert.equal(s.enemy.card.r, 'J', 'a fresh royal is already on the table');
+  chooseNext(s, 0, 2);
+  assert.equal(s.current, 2);
+});
+
+test('solo never stops to ask who acts next — there is nobody to choose between', () => {
+  const alone = () => {
+    const s = newGame(['Citoyen'], { seed: 58, rules: { pamphleteerCompanion: true } });
+    rig(s, { hands: [[{ r: 'X', s: null }, { r: 5, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+    s.tavern = Array.from({ length: 12 }, () => ({ r: 4, s: 'D' }));
+    return s;
+  };
+
+  const solo = alone();
+  playCards(solo, 0, [{ r: 'X', s: null }]);
+  assert.equal(solo.phase, 'play', 'the turn simply carries on');
+  assert.equal(solo.current, 0);
+  assert.equal(solo.enemy.immunityCancelled, true, 'immunity still falls');
+
+  const partnered = alone();
+  playCards(partnered, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]);
+  assert.equal(partnered.phase, 'play');
+  assert.equal(partnered.enemy.damage, 10, 'the partner still strikes, doubled by the mob');
+
+  // Nor after a Pamphleteer lands the kill.
+  const killer = alone();
+  killer.enemy.damage = 15;
+  playCards(killer, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]);
+  assert.equal(killer.phase, 'play', 'no choice prompt after a solo kill either');
+  assert.equal(killer.current, 0);
+
+  // And a table of two still gets the choice.
+  const table = newGame(names2, { seed: 58 });
+  rig(table, { hands: [[{ r: 'X', s: null }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+  playCards(table, 0, [{ r: 'X', s: null }]);
+  assert.equal(table.phase, 'jesterChoose');
+});
+
+test('a Pamphleteer partner is refused unless La Constitution allows it', () => {
+  const s = newGame(names2, { seed: 57 });
+  rig(s, { hands: [[{ r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+  assert.match(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]), /works alone/);
+
+  const open = newGame(names2, { seed: 57, rules: { pamphleteerCompanion: true } });
+  rig(open, {
+    hands: [[{ r: 'X', s: null }, { r: 'X', s: null }, { r: 5, s: 'C' }, { r: 6, s: 'C' }], [{ r: 2, s: 'C' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  assert.match(validatePlay(open, 0, [{ r: 'X', s: null }, { r: 'X', s: null }]), /Only one Pamphleteer/);
+  assert.match(
+    validatePlay(open, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }, { r: 6, s: 'C' }]),
+    /only one partner/,
+  );
 });
 
 test('view hides other hands but shows counts', () => {

@@ -6,6 +6,7 @@ import { cardSVG, cardBackSVG } from '/js/cards.js';
 import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
+import { SETTINGS, loadRules, saveRules, summarize, rulebookRuns } from '/js/constitution.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -25,6 +26,7 @@ let endHandled = false;
 let animBusy = false;
 let pendingView = null;
 let lastHandCount = 0;       // "your" hand size as of the last processed view
+let lobbyCount = 2;          // citoyens in the salon, floored at 2 for rule display
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
@@ -123,7 +125,10 @@ function pseudoState(v) {
   if (v.you) players[v.you.index] = { hand: v.you.hand };
   return {
     phase: v.phase, current: v.current, players,
-    enemy: v.enemy ? { card: v.enemy.card, immunityCancelled: v.enemy.immunityCancelled } : null,
+    // validatePlay and previewPlay both read the table's Constitution.
+    rules: v.rules ?? engine.DEFAULT_RULES,
+    assembly: v.assembly ?? null,
+    enemy: v.enemy ? { card: v.enemy.card, damage: v.enemy.damage, immunityCancelled: v.enemy.immunityCancelled } : null,
     discard: { length: v.discardCount },
     tavern: { length: v.tavernCount },
     pendingDamage: v.pendingDamage,
@@ -168,6 +173,7 @@ function sendAction(action, cb) {
       else if (action.type === 'yield') engine.yieldTurn(s, 0);
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
       else if (action.type === 'regroup') engine.regroup(s, 0);
+      else if (action.type === 'assembly') throw new Error('There is no Assemblée to convene alone.');
       else if (action.type === 'chooseNext') engine.chooseNext(s, 0, action.target);
       else if (action.type === 'surrender') engine.surrenderGame(s, 0);
       onView(engine.viewFor(s, 0));
@@ -187,14 +193,96 @@ function myName() {
 }
 $('#name-input').value = load('r1789_name') ?? '';
 
+// ── La Constitution ─────────────────────────────────────────────────────────
+// The same modal serves forming a salon, editing in the lobby, calling a
+// rematch, and starting solo — only the confirm label and callback differ.
+let draftRules = loadRules();
+let constitutionCtx = null;   // { playerCount, onAdopt }
+
+function openConstitution({ sub, confirmLabel, playerCount = 2, onAdopt }) {
+  draftRules = loadRules();
+  constitutionCtx = { playerCount, onAdopt };
+  $('#constitution-sub').textContent = sub;
+  $('#constitution-go').textContent = confirmLabel;
+  renderConstitution();
+  $('#constitution').hidden = false;
+}
+function closeConstitution() { $('#constitution').hidden = true; constitutionCtx = null; }
+
+function renderConstitution() {
+  const seats = constitutionCtx?.playerCount ?? 2;
+  const solo = seats === 1;
+  $('#constitution-rules').innerHTML = SETTINGS
+    .filter(s => !(solo && s.hideForSolo))
+    .map(s => `
+      <div class="rule-row">
+        <span class="rule-label">${esc(s.label)}</span>
+        <div class="rule-options" data-key="${s.key}">
+          ${s.options.map((o, i) => `
+            <button type="button" class="rule-opt${draftRules[s.key] === o.value ? ' on' : ''}" data-idx="${i}">
+              ${esc(o.label)}${o.note ? `<span class="rule-note">${esc(o.note)}</span>` : ''}
+            </button>`).join('')}
+        </div>
+        ${rulebookLine(s.key, seats)}
+        <p class="rule-hint">${esc(s.hint)}</p>
+      </div>`).join('');
+}
+
+// What "Rulebook" comes to at each table size, with this table's own size
+// picked out — the host is usually choosing before anyone has joined.
+function rulebookLine(key, seats) {
+  const runs = rulebookRuns(key);
+  if (!runs) return '';
+  const chips = runs.map(r => {
+    const sizes = r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
+    const yours = seats >= r.from && seats <= r.to;
+    return `<span class="rule-book-run${yours ? ' yours' : ''}">${sizes} <i>→</i> ${r.value}</span>`;
+  }).join('');
+  return `<p class="rule-book"><span class="rule-book-label">Rulebook by table size</span>${chips}</p>`;
+}
+
+$('#constitution-rules').onclick = e => {
+  const btn = e.target.closest('.rule-opt');
+  if (!btn) return;
+  const key = btn.parentElement.dataset.key;
+  const setting = SETTINGS.find(s => s.key === key);
+  draftRules = { ...draftRules, [key]: setting.options[Number(btn.dataset.idx)].value };
+  audio.sfx('select');
+  renderConstitution();
+};
+$('#constitution-reset').onclick = () => {
+  draftRules = { ...engine.DEFAULT_RULES };
+  renderConstitution();
+};
+$('#constitution-cancel').onclick = closeConstitution;
+$('#constitution-go').onclick = () => {
+  const ctx = constitutionCtx;
+  const rules = draftRules;
+  saveRules(rules);
+  closeConstitution();
+  ctx?.onAdopt(rules);
+};
+
+function renderRuleBadges(el, rules, playerCount) {
+  el.innerHTML = summarize(rules, playerCount)
+    .map(r => `<span class="rule-badge${r.standard ? '' : ' house'}">
+        <span class="rule-badge-label">${esc(r.label)}</span>${esc(r.value)}</span>`).join('');
+}
+
 $('#btn-create').onclick = () => {
   homeError('');
-  net().emit('create', { name: myName() }, res => {
-    if (!res.ok) return homeError(res.error);
-    session = { code: res.code, token: res.token, name: myName() };
-    saveSession(session);
-    myIndex = 0;
-    show('lobby');
+  openConstitution({
+    sub: 'The rules this salon adopts. You may revise them until the Revolution begins.',
+    confirmLabel: 'Form the Salon',
+    onAdopt: rules => {
+      net().emit('create', { name: myName(), rules }, res => {
+        if (!res.ok) return homeError(res.error);
+        session = { code: res.code, token: res.token, name: myName() };
+        saveSession(session);
+        myIndex = 0;
+        show('lobby');
+      });
+    },
   });
 };
 $('#btn-join').onclick = () => {
@@ -210,10 +298,18 @@ $('#btn-join').onclick = () => {
   });
 };
 $('#btn-solo').onclick = () => {
-  mode = 'solo';
-  soloState = engine.newGame([myName()]);
-  lastAnimSeq = 0; endHandled = false; handOrder = [];
-  onView(engine.viewFor(soloState, 0));
+  homeError('');
+  openConstitution({
+    sub: 'The rules you fight under, citoyen.',
+    confirmLabel: 'Défendre Seul',
+    playerCount: 1,
+    onAdopt: rules => {
+      mode = 'solo';
+      soloState = engine.newGame([myName()], { rules });
+      lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
+      onView(engine.viewFor(soloState, 0));
+    },
+  });
 };
 $('#btn-rules').onclick = () => openHelp({ solo: true, phase: null });
 
@@ -230,8 +326,22 @@ function renderLobby(lv) {
     ? 'Waiting for citoyens… (2–4 to begin)'
     : `${n} citoyens assembled.` + (lv.youAreHost ? '' : ' Waiting for the host to begin…');
   $('#btn-start').hidden = !(lv.youAreHost && n >= 2);
+  $('#btn-edit-rules').hidden = !lv.youAreHost;
+  // A salon is never a solo table, however few have arrived so far — showing it
+  // as one would hide the after-kill rule and quote solo's hand size.
+  lobbyCount = Math.max(2, n);
+  renderRuleBadges($('#lobby-rules'), lv.rules, lobbyCount);
   myIndex = lv.yourIndex ?? myIndex;
 }
+
+$('#btn-edit-rules').onclick = () => openConstitution({
+  sub: 'Revise the rules. Every citoyen in the salon sees them.',
+  confirmLabel: 'Adopt',
+  playerCount: lobbyCount,
+  onAdopt: rules => net().emit('rules', { rules }, res => {
+    if (!res.ok) { $('#lobby-error').textContent = res.error; $('#lobby-error').hidden = false; }
+  }),
+});
 $('#btn-start').onclick = () => net().emit('start', {}, res => {
   if (!res.ok) { $('#lobby-error').textContent = res.error; $('#lobby-error').hidden = false; }
 });
@@ -263,12 +373,12 @@ function routeView(v) {
         // yet) so the killing combo can make the same hand-to-enemy trip a
         // survived hit gets, before a killing Heart/Diamond resolves and the
         // victory cutscene plays.
-        withAnim(done => animateKillingBlow(v, () => {
+        withAnim(done => animateKillingBlow(v, prevHandCount, () => {
           renderGame(v);
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(v.lastEvent, () => {
               audio.sfx('guillotine');
-              showGuillotine(v.lastEvent.card, v.lastEvent.exact, done);
+              showGuillotine(v.lastEvent.card, v.lastEvent.exact, wonOverTo(v, v.lastEvent), done);
             });
           });
         }), () => playCutscene('victory', () => renderEnd(v)));
@@ -312,12 +422,12 @@ function routeView(v) {
         // Board stays on the about-to-fall royal until the killing combo has
         // made its trip; only then does the new enemy actually swap in,
         // right before the guillotine covers the screen anyway.
-        withAnim(done => animateKillingBlow(v, () => {
+        withAnim(done => animateKillingBlow(v, prevHandCount, () => {
           renderGame(v);
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(ev, () => {
               audio.sfx('guillotine');
-              showGuillotine(ev.card, ev.exact, () => {
+              showGuillotine(ev.card, ev.exact, wonOverTo(v, ev), () => {
                 audio.sfx('enemy');
                 showEntrance(v.enemy, done);
               });
@@ -475,6 +585,15 @@ function animatePlay(v, done) {
 // the fallen royal's own card (from the event) for the bars. The caller
 // renders the real new state once this settles, right before the guillotine
 // takes over the screen anyway.
+// Whose hand an exact-kill royal joined, phrased as a possessive for the
+// guillotine caption — or null when it went to the top of Le Peuple.
+function wonOverTo(v, ev) {
+  if (!ev?.toHand) return null;
+  const slayer = v.lastPlay?.playerIdx;
+  if (slayer == null || v.solo || slayer === v.you?.index) return 'your';
+  return `${v.players[slayer]?.name ?? 'the slayer'}'s`;
+}
+
 function setEnemyBarsForCard(card, hp, atk) {
   const stats = engine.ENEMY_STATS[card.r];
   const hpRatio = hp / stats.health;
@@ -488,12 +607,22 @@ function setEnemyBarsForCard(card, hp, atk) {
   $('#strike-text').textContent = `${atk} / ${stats.attack}`;
 }
 
-function animateKillingBlow(v, done) {
+function animateKillingBlow(v, prevHandCount, done) {
   const lp = v.lastPlay;
   const ev = v.lastEvent;
   if (!lp) { done(); return; } // safety net — never hang the sequence
   const isYou = v.you && lp.playerIdx === v.you.index;
   const origin = isYou ? findPlayedCardsOrigin(lp.cards) : null;
+
+  // The board deliberately stays on the fallen royal until the combo lands, but
+  // the HAND must not: it still holds the cards now flying out of it, and would
+  // show each played card twice for the whole trip. Re-render it alone, once the
+  // origin has been measured from the old positions — holding back this action's
+  // new arrivals (a Rally draw, or a royal won over to the hand) exactly as
+  // animateEffects does, so nothing lands before its own animation delivers it.
+  const removed = isYou ? lp.cards.length : 0;
+  const arrivals = v.you ? Math.max(0, v.you.hand.length - (prevHandCount - removed)) : 0;
+  renderHand(v, arrivals);
 
   setEnemyBarsForCard(ev.card, lp.healthBefore, lp.attackBefore);
 
@@ -729,7 +858,7 @@ function renderHand(v, holdBack = 0) {
   hand.forEach((card, i) => {
     const el = document.createElement('div');
     el.className = 'hand-card';
-    el.innerHTML = cardSVG(card);
+    el.innerHTML = cardSVG(card, { solo: !!v.solo });
     el.dataset.card = engine.cardId(card); // lets the play animation find this card's on-screen origin
     if (card.s && card.s === immuneSuit) {
       el.classList.add('power-off');
@@ -828,12 +957,46 @@ function renderActions(v) {
     yield_.hidden = true;
   }
 
-  const regroupsRemaining = v.you?.regroupsRemaining ?? 0;
-  regroup.hidden = !(regroupsRemaining > 0 && myTurn && (v.phase === 'play' || v.phase === 'discard'));
-  regroup.textContent = `Regroup (${regroupsRemaining})`;
+  // Alone you simply spend a Regroup; at a table you must move for one and let
+  // l'Assemblée decide.
+  const left = v.regroupsRemaining ?? 0;
+  regroup.hidden = !v.canRegroup || !myTurn;
+  regroup.textContent = v.solo ? `Regroup (${left})` : `l'Assemblée (${left})`;
+  regroup.title = v.solo ? 'Discard your hand and draw a fresh one' : 'Move for a Regroup — the table votes';
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
+  renderAssembly(v);
 }
+
+// ── l'Assemblée ─────────────────────────────────────────────────────────────
+function renderAssembly(v) {
+  const a = v.assembly;
+  $('#assembly').hidden = !a;
+  if (!a) return;
+  const mover = v.players[a.caller]?.name ?? 'A citoyen';
+  $('#assembly-motion').innerHTML =
+    `<strong>${esc(mover)}</strong> moves to Regroup — to discard their hand and draw afresh.
+     ${v.regroupsRemaining} remain${v.regroupsRemaining === 1 ? 's' : ''} in the pool.`;
+  $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
+    const answered = i === a.caller ? true : a.votes[i] !== undefined;
+    const aye = i === a.caller ? true : a.votes[i];
+    const mark = !answered ? '<span class="vote-pending">…</span>'
+      : `<span class="vote-${aye ? 'aye' : 'nay'}">${aye ? 'Pour' : 'Contre'}</span>`;
+    return `<li><span>${esc(v.players[i]?.name ?? '—')}${i === a.caller ? ' <span class="tag">· mover</span>' : ''}</span>${mark}</li>`;
+  }).join('');
+  $('#assembly-actions').hidden = !a.youMayVote;
+  $('#assembly-wait').hidden = !!a.youMayVote;
+  $('#assembly-wait').textContent = v.you?.index === a.caller
+    ? 'Your motion is before the floor…'
+    : 'The floor is still debating…';
+}
+
+const castVote = aye => {
+  audio.sfx('select');
+  sendAction({ type: 'vote', aye }, flashError);
+};
+$('#assembly-aye').onclick = () => castVote(true);
+$('#assembly-nay').onclick = () => castVote(false);
 
 function flashError(res) {
   if (res?.ok === false) {
@@ -855,7 +1018,12 @@ $('#btn-confirm').onclick = () => {
   sendAction({ type, cards }, res => { if (!res.ok) { staged = cards; renderGame(view); flashError(res); } });
 };
 $('#btn-yield').onclick = () => { audio.sfx('yield'); staged = []; sendAction({ type: 'yield' }, flashError); };
-$('#btn-regroup').onclick = () => { audio.sfx('shuffle'); staged = []; sendAction({ type: 'regroup' }, flashError); };
+$('#btn-regroup').onclick = () => {
+  staged = [];
+  if (view?.solo) { audio.sfx('shuffle'); sendAction({ type: 'regroup' }, flashError); return; }
+  audio.sfx('select');
+  sendAction({ type: 'assembly' }, flashError);
+};
 
 // ── cutscenes (game-start and victory) ────────────────────────────────────
 const CUTSCENE_FADE_MS = 500;
@@ -896,21 +1064,31 @@ function renderEnd(v) {
     ? `<img class="end-banner" src="/img/specials/victory-banner.png" alt="Citoyens triumphant on the barricade">`
     : '⚰️';
   $('#end-title').textContent = won ? EXCLAIM.win : EXCLAIM.lose;
-  let detail = '';
-  if (won && v.solo) detail = `A ${v.result?.medal ?? 'Bronze'} victory — ${v.soloJestersUsed} Regroup${v.soloJestersUsed === 1 ? '' : 's'} used.`;
-  else if (won) detail = 'The twelve royals have fallen. The Republic is born.';
-  else detail = v.result?.reason ?? '';
-  $('#end-detail').textContent = detail;
+  $('#end-detail').textContent = won
+    ? 'The twelve royals have fallen. The Republic is born.'
+    : (v.result?.reason ?? '');
+  // A rematch carries a fresh Constitution, so only the host may call one.
+  const mayRematch = v.solo || v.youAreHost;
+  $('#btn-rematch').hidden = !mayRematch;
   $('#btn-rematch').textContent = 'Once More to the Barricades';
+  $('#end-wait').hidden = mayRematch;
 }
 $('#btn-rematch').onclick = () => {
-  if (mode === 'solo') {
-    soloState = engine.newGame([myName()]);
-    lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
-    onView(engine.viewFor(soloState, 0));
-  } else {
-    net().emit('rematch', {}, flashError);
-  }
+  const solo = mode === 'solo';
+  openConstitution({
+    sub: solo ? 'The rules you fight under, citoyen.' : 'The rules for the next game.',
+    confirmLabel: 'To the Barricades',
+    playerCount: solo ? 1 : (view?.playerCount ?? 2),
+    onAdopt: rules => {
+      if (solo) {
+        soloState = engine.newGame([myName()], { rules });
+        lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
+        onView(engine.viewFor(soloState, 0));
+      } else {
+        net().emit('rematch', { rules }, flashError);
+      }
+    },
+  });
 };
 function exitToHome(forgetSession = false) {
   if (mode === 'mp' && forgetSession) { saveSession(null); session = null; }
@@ -1272,7 +1450,7 @@ document.addEventListener('keydown', e => {
 const debugParams = new URLSearchParams(location.search);
 if (debugParams.has('win')) {
   mode = 'solo';
-  const debugView = { phase: 'won', solo: true, result: { medal: 'Gold' }, soloJestersUsed: 1 };
+  const debugView = { phase: 'won', solo: true, result: null };
   view = debugView;
   playCutscene('victory', () => renderEnd(debugView));
 } else if (debugParams.has('begin')) {

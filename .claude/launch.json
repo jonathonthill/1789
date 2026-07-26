@@ -5,7 +5,8 @@
       "name": "regicide-1789",
       "runtimeExecutable": "node",
       "runtimeArgs": ["server/index.js"],
-      "port": 3789
+      "port": 3789,
+      "autoPort": true
     }
   ]
 }

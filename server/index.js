@@ -37,6 +37,7 @@ function makeRoom(hostName) {
     status: 'lobby', // lobby | playing | ended
     players: [],     // { token, name, socketId|null }
     state: null,
+    rules: { ...engine.DEFAULT_RULES }, // La Constitution, as set by the host
     lastActivity: Date.now(),
   };
   rooms.set(code, room);
@@ -66,8 +67,17 @@ function lobbyView(room) {
   return {
     code: room.code,
     status: room.status,
+    rules: room.rules,
+    // What those rules actually mean for the table as it currently stands, so
+    // joiners see real numbers rather than "rulebook".
+    resolvedRules: engine.resolveRules(room.rules, Math.max(1, room.players.length)),
     players: room.players.map((p, i) => ({ name: p.name, connected: !!p.socketId, host: i === 0 })),
   };
+}
+
+// Seats currently holding a live socket — l'Assemblée counts only these.
+function connectedSeats(room) {
+  return room.players.map((p, i) => (p.socketId ? i : -1)).filter(i => i >= 0);
 }
 
 function broadcastLobby(room) {
@@ -84,8 +94,20 @@ function broadcastState(room) {
     view.connections = room.players.map(q => !!q.socketId);
     view.roomCode = room.code;
     view.status = room.status;
+    view.youAreHost = i === 0;
     io.to(p.socketId).emit('state', view);
   }
+}
+
+// A seat changing hands can settle an open motion — a dropped voter leaves the
+// floor, and the remaining tally may already carry. That can even end the game,
+// so the room status has to follow.
+function syncAndBroadcast(room) {
+  if (room.status === 'playing' && room.state) {
+    engine.syncAssembly(room.state, connectedSeats(room));
+    if (room.state.phase === 'won' || room.state.phase === 'lost') room.status = 'ended';
+  }
+  broadcastState(room);
 }
 
 io.on('connection', socket => {
@@ -107,9 +129,10 @@ io.on('connection', socket => {
     room.players[idx].socketId = socket.id;
   };
 
-  socket.on('create', ({ name }, cb) => {
+  socket.on('create', ({ name, rules }, cb) => {
     try {
       const room = makeRoom(name);
+      if (rules) room.rules = { ...engine.DEFAULT_RULES, ...rules };
       bind(room, room.players[0].token);
       cb({ ok: true, code: room.code, token: room.players[0].token, playerIndex: 0 });
       broadcastLobby(room);
@@ -138,7 +161,18 @@ io.on('connection', socket => {
     bind(room, token);
     cb({ ok: true, code: room.code, playerIndex: idx, name: room.players[idx].name, status: room.status });
     if (room.status === 'lobby') broadcastLobby(room);
-    else { broadcastState(room); }
+    else { syncAndBroadcast(room); }
+  });
+
+  // The host may revise La Constitution right up until the Revolution begins.
+  socket.on('rules', ({ rules }, cb) => {
+    const room = myRoom;
+    if (!room || playerIndex(room, myToken) !== 0) return cb?.({ ok: false, error: 'Only the host may set the rules.' });
+    if (room.status === 'playing') return cb?.({ ok: false, error: 'The rules are set for this game.' });
+    touch(room);
+    room.rules = { ...engine.DEFAULT_RULES, ...(rules ?? {}) };
+    cb?.({ ok: true });
+    broadcastLobby(room);
   });
 
   socket.on('start', (_, cb) => {
@@ -147,7 +181,7 @@ io.on('connection', socket => {
     if (room.status !== 'lobby') return cb?.({ ok: false, error: 'Already begun.' });
     if (room.players.length < 2) return cb?.({ ok: false, error: 'At least 2 citoyens needed. For solo, use Solo mode.' });
     touch(room);
-    room.state = engine.newGame(room.players.map(p => p.name));
+    room.state = engine.newGame(room.players.map(p => p.name), { rules: room.rules });
     room.status = 'playing';
     cb?.({ ok: true });
     broadcastState(room);
@@ -165,7 +199,8 @@ io.on('connection', socket => {
         case 'play': engine.playCards(s, idx, msg.cards ?? []); break;
         case 'yield': engine.yieldTurn(s, idx); break;
         case 'discard': engine.discardForDamage(s, idx, msg.cards ?? []); break;
-        case 'regroup': engine.regroup(s, idx); break;
+        case 'assembly': engine.callAssembly(s, idx, connectedSeats(room)); break;
+        case 'vote': engine.castVote(s, idx, !!msg.aye); break;
         case 'chooseNext': engine.chooseNext(s, idx, msg.target); break;
         case 'surrender': engine.surrenderGame(s, idx); break;
         default: return cb?.({ ok: false, error: 'Unknown action.' });
@@ -178,11 +213,14 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('rematch', (_, cb) => {
+  // Host-only, because a rematch carries a fresh Constitution with it.
+  socket.on('rematch', ({ rules } = {}, cb) => {
     const room = myRoom;
     if (!room || room.status !== 'ended') return cb?.({ ok: false, error: 'Nothing to rematch.' });
+    if (playerIndex(room, myToken) !== 0) return cb?.({ ok: false, error: 'Only the host may call the next game.' });
     touch(room);
-    room.state = engine.newGame(room.players.map(p => p.name));
+    if (rules) room.rules = { ...engine.DEFAULT_RULES, ...rules };
+    room.state = engine.newGame(room.players.map(p => p.name), { rules: room.rules });
     room.status = 'playing';
     cb?.({ ok: true });
     broadcastState(room);
@@ -209,7 +247,7 @@ io.on('connection', socket => {
         }
         broadcastLobby(room);
       } else {
-        broadcastState(room); // shows the paused/disconnected banner
+        syncAndBroadcast(room); // shows the paused/disconnected banner
       }
     }
   });

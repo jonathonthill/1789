@@ -47,7 +47,7 @@ fly deploy
 
 | Path | What it is |
 |---|---|
-| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, enemy immunity + Pamphleteer cancellation, 2–4 card same-number combos capped at 20, Sans-Culotte pairing, dynamic spade barricades, yield restrictions, exact-kill conversion, captured royals at 10/15/20, solo medals, and personal two-player Regroups. |
+| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, enemy immunity + Pamphleteer cancellation, 2–4 card same-number combos capped at 20, Sans-Culotte pairing, dynamic spade barricades, yield restrictions, exact-kill conversion, captured royals at 10/15/20, a Regroup pool shared by the table, and the house rules of La Constitution. |
 | `shared/theme.js` | The French Revolution naming: 12 historical enemies with 3 threat lines each, suit power names, terminology. |
 | `server/index.js` | Express + Socket.IO. Salon codes, host-led lobby with 30s disconnect grace, per-player secret views, token-based seamless rejoin, rematch, 2h idle room expiry. |
 | `public/` | Vanilla JS frontend. SVG-drawn cards, entrance animations with typewriter threats, guillotine defeats, stage-then-confirm play, contextual help (status strip, long-press explainers, phase-aware rules panel, first-game coach marks). |

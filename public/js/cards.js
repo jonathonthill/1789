@@ -8,6 +8,36 @@ const GOLD = '#b08d2c', GOLD_HI = '#d9bc63', BLUE = '#1b2a5e', BLUE_DEEP = '#101
 const CRIMSON_DEEP = '#741526';
 const SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣' };
 const SERIF = `'Cinzel', Georgia, serif`;
+// Width of the paper outline behind a royal's corner index, in card units. The
+// rank and the pip both read this, so they can never drift apart.
+const ROYAL_HALO = 3;
+
+// Card pips are DRAWN, never typed. Cinzel carries no ♠♥♦♣, so a text glyph
+// falls through per-character to whatever symbol font the system happens to
+// have — and those disagree wildly on how big a suit sits at a given font
+// size, which is why the pip came out smaller than its rank on some browsers.
+// Paths are identical everywhere. Each is drawn in a 100×100 box.
+const SUIT_PATH = {
+  S: 'M50 4C50 4 4 38 4 62c0 14 10 22 22 22 8 0 15-4 19-10-1 10-6 18-15 22h40c-9-4-14-12-15-22 4 6 11 10 19 10 12 0 22-8 22-22C96 38 50 4 50 4Z',
+  H: 'M50 96S4 62 4 32C4 14 18 4 32 4c9 0 15 5 18 11 3-6 9-11 18-11 14 0 28 10 28 28 0 30-46 64-46 64Z',
+  D: 'M50 2 92 50 50 98 8 50Z',
+  C: 'M50 4c-12 0-22 10-22 22 0 5 2 9 5 13-4-3-8-5-12-5C10 34 1 44 1 55s9 21 20 21c10 0 18-7 21-16 0 12-3 27-12 36h40c-9-9-12-24-12-36 3 9 11 16 21 16 11 0 20-10 20-21s-9-21-20-21c-4 0-8 2-12 5 3-4 5-8 5-13 0-12-10-22-22-22Z',
+};
+
+// A suit pip centred on (cx, cy), `size` units across. Inherits fill from its
+// group, exactly as the text glyph it replaces did.
+//
+// `halo` is the outline width the pip should END UP with, in card units — pass
+// the same value the sibling rank text uses and the two match. It has to be
+// divided back out here because the scale() that sizes the pip scales its
+// stroke too, which would otherwise draw the outline at a fraction of the
+// rank's (0.27× on royals).
+function suitPip(suit, cx, cy, size, { halo = 0, cls = 'corner-suit' } = {}) {
+  const k = size / 100;
+  const stroke = halo ? ` stroke-width="${(halo / k).toFixed(2)}"` : '';
+  return `<path class="${cls}" d="${SUIT_PATH[suit]}"${stroke} `
+    + `transform="translate(${(cx - size / 2).toFixed(2)} ${(cy - size / 2).toFixed(2)}) scale(${k.toFixed(4)})"/>`;
+}
 
 export function suitColor(s) { return (s === 'H' || s === 'D') ? RED : INK; }
 export function rankLabel(r) { return r === 'X' ? '0' : String(r); }
@@ -59,7 +89,10 @@ export function cardBackSVG() {
 // ── corners ─────────────────────────────────────────────────────────────────
 function corners(card) {
   const col = card.s ? suitColor(card.s) : INK;
-  const glyph = card.s ? SUIT_GLYPH[card.s] : '🪶';
+  // Suitless cards keep the typed feather — there is no pip to draw for it.
+  const pip = card.s
+    ? suitPip(card.s, 34, 76, 34)
+    : `<text class="corner-suit" x="34" y="88" font-size="34">🪶</text>`;
   const label = rankLabel(card.r);
   // One size for every rank so numbers never shift vertically; the two-glyph
   // '10' keeps that height and is condensed horizontally to fit the corner.
@@ -71,7 +104,7 @@ function corners(card) {
   return `
     <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
       ${rank}
-      <text class="corner-suit" x="34" y="88" font-size="34">${glyph}</text>
+      ${pip}
     </g>
     <line class="corner-suit-slash" x1="18" y1="91" x2="50" y2="61" stroke="${slash}" stroke-width="5.5" stroke-linecap="round"/>`;
 }
@@ -135,13 +168,13 @@ function royalCorners(card) {
   const slash = (card.s === 'H' || card.s === 'D') ? INK : RED;
   return `
     <g font-family="${SERIF}" font-weight="700" text-anchor="middle">
-      <g stroke="${FACE}" stroke-width="3.5" stroke-linejoin="round" fill="${FACE}">
+      <g stroke="${FACE}" stroke-width="${ROYAL_HALO}" stroke-linejoin="round" fill="${FACE}">
         <text x="36" y="54" font-size="36">${card.r}</text>
-        <text class="corner-suit" x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
+        ${suitPip(card.s, 36, 77, 27, { halo: ROYAL_HALO })}
       </g>
       <g fill="${col}">
         <text x="36" y="54" font-size="36">${card.r}</text>
-        <text class="corner-suit" x="36" y="86" font-size="27">${SUIT_GLYPH[card.s]}</text>
+        ${suitPip(card.s, 36, 77, 27)}
       </g>
       <line class="corner-suit-slash" x1="23" y1="89" x2="49" y2="65" stroke="${slash}" stroke-width="4.5" stroke-linecap="round"/>
     </g>`;
@@ -169,7 +202,9 @@ function companionArt() {
     ${powerBox('CALL LES RENFORTS!', 'ADD 1 ATTACK', {
       fill: RED, stroke: GOLD, titleFill: '#fbf3dc', actionFill: '#fbf3dc', actionOpacity: '.85', titleSize: 16 })}`;
 }
-function pamphleteerArt() {
+// Alone there is nobody to hand the floor to, so the card promises what it
+// actually delivers in that game: a strike the royal cannot answer.
+function pamphleteerArt({ solo = false } = {}) {
   return `
     <image href="/img/specials/pamphleteer.png" x="60" y="58" width="120" height="149"/>
     <rect x="17" y="239" width="206" height="80" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
@@ -178,7 +213,7 @@ function pamphleteerArt() {
     <text x="120" y="287" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
       font-family="${SERIF}" font-weight="700" letter-spacing=".3">SHATTERS IMMUNITY</text>
     <text x="120" y="306" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".3">CHOOSE WHO'S NEXT</text>`;
+      font-family="${SERIF}" font-weight="700" letter-spacing=".3">${solo ? 'NO REPRISAL' : "CHOOSE WHO'S NEXT"}</text>`;
 }
 
 export function cardSVG(card, opts = {}) {
@@ -190,7 +225,7 @@ export function cardSVG(card, opts = {}) {
   } else if (card.r === 'A') {
     center = companionArt(); cornerLayer = corners(card);
   } else if (card.r === 'X') {
-    center = pamphleteerArt(); cornerLayer = pamphleteerCorners();
+    center = pamphleteerArt(opts); cornerLayer = pamphleteerCorners();
   } else {
     center = numberArt(card); cornerLayer = corners(card);
   }

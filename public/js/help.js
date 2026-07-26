@@ -3,6 +3,7 @@
 import { SUIT_META, TERMS, enemyMeta, suitPowerLine } from '/shared/theme.js';
 import { cardSVG, cardBackSVG, miniLabel } from '/js/cards.js';
 import { cardValue, previewPlay } from '/shared/engine.js';
+import { summarize } from '/js/constitution.js';
 
 const RANKS = { J: 'Officer', Q: 'Queen', K: 'King' };
 
@@ -216,17 +217,39 @@ export function projectionText(view, staged, pseudoState) {
   }
   if (view.phase !== 'play' || view.current !== view.you.index || staged.length === 0) return '';
   const p = previewPlay(pseudoState, staged);
-  if (p.isJester) return `The Pamphleteer strikes — immunity shattered, you choose who goes next.`;
-  const bits = [`⚔️ <b>${p.damage}</b> damage${p.doubled ? ' (mob ×2!)' : ''}`];
+  if (p.isJester && staged.length === 1) return `The Pamphleteer strikes — immunity shattered, you choose who goes next.`;
+  const bits = [];
+  if (p.isJester) bits.push('📜 immunity shattered');
+  bits.push(`⚔️ <b>${p.damage}</b> damage${p.doubled ? ' (mob ×2!)' : ''}`);
   if (p.heals) bits.push(`♦ ${p.heals} freed from La Prison`);
   if (p.draws) bits.push(`♥ ${p.draws} recruited`);
   if (p.shieldAdd) bits.push(`♠ +${p.shieldAdd} barricade`);
   if (p.immuneSuits.length) bits.push(`<span class="warn">⚠ ${p.immuneSuits.map(s => SUIT_META[s].symbol + ' immune').join(', ')}</span>`);
   const e = view.enemy;
   const remaining = e.health - e.damage - p.damage;
-  if (remaining === 0) bits.push(`<b>exact — won over to the Revolution!</b>`);
-  else if (remaining < 0) bits.push(`<b>the guillotine awaits</b>`);
+  if (remaining === 0) {
+    bits.push(p.toHand
+      ? `<b>exact — the royal joins your hand!</b>`
+      : `<b>exact — won over to the Revolution!</b>`);
+  } else if (remaining < 0) bits.push(`<b>the guillotine awaits</b>`);
+  else if (p.isJester) bits.push('no reprisal — you choose who goes next');
   return bits.join(' · ');
+}
+
+// The rules in force at THIS table, so nobody has to remember what the host
+// adopted. Anything shifted from the rulebook is called out as a house rule.
+function constitutionSection(view) {
+  if (!view?.rules) return '';
+  const rows = summarize(view.rules, view.playerCount);
+  const house = rows.filter(r => !r.standard).length;
+  return `
+    <h3>La Constitution</h3>
+    <p class="help-rule-note">${house
+      ? `This table plays under <b>${house} house rule${house === 1 ? '' : 's'}</b>, marked below.`
+      : 'This table plays the rulebook exactly.'}</p>
+    <div class="rule-badges help-rule-badges">${rows.map(r =>
+      `<span class="rule-badge${r.standard ? '' : ' house'}"><span class="rule-badge-label">${r.label}</span>${r.value}</span>`
+    ).join('')}</div>`;
 }
 
 // ── the full help panel, opened to the relevant section ────────────────────
@@ -248,6 +271,7 @@ export function helpHTML(view) {
       </div>
       <p><b>One Revolution, twelve royals.</b> Defeat 4 Officers of the Crown, then 4 Queens, then 4 Kings. If one citoyen falls, everyone loses.</p>
     </div>
+${constitutionSection(view)}
 
     <h3 class="${here('turn')}">Your Turn</h3>
     <div class="help-turn-flow">
@@ -324,11 +348,10 @@ function walkCard(card, label, className = '') {
 }
 
 export function walkthroughSteps(view) {
+  const left = view?.regroupsRemaining ?? 0;
   const regroupCopy = view?.solo
-    ? 'In solo play you hold 8 cards and may Regroup twice. Your medal records whether you used 0 (Gold), 1 (Silver), or 2 (Bronze).'
-    : view?.playerCount === 2
-      ? 'In a two-citizen game, each player may Regroup once on their own turn or while suffering damage.'
-      : 'Solo players may Regroup twice; in a two-citizen game, each player may Regroup once. Regroup is unavailable with 3–4 citizens.';
+    ? `A Regroup discards your hand and draws a fresh one. You have ${left} left; La Constitution sets how many the game begins with.`
+    : `The table shares a pool of Regroups — ${left} left. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Pour, and a majority of the table carries it.`;
 
   return [
     {

@@ -93,9 +93,19 @@ function ensureContext() {
 // re-resuming it, every later scene/effect call would silently no-op forever.
 // Any subsequent user interaction nudges it back instead.
 function tryResume() {
-  if (ctx && !muted && ctx.state !== 'running') {
+  if (muted) return;
+  // The one-shot first-gesture unlock can be spent before a context exists at
+  // all (an early tap that raced the module, or one thrown away by a failed
+  // resume) — in that case there is nothing left to re-arm it but this.
+  if (!ctx) { unlock(); return; }
+  if (ctx.state !== 'running') {
     ctx.resume().then(startMusic).catch(() => {});
+    return;
   }
+  // Running, yet possibly silent: an earlier startMusic may have bailed because
+  // the score or the scene had not arrived yet, and nothing else retries it.
+  // startMusic guards its own epoch and scheduler, so this is cheap to repeat.
+  startMusic();
 }
 export function nudge() { tryResume(); }
 
@@ -123,6 +133,8 @@ async function loadMidi() {
       .then(score => {
         if (!score.notes.length) throw new Error('MIDI contains no playable notes');
         midiScore = score;
+        // A scene may already be waiting on a score that had not loaded yet.
+        startMusic();
         return score;
       })
       .catch(err => {

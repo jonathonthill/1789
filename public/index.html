@@ -31,7 +31,7 @@
         <input id="code-input" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters">
         <button id="btn-join" class="btn">Join</button>
       </div>
-      <button id="btn-solo" class="btn">Solo — Défendre Seul <small>1 player, medal victories</small></button>
+      <button id="btn-solo" class="btn">Solo — Défendre Seul <small>1 player against the twelve</small></button>
       <button id="btn-rules" class="btn ghost">How to Play</button>
     </div>
     <p id="home-error" class="error" hidden></p>
@@ -46,6 +46,13 @@
     <p class="lobby-hint">Fellow citoyens join with this code:</p>
     <div id="lobby-code" class="big-code">····</div>
     <ul id="lobby-players" class="lobby-players"></ul>
+    <div class="lobby-constitution">
+      <div class="lobby-constitution-head">
+        <span>La Constitution</span>
+        <button id="btn-edit-rules" class="btn tiny ghost" type="button" hidden>Edit</button>
+      </div>
+      <div id="lobby-rules" class="rule-badges"></div>
+    </div>
     <p id="lobby-status" class="lobby-status">Waiting for citoyens… (2–4 to begin)</p>
     <button id="btn-start" class="btn primary" hidden>Begin the Revolution</button>
     <button id="btn-leave" class="btn ghost">Leave</button>
@@ -168,6 +175,7 @@
     <h2 id="end-title"></h2>
     <p id="end-detail"></p>
     <button id="btn-rematch" class="btn primary">Once More to the Barricades</button>
+    <p id="end-wait" class="lobby-status" hidden>Waiting for the host to call the next game…</p>
     <button id="btn-home" class="btn ghost">Back to the Streets</button>
   </div>
 </section>
@@ -198,6 +206,32 @@
   <div class="sheet-panel" role="dialog" aria-modal="true">
     <div id="sheet-grip" class="sheet-grip" role="button" tabindex="0" aria-label="Drag down or tap to close"></div>
     <div id="sheet-content"></div>
+  </div>
+</div>
+
+<div id="constitution" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="constitution-title">
+  <div class="modal-panel constitution-panel">
+    <h2 id="constitution-title" class="modal-title">La Constitution</h2>
+    <p id="constitution-sub" class="modal-sub">The rules this salon adopts.</p>
+    <div id="constitution-rules" class="constitution-rules"></div>
+    <div class="modal-actions">
+      <button id="constitution-reset" class="btn small ghost" type="button" title="Reset every rule to the rulebook">Reset</button>
+      <button id="constitution-cancel" class="btn small ghost" type="button">Cancel</button>
+      <button id="constitution-go" class="btn small primary" type="button">Adopt</button>
+    </div>
+  </div>
+</div>
+
+<div id="assembly" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="assembly-title">
+  <div class="modal-panel assembly-panel">
+    <h2 id="assembly-title" class="modal-title">l'Assemblée</h2>
+    <p id="assembly-motion" class="modal-sub"></p>
+    <ul id="assembly-tally" class="assembly-tally"></ul>
+    <div id="assembly-actions" class="modal-actions" hidden>
+      <button id="assembly-nay" class="btn small ghost" type="button">Contre</button>
+      <button id="assembly-aye" class="btn small primary" type="button">Pour</button>
+    </div>
+    <p id="assembly-wait" class="assembly-wait" hidden>The floor is still debating…</p>
   </div>
 </div>
 

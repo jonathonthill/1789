@@ -19,7 +19,10 @@ export function showEntrance(enemy, done) {
   const meta = enemyMeta(enemy.card);
   const threat = enemyThreat(enemy.card, enemy.threatVariant);
   const sm = SUIT_META[enemy.card.s];
-  $('#entrance-card').innerHTML = cardSVG(enemy.card, { subtitle: true });
+  // Plain card, exactly as it appears on the table — the facts panel beside it
+  // already carries the name and title, and a subtitle here would make the
+  // royal look like a different card than the one about to be dealt.
+  $('#entrance-card').innerHTML = cardSVG(enemy.card);
   $('#entrance-facts').innerHTML =
     `<div class="entrance-name">${meta.name}</div>` +
     `<div class="entrance-title">${meta.title}</div>` +
@@ -233,7 +236,9 @@ export function severFall(container, { speed = 1, done } = {}) {
   severRaf = requestAnimationFrame(step);
 }
 
-export function showGuillotine(enemyCard, exact, done) {
+// handOwner: whose hand the won-over royal joined ("your", "Danton's"), or null
+// when La Constitution sends it to the top of Le Peuple instead.
+export function showGuillotine(enemyCard, exact, handOwner, done) {
   const meta = enemyMeta(enemyCard);
   $('#g-victim').innerHTML = victimSVG(enemyCard);
   const victim = $('#g-victim');
@@ -244,8 +249,11 @@ export function showGuillotine(enemyCard, exact, done) {
   blade.classList.remove('drop');
   caption.classList.remove('show');
   for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
+  const converted = handOwner
+    ? `${meta.name} joins the cause — into ${handOwner} hand`
+    : `${meta.name} joins the cause — top of Le Peuple`;
   caption.innerHTML = exact
-    ? `${EXCLAIM.converted}<span class="sub">${meta.name} joins the cause — top of Le Peuple</span>`
+    ? `${EXCLAIM.converted}<span class="sub">${converted}</span>`
     : `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;
   $('#guillotine-overlay').hidden = false;
   // force reflow so the animation classes retrigger
