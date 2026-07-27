@@ -58,10 +58,19 @@ let sfxVol = loadVol('r1789_sfx_vol_v2', 0.5);
 // keep the 1.7 dB lift they always had over the table. Move both together to
 // shift the music against the effects as a whole.
 const MUSIC_SCENE_GAIN = { intro: 5.52, game: 4.56 };
-function musicSceneGain() { return (desiredScene === 'intro' ? MUSIC_SCENE_GAIN.intro : MUSIC_SCENE_GAIN.game) * musicVol * VOL_SCALE; }
+// The cutscenes carry a soundtrack of their own, so the score stands down
+// while one plays. Silencing the bus rather than clearing the scene leaves the
+// scheduler, the scene and the player's volume untouched, so it simply fades
+// back in afterwards instead of restarting the loop from the top.
+let musicSilenced = false;
+function musicSceneGain() {
+  if (musicSilenced) return 0;
+  return (desiredScene === 'intro' ? MUSIC_SCENE_GAIN.intro : MUSIC_SCENE_GAIN.game) * musicVol * VOL_SCALE;
+}
 function applyMusicGain(smooth = 0.18) {
   if (ctx && musicBus && !muted && desiredScene) musicBus.gain.setTargetAtTime(musicSceneGain(), ctx.currentTime, smooth);
 }
+export function setMusicSilenced(on) { musicSilenced = !!on; applyMusicGain(.12); }
 export function getMusicVolume() { return musicVol; }
 export function getSfxVolume() { return sfxVol; }
 export function setMusicVolume(v) { musicVol = clamp01(v); persistVol('r1789_music_vol_v2', musicVol); applyMusicGain(0.04); }

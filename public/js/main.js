@@ -1114,6 +1114,7 @@ function playCutscene(name, next) {
     if (finished) return;
     finished = true;
     video.pause();
+    audio.setMusicSilenced(false);
     video.removeEventListener('ended', finish);
     screen.removeEventListener('click', finish);
     // Fade the stage out before cutting to what comes next, rather than
@@ -1124,12 +1125,19 @@ function playCutscene(name, next) {
   video.currentTime = 0;
   video.volume = CUTSCENE_VOLUME;
   video.muted = !audio.sfxEnabled();
+  // Stand the score down only while the clip's own soundtrack is actually
+  // audible — a muted clip with silenced music would be ten seconds of nothing.
+  audio.setMusicSilenced(!video.muted);
   video.addEventListener('ended', finish, { once: true });
   screen.addEventListener('click', finish, { once: true });
   const playing = video.play();
   // Autoplay-with-sound can be refused even mid-session; fall back to muted
   // playback rather than leaving the cutscene frozen on its first frame.
-  if (playing?.catch) playing.catch(() => { video.muted = true; video.play().catch(() => finish()); });
+  if (playing?.catch) playing.catch(() => {
+    video.muted = true;
+    audio.setMusicSilenced(false);
+    video.play().catch(() => finish());
+  });
 }
 
 // ── end screen ──────────────────────────────────────────────────────────────
