@@ -52,7 +52,13 @@ function loadVol(key, dflt) {
 function persistVol(key, v) { try { localStorage.setItem(key, String(v)); } catch {} }
 let musicVol = loadVol('r1789_music_vol_v2', 0.5);
 let sfxVol = loadVol('r1789_sfx_vol_v2', 0.5);
-function musicSceneGain() { return (desiredScene === 'intro' ? 0.46 : 0.38) * musicVol * VOL_SCALE; }
+// Calibrated the same way as SFX_CALIBRATION: at the default 50% slider these
+// put the in-game arrangement at -45 dBFS RMS on the music bus, 5 dB under the
+// effects, so it reads as a bed without disappearing beneath them. The menus
+// keep the 1.7 dB lift they always had over the table. Move both together to
+// shift the music against the effects as a whole.
+const MUSIC_SCENE_GAIN = { intro: 5.52, game: 4.56 };
+function musicSceneGain() { return (desiredScene === 'intro' ? MUSIC_SCENE_GAIN.intro : MUSIC_SCENE_GAIN.game) * musicVol * VOL_SCALE; }
 function applyMusicGain(smooth = 0.18) {
   if (ctx && musicBus && !muted && desiredScene) musicBus.gain.setTargetAtTime(musicSceneGain(), ctx.currentTime, smooth);
 }
@@ -73,9 +79,9 @@ function ensureContext() {
   compressor.ratio.value = 5;
   compressor.attack.value = .004;
   compressor.release.value = .22;
-  // The music used to sit around 10–15 dB below the effects. Keep effects crisp,
-  // but give the arrangement enough level to read as an actual backing track.
-  musicBus.gain.value = .42;
+  // Start at the level the current scene will ramp to, so the first bars aren't
+  // played at some other gain before applyMusicGain catches up.
+  musicBus.gain.value = musicSceneGain();
   sfxBus.gain.value = SFX_BASE * sfxVol * VOL_SCALE;
   master.gain.value = muted ? 0 : .72;
   musicBus.connect(master);
@@ -362,6 +368,18 @@ export const SFX_KINDS = [
   'guillotine', 'yield', 'pamphleteer', 'win', 'lose', 'tap',
 ];
 
+// Output calibration per kind, on top of the hand-tuned voice volumes below,
+// which only ever balanced each effect against itself — hence factors this far
+// from 1. Every effect is scaled to measure -40 dBFS on the effects bus, as
+// read by the sound lab (RMS over its 1.6 s window, sfx slider at 50%). Change
+// a kind's synthesis and its factor goes stale: re-measure in the lab and
+// scale the factor by 10^(error dB / 20).
+const SFX_CALIBRATION = {
+  select: 10.99, deselect: 18.41, attack: 1.39, sacrifice: 10.97, shuffle: 17.4,
+  draw: 9.91, enemy: 5.14, guillotine: 4.59, yield: 10.02, pamphleteer: 10.1,
+  win: 3.53, lose: 5.14, tap: 25.83,
+};
+
 // trim is an extra gain multiplier on top of a kind's own hardcoded volumes —
 // production code never passes it (defaults to a no-op 1); it exists so the
 // sound lab can preview a kind at a different level using this exact
@@ -370,14 +388,15 @@ export function sfx(kind, trim = 1) {
   if (!ctx || muted) return;
   if (ctx.state !== 'running') { tryResume(); return; }
   const t = ctx.currentTime + .006;
+  const g = trim * (SFX_CALIBRATION[kind] ?? 1);
   const n = (midi, time, duration, volume, wave, destination, envelope) =>
-    note(midi, time, duration, volume * trim, wave, destination, envelope);
+    note(midi, time, duration, volume * g, wave, destination, envelope);
   const sw = (from, to, time, duration, volume, wave, destination) =>
-    sweep(from, to, time, duration, volume * trim, wave, destination);
+    sweep(from, to, time, duration, volume * g, wave, destination);
   const ns = (time, duration, volume, highpass, lowpass, destination) =>
-    noise(time, duration, volume * trim, highpass, lowpass, destination);
+    noise(time, duration, volume * g, highpass, lowpass, destination);
   const ps = (name, time, volume, offset, duration) =>
-    playSample(name, time, volume * trim, offset, duration);
+    playSample(name, time, volume * g, offset, duration);
   switch (kind) {
     case 'select':
       n(74, t, .11, .18); n(81, t + .045, .12, .11); break;

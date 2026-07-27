@@ -9,14 +9,19 @@ import * as audio from '/js/audio.js';
 const $ = sel => document.querySelector(sel);
 
 const SFX_ROWS = audio.SFX_KINDS.map(kind => ({ id: `sfx-${kind}`, label: kind, kind: 'sfx', sfxKind: kind }));
+// Effects carry their calibration inside audio.js, so a trim of 1 here is
+// already the in-game level. The cutscenes have no such hook — main.js sets
+// the video element's volume — so start their trims at CUTSCENE_VOLUME to
+// preview and measure what the game actually plays.
+const GAME_CUTSCENE_VOLUME = .64;
 const VIDEO_ROWS = [
-  { id: 'video-begin', label: 'Begin cutscene', kind: 'video', url: '/video/begin.mp4', hint: 'game-start video' },
-  { id: 'video-victory', label: 'Victory cutscene', kind: 'video', url: '/video/victory.mp4', hint: 'win video' },
+  { id: 'video-begin', label: 'Begin cutscene', kind: 'video', url: '/video/begin.mp4', hint: 'game-start video', trim: GAME_CUTSCENE_VOLUME },
+  { id: 'video-victory', label: 'Victory cutscene', kind: 'video', url: '/video/victory.mp4', hint: 'win video', trim: GAME_CUTSCENE_VOLUME },
 ];
 const ROWS = [...SFX_ROWS, ...VIDEO_ROWS];
 
 const state = {};
-for (const row of ROWS) state[row.id] = { dbfs: null, trim: 1, suggestedTrim: null };
+for (const row of ROWS) state[row.id] = { dbfs: null, trim: row.trim ?? 1, suggestedTrim: null };
 
 // ── a small, separate Web Audio graph just for the two video soundtracks —
 // independent of audio.js's own context, so trims here never touch the game.
@@ -38,7 +43,7 @@ function ensureFileGraph() {
 // ── loudness measurement ────────────────────────────────────────────────
 // Video: decode the file directly and take the RMS across the whole buffer —
 // instant, exact, no playback needed.
-async function measureVideo(row) {
+async function measureVideo(row, trim) {
   const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
   let dbfs = -Infinity;
   try {
@@ -50,7 +55,9 @@ async function measureVideo(row) {
       const data = audioBuf.getChannelData(ch);
       for (let i = 0; i < data.length; i++) { sumSquares += data[i] * data[i]; count++; }
     }
-    const rms = Math.sqrt(sumSquares / Math.max(1, count));
+    // Scale by the trim the file would be played at, so a video's number means
+    // the same thing an effect's does: the level as currently set, not raw.
+    const rms = Math.sqrt(sumSquares / Math.max(1, count)) * trim;
     if (rms > 0) dbfs = 20 * Math.log10(rms);
   } catch (err) {
     console.warn(`Could not decode ${row.url} for measurement:`, err);
@@ -86,7 +93,7 @@ function measureSfxLive(kind, trim, ms = 1600) {
 async function measureRow(row) {
   const s = state[row.id];
   setRowBusy(row, true);
-  s.dbfs = row.kind === 'video' ? await measureVideo(row) : await measureSfxLive(row.sfxKind, s.trim);
+  s.dbfs = row.kind === 'video' ? await measureVideo(row, s.trim) : await measureSfxLive(row.sfxKind, s.trim);
   setRowBusy(row, false);
   renderRow(row);
   return s.dbfs;
@@ -233,7 +240,7 @@ function applyAllSuggested() {
 
 function resetTrims() {
   for (const row of ROWS) {
-    state[row.id].trim = 1;
+    state[row.id].trim = row.trim ?? 1;
     renderRow(row);
   }
   renderReport();
@@ -247,9 +254,12 @@ function sectionLabel(text) {
   return tr;
 }
 $('#rows-sfx').appendChild(sectionLabel('Sound effects'));
-for (const row of SFX_ROWS) $('#rows-sfx').appendChild(rowTemplate(row));
 $('#rows-video').appendChild(sectionLabel('Cutscene video audio'));
+for (const row of SFX_ROWS) $('#rows-sfx').appendChild(rowTemplate(row));
 for (const row of VIDEO_ROWS) $('#rows-video').appendChild(rowTemplate(row));
+// The template markup is a static 100%; only renderRow knows a row's real
+// starting trim, so the sliders would otherwise lie about the cutscenes.
+for (const row of ROWS) renderRow(row);
 renderReport();
 
 $('#btn-enable').addEventListener('click', async () => {

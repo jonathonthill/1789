@@ -1100,6 +1100,9 @@ $('#btn-regroup').onclick = () => {
 
 // ── cutscenes (game-start and victory) ────────────────────────────────────
 const CUTSCENE_FADE_MS = 500;
+// Both clips carry their own soundtrack, mastered louder than anything the
+// synth bus produces. Pull them down so they don't jump out of the mix.
+const CUTSCENE_VOLUME = .64;
 // name is 'begin' or 'victory' — each maps to #screen-{name} / #{name}-video.
 function playCutscene(name, next) {
   const screen = $(`#screen-${name}`);
@@ -1119,6 +1122,7 @@ function playCutscene(name, next) {
     setTimeout(next, CUTSCENE_FADE_MS);
   };
   video.currentTime = 0;
+  video.volume = CUTSCENE_VOLUME;
   video.muted = !audio.sfxEnabled();
   video.addEventListener('ended', finish, { once: true });
   screen.addEventListener('click', finish, { once: true });
