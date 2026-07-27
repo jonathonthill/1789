@@ -34,6 +34,12 @@ Any host that runs a Dockerfile or a Node server works. Two notes:
 - **WebSockets** must be supported (Fly.io, Railway, Render all fine).
 - **One instance only** — rooms live in process memory, so don't scale horizontally.
   Free tiers that sleep on idle will drop in-progress games when they sleep.
+- **Redeploys are picked up automatically.** The server fingerprints `public/` and
+  `shared/` at boot and stamps that build into `index.html` (served `no-store`);
+  code assets revalidate on every request and media caches for an hour. An open
+  tab re-checks `/version` on load, on socket reconnect, and whenever it returns
+  to the foreground, then reloads itself — or offers a reload banner if a solo
+  game is in progress. This is what stops mobile Safari sitting on an old build.
 
 ```bash
 # Fly.io example
@@ -47,7 +53,7 @@ fly deploy
 
 | Path | What it is |
 |---|---|
-| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, enemy immunity + Pamphleteer cancellation, 2–4 card same-number combos capped at 20, Sans-Culotte pairing, dynamic spade barricades, yield restrictions, exact-kill conversion, captured royals at 10/15/20, a Regroup pool shared by the table, and the house rules of La Constitution. |
+| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, enemy immunity + Pamphleteer cancellation, 2–4 card same-number combos capped at 20, Sans-Culotte pairing, dynamic spade barricades, Lay Low as a free duck rationed to once per citoyen per royal, exact kills won over into the slayer's hand, captured royals at 10/15/20, a shared Regroup pool that resets the deck for the whole table, and the house rules of La Constitution. |
 | `shared/theme.js` | The French Revolution naming: 12 historical enemies with 3 threat lines each, suit power names, terminology. |
 | `server/index.js` | Express + Socket.IO. Salon codes, host-led lobby with 30s disconnect grace, per-player secret views, token-based seamless rejoin, rematch, 2h idle room expiry. |
 | `public/` | Vanilla JS frontend. SVG-drawn cards, entrance animations with typewriter threats, guillotine defeats, stage-then-confirm play, contextual help (status strip, long-press explainers, phase-aware rules panel, first-game coach marks). |

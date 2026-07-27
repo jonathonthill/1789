@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#1c2f57">
+<!-- Stamped by the server with the build this document was served from; the
+     client compares it against /version to notice a deploy it has cached past. -->
+<meta name="build" content="__BUILD__">
 <title>1789</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -215,7 +218,7 @@
     <p id="constitution-sub" class="modal-sub">The rules this salon adopts.</p>
     <div id="constitution-rules" class="constitution-rules"></div>
     <div class="modal-actions">
-      <button id="constitution-reset" class="btn small ghost" type="button" title="Reset every rule to the rulebook">Reset</button>
+      <button id="constitution-reset" class="btn small ghost" type="button" title="Reset every rule to the défaut">Reset</button>
       <button id="constitution-cancel" class="btn small ghost" type="button">Cancel</button>
       <button id="constitution-go" class="btn small primary" type="button">Adopt</button>
     </div>
@@ -228,12 +231,16 @@
     <p id="assembly-motion" class="modal-sub"></p>
     <ul id="assembly-tally" class="assembly-tally"></ul>
     <div id="assembly-actions" class="modal-actions" hidden>
-      <button id="assembly-nay" class="btn small ghost" type="button">Contre</button>
-      <button id="assembly-aye" class="btn small primary" type="button">Pour</button>
+      <button id="assembly-nay" class="btn small ghost" type="button">Nay</button>
+      <button id="assembly-aye" class="btn small primary" type="button">Yea</button>
     </div>
     <p id="assembly-wait" class="assembly-wait" hidden>The floor is still debating…</p>
   </div>
 </div>
+
+<button id="update-banner" class="update-banner" type="button" hidden>
+  A new version of 1789 is ready — <b>tap to reload</b>
+</button>
 
 <div id="sound-menu" class="sound-menu" hidden role="dialog" aria-label="Sound settings">
   <div class="sound-menu-head">

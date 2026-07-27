@@ -3,6 +3,7 @@
 import express from 'express';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
@@ -13,8 +14,52 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const SHARED_DIR = path.join(__dirname, '..', 'shared');
+
+// ---- build stamp -----------------------------------------------------------
+// Everything the browser downloads, fingerprinted by size and mtime at boot.
+// The page is stamped with it and asks /version whether it has fallen behind —
+// mobile Safari is otherwise happy to sit on a cached build indefinitely.
+function buildStamp() {
+  const h = crypto.createHash('sha1');
+  const walk = dir => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+      .sort((a, b) => (a.name < b.name ? -1 : 1));
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      const st = fs.statSync(p);
+      h.update(`${path.relative(__dirname, p)}:${st.size}:${st.mtimeMs}\n`);
+    }
+  };
+  try { walk(PUBLIC_DIR); walk(SHARED_DIR); } catch { /* stamp what we can read */ }
+  return h.digest('hex').slice(0, 12);
+}
+const BUILD = buildStamp();
+
+// The entry document is never cached: it carries the stamp every other
+// freshness check is measured against, so a stale copy would defeat the lot.
+const INDEX_HTML = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
+  .replaceAll('__BUILD__', BUILD);
+app.get(['/', '/index.html'], (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(INDEX_HTML);
+});
+app.get('/version', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ build: BUILD });
+});
+
+// Code revalidates on every request (cheap — an unchanged file answers 304);
+// the paintings, audio and cutscenes are large and change rarely, so they get
+// an hour before the browser asks again.
+const CODE = /\.(?:html|js|mjs|css|json|map)$/i;
+const cacheHeaders = (res, filePath) => {
+  res.setHeader('Cache-Control', CODE.test(filePath) ? 'no-cache' : 'public, max-age=3600');
+};
+app.use(express.static(PUBLIC_DIR, { setHeaders: cacheHeaders }));
+app.use('/shared', express.static(SHARED_DIR, { setHeaders: cacheHeaders }));
 
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const rooms = new Map(); // code -> room
@@ -262,6 +307,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3789;
 server.listen(PORT, () => {
-  console.log(`1789 — listening on http://localhost:${PORT}`);
+  console.log(`1789 — build ${BUILD} — listening on http://localhost:${PORT}`);
   console.log('For LAN play, share your local IP, e.g. http://<your-ip>:' + PORT);
 });

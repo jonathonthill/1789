@@ -236,8 +236,8 @@ export function severFall(container, { speed = 1, done } = {}) {
   severRaf = requestAnimationFrame(step);
 }
 
-// handOwner: whose hand the won-over royal joined ("your", "Danton's"), or null
-// when La Constitution sends it to the top of Le Peuple instead.
+// handOwner: whose hand the won-over royal joined ("your", "Danton's"); only
+// read on an exact kill, which is the only way a royal is won over at all.
 export function showGuillotine(enemyCard, exact, handOwner, done) {
   const meta = enemyMeta(enemyCard);
   $('#g-victim').innerHTML = victimSVG(enemyCard);
@@ -249,9 +249,7 @@ export function showGuillotine(enemyCard, exact, handOwner, done) {
   blade.classList.remove('drop');
   caption.classList.remove('show');
   for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
-  const converted = handOwner
-    ? `${meta.name} joins the cause — into ${handOwner} hand`
-    : `${meta.name} joins the cause — top of Le Peuple`;
+  const converted = `${meta.name} joins the cause — into ${handOwner ?? 'the slayer’s'} hand`;
   caption.innerHTML = exact
     ? `${EXCLAIM.converted}<span class="sub">${converted}</span>`
     : `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;

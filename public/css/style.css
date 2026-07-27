@@ -70,6 +70,10 @@ input { user-select: text; -webkit-user-select: text; }
 .btn.ghost { background: transparent; color: var(--royal); border-color: var(--royal); box-shadow: none; }
 .btn.small { width: auto; padding: 10px 18px; font-size: .92rem; }
 .btn.tiny { width: auto; padding: 4px 11px; font-size: .72rem; letter-spacing: .06em; }
+/* Ghost buttons are navy-on-parchment; the dark lab pages need the same gold
+   treatment the game board uses, or they vanish into the background. */
+.lab-page .btn.ghost { color: var(--gold-hi); border-color: var(--gold); }
+.lab-page .btn.ghost:hover { background: rgba(217,188,99,.12); }
 
 /* ── La Constitution & l'Assemblée ── */
 .modal {
@@ -150,18 +154,74 @@ input { user-select: text; -webkit-user-select: text; }
   display: block; font-family: Georgia, serif; font-style: italic;
   font-size: .64rem; letter-spacing: 0; text-transform: none; opacity: .72; margin-top: 2px;
 }
+
+/* A settled count reads as one position on a track: a plain crimson line with a
+   dot at every stop, no frame around it. The tick labels below stay tappable,
+   so nothing here depends on landing a drag precisely. */
+.rule-slider { --thumb: 20px; }
+.rule-track { position: relative; height: 24px; }
+.rule-track-line {
+  position: absolute; top: 50%; height: 3px; margin-top: -1.5px;
+  left: calc(var(--thumb) / 2); right: calc(var(--thumb) / 2);
+  border-radius: 999px; background: var(--crimson);
+}
+.rule-stop {
+  position: absolute; top: 50%; width: 7px; height: 7px; margin-top: -3.5px;
+  transform: translateX(-50%); border-radius: 50%; background: var(--crimson);
+}
+/* border/padding are reset explicitly: the global `input` rule below would
+   otherwise frame the track and, worse, inset the thumb's travel away from the
+   stop dots, which are placed against the full width of the track. */
+.rule-range {
+  -webkit-appearance: none; appearance: none;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer;
+}
+.rule-range:focus { outline: none; }
+/* The invisible track is the same 3px as the drawn line and is centred in the
+   input box, so a thumb pulled up by half its own overhang lands exactly on
+   the line — rather than sitting a couple of pixels proud, as it does when the
+   track fills the box and the thumb hangs from its top edge. */
+.rule-range::-webkit-slider-runnable-track { height: 3px; background: transparent; border: 0; }
+.rule-range::-moz-range-track { height: 3px; background: transparent; border: 0; }
+.rule-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: var(--thumb); height: var(--thumb); border-radius: 50%;
+  margin-top: calc((3px - var(--thumb)) / 2);
+  background: radial-gradient(circle at 35% 30%, #b93a50, var(--crimson) 60%, var(--crimson-deep));
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+.rule-range::-moz-range-thumb {
+  width: var(--thumb); height: var(--thumb); border: 0; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #b93a50, var(--crimson) 60%, var(--crimson-deep));
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+/* Keyboard users still need to see where they are; a pointer drag does not. */
+.rule-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--gold); }
+.rule-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--gold); }
+.rule-ticks { position: relative; height: 17px; margin-top: 1px; }
+.rule-tick {
+  position: absolute; top: 0; transform: translateX(-50%);
+  padding: 1px 3px; cursor: pointer; white-space: nowrap;
+  background: none; border: 0;
+  font: 600 .7rem/1.15 var(--serif-display); color: var(--ink-soft); opacity: .72;
+}
+.rule-tick.on { color: var(--crimson-deep); opacity: 1; }
+/* Flush with the row's text column, so no label hangs past the card's edge. */
+.rule-tick.at-start { left: 0; transform: none; padding-left: 0; }
+.rule-tick.at-end { right: 0; transform: none; padding-right: 0; }
 .rule-hint {
   font-family: var(--serif-fell); font-style: italic; color: var(--ink-soft);
   font-size: .82rem; line-height: 1.35; margin: 7px 0 2px;
 }
-.rule-book {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px;
-  margin: 8px 0 0;
-}
+/* Label on its own line, the runs it explains on the line beneath it. */
+.rule-book { margin: 8px 0 0; }
 .rule-book-label {
+  display: block; margin-bottom: 4px;
   font-family: var(--serif-display); font-size: .6rem; letter-spacing: .09em;
   text-transform: uppercase; color: var(--ink-soft); opacity: .8;
 }
+.rule-book-runs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; }
 .rule-book-run {
   font-size: .74rem; color: var(--ink-soft);
   border: 1px solid var(--parchment-deep); border-radius: 999px;
@@ -631,6 +691,19 @@ input {
   border-radius: 999px; font-size: .85rem; font-style: italic;
   box-shadow: 0 4px 12px rgba(0,0,0,.4); z-index: 40;
 }
+
+/* Only shown when a reload has to wait for the player — a solo game in
+   progress would not survive one. Sits above everything, including overlays. */
+.update-banner {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  top: calc(8px + env(safe-area-inset-top));
+  max-width: calc(100vw - 24px);
+  font-family: var(--serif-fell); font-size: .85rem; line-height: 1.25;
+  background: var(--gold-hi); color: var(--ink);
+  border: 1px solid var(--ink); border-radius: 999px; padding: 8px 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.45); cursor: pointer; z-index: 200;
+}
+.update-banner b { font-weight: bold; }
 
 /* ── cutscenes (game-start and victory) ── */
 /* The same royal-blue fleur-de-lis stage as the home and game screens, behind

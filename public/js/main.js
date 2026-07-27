@@ -144,6 +144,7 @@ function net() {
   // Reconnect only re-claims a seat THIS tab established (sessionStorage) —
   // never the localStorage fallback, or a second tab would hijack the seat.
   socket.on('connect', () => {
+    checkForUpdate(); // a reconnect is usually a phone waking up on a stale tab
     let s = null;
     try { s = JSON.parse(sessionStorage.getItem('r1789_session')); } catch {}
     if (s?.code) { session = s; tryRejoin(true); }
@@ -211,24 +212,61 @@ function closeConstitution() { $('#constitution').hidden = true; constitutionCtx
 
 function renderConstitution() {
   const seats = constitutionCtx?.playerCount ?? 2;
-  const solo = seats === 1;
   $('#constitution-rules').innerHTML = SETTINGS
-    .filter(s => !(solo && s.hideForSolo))
     .map(s => `
       <div class="rule-row">
         <span class="rule-label">${esc(s.label)}</span>
-        <div class="rule-options" data-key="${s.key}">
-          ${s.options.map((o, i) => `
-            <button type="button" class="rule-opt${draftRules[s.key] === o.value ? ' on' : ''}" data-idx="${i}">
-              ${esc(o.label)}${o.note ? `<span class="rule-note">${esc(o.note)}</span>` : ''}
-            </button>`).join('')}
-        </div>
+        ${s.slider ? sliderControl(s) : buttonControl(s)}
         ${rulebookLine(s.key, seats)}
         <p class="rule-hint">${esc(s.hint)}</p>
       </div>`).join('');
 }
 
-// What "Rulebook" comes to at each table size, with this table's own size
+function buttonControl(s) {
+  return `<div class="rule-options" data-key="${s.key}">
+    ${s.options.map((o, i) => `
+      <button type="button" class="rule-opt${draftRules[s.key] === o.value ? ' on' : ''}" data-idx="${i}">
+        ${esc(o.label)}${o.note ? `<span class="rule-note">${esc(o.note)}</span>` : ''}
+      </button>`).join('')}
+  </div>`;
+}
+
+// A settled count reads better as one position on a track than as a row of
+// look-alike buttons. The tick labels beneath stay tappable, so the choice is
+// never a drag-only affair on a small screen.
+function sliderControl(s) {
+  const idx = optionIndex(s, draftRules[s.key]);
+  const last = s.options.length - 1;
+  // The thumb's centre only travels between half a thumb from each end, so the
+  // stop dots and their labels are placed on that same inset track rather than
+  // on evenly divided columns — otherwise the outer two would never line up.
+  const at = i => `left:calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${(i / last).toFixed(4)})`;
+  return `<div class="rule-slider" data-key="${s.key}">
+    <div class="rule-track">
+      <span class="rule-track-line" aria-hidden="true"></span>
+      ${s.options.map((_, i) => `<span class="rule-stop" style="${at(i)}" aria-hidden="true"></span>`).join('')}
+      <input type="range" class="rule-range" min="0" max="${last}" step="1"
+             value="${idx}" aria-label="${esc(s.label)}">
+    </div>
+    <div class="rule-ticks">
+      ${s.options.map((o, i) => {
+        // The two end labels are flush with the row's text column rather than
+        // centred on their dot, which would hang them past the card's edge —
+        // "Défaut" is far wider than the half-thumb of track it sits above.
+        const edge = i === 0 ? ' at-start' : (i === last ? ' at-end' : '');
+        return `<button type="button" class="rule-tick${i === idx ? ' on' : ''}${edge}"
+          style="${edge ? '' : at(i)}" data-idx="${i}">${esc(o.label)}</button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function optionIndex(setting, value) {
+  const i = setting.options.findIndex(o => o.value === value);
+  return i === -1 ? setting.options.findIndex(o => o.value === engine.DEFAULT_RULES[setting.key]) : i;
+}
+
+// What "Défaut" comes to at each table size, with this table's own size
 // picked out — the host is usually choosing before anyone has joined.
 function rulebookLine(key, seats) {
   const runs = rulebookRuns(key);
@@ -238,17 +276,32 @@ function rulebookLine(key, seats) {
     const yours = seats >= r.from && seats <= r.to;
     return `<span class="rule-book-run${yours ? ' yours' : ''}">${sizes} <i>→</i> ${r.value}</span>`;
   }).join('');
-  return `<p class="rule-book"><span class="rule-book-label">Rulebook by table size</span>${chips}</p>`;
+  return `<p class="rule-book"><span class="rule-book-label">Défaut by table size</span>
+    <span class="rule-book-runs">${chips}</span></p>`;
+}
+
+// Sliders update in place rather than re-rendering the menu: replacing the
+// range element mid-drag would drop the pointer and strand the thumb.
+function setRule(key, idx) {
+  const setting = SETTINGS.find(s => s.key === key);
+  const value = setting.options[idx].value;
+  if (draftRules[key] === value) return;
+  draftRules = { ...draftRules, [key]: value };
+  audio.sfx('select');
+  if (!setting.slider) { renderConstitution(); return; }
+  const row = $(`.rule-slider[data-key="${key}"]`);
+  row.querySelector('.rule-range').value = idx;
+  row.querySelectorAll('.rule-tick').forEach((t, i) => t.classList.toggle('on', i === idx));
 }
 
 $('#constitution-rules').onclick = e => {
-  const btn = e.target.closest('.rule-opt');
+  const btn = e.target.closest('.rule-opt, .rule-tick');
   if (!btn) return;
-  const key = btn.parentElement.dataset.key;
-  const setting = SETTINGS.find(s => s.key === key);
-  draftRules = { ...draftRules, [key]: setting.options[Number(btn.dataset.idx)].value };
-  audio.sfx('select');
-  renderConstitution();
+  setRule(btn.closest('[data-key]').dataset.key, Number(btn.dataset.idx));
+};
+$('#constitution-rules').oninput = e => {
+  const range = e.target.closest('.rule-range');
+  if (range) setRule(range.closest('[data-key]').dataset.key, Number(range.value));
 };
 $('#constitution-reset').onclick = () => {
   draftRules = { ...engine.DEFAULT_RULES };
@@ -328,7 +381,7 @@ function renderLobby(lv) {
   $('#btn-start').hidden = !(lv.youAreHost && n >= 2);
   $('#btn-edit-rules').hidden = !lv.youAreHost;
   // A salon is never a solo table, however few have arrived so far — showing it
-  // as one would hide the after-kill rule and quote solo's hand size.
+  // as one would quote solo's hand size and Regroup pool.
   lobbyCount = Math.max(2, n);
   renderRuleBadges($('#lobby-rules'), lv.rules, lobbyCount);
   myIndex = lv.yourIndex ?? myIndex;
@@ -464,6 +517,12 @@ function routeView(v) {
       withAnim(done => animateSacrifice(v, done), () => animateEffects(v, prevHandCount));
     } else {
       renderGame(v);
+      // A Regroup empties La Prison and every hand back into Le Peuple, which
+      // swells and is reshuffled — give it the riffle that explains the jump.
+      if (isNewAction && v.lastEvent?.type === 'regroup') {
+        audio.sfx('shuffle');
+        riffleDeck($('#stack-tavern'));
+      }
       animateEffects(v, prevHandCount);
     }
   };
@@ -511,13 +570,19 @@ function animateEffects(v, prevHandCount, done) {
   const yourDrawCount = v.you ? Math.max(0, v.you.hand.length - (prevHandCount - removedThisAction)) : 0;
   if (yourDrawCount > 0) renderHand(v, yourDrawCount);
 
+  // Every exit releases the held-back cards. Not all arrivals come from a
+  // Rally — an exact kill drops the royal itself into the slayer's hand — so
+  // the release cannot hang off the draw animation alone, or a kill alongside
+  // a Raid (♦, no draw) would leave the captured royal invisible until some
+  // later action happened to re-render the hand.
+  const finish = () => {
+    if (yourDrawCount > 0) renderHand(v);
+    done?.();
+  };
   const draw = () => {
-    if (drawn <= 0) { done?.(); return; }
+    if (drawn <= 0) { finish(); return; }
     audio.sfx('draw');
-    flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), () => {
-      if (yourDrawCount > 0) renderHand(v); // the ghosts have landed — release the held-back cards
-      done?.();
-    });
+    flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), finish);
   };
   if (healed > 0) {
     audio.sfx('shuffle');
@@ -526,7 +591,7 @@ function animateEffects(v, prevHandCount, done) {
       () => {
         riffleDeck($('#stack-tavern'));
         if (drawn > 0) setTimeout(draw, 300);
-        else done?.();
+        else finish();
       });
   } else {
     draw();
@@ -586,9 +651,9 @@ function animatePlay(v, done) {
 // renders the real new state once this settles, right before the guillotine
 // takes over the screen anyway.
 // Whose hand an exact-kill royal joined, phrased as a possessive for the
-// guillotine caption — or null when it went to the top of Le Peuple.
+// guillotine caption — null when the royal was overkilled and won over to nobody.
 function wonOverTo(v, ev) {
-  if (!ev?.toHand) return null;
+  if (!ev?.exact) return null;
   const slayer = v.lastPlay?.playerIdx;
   if (slayer == null || v.solo || slayer === v.you?.index) return 'your';
   return `${v.players[slayer]?.name ?? 'the slayer'}'s`;
@@ -810,7 +875,8 @@ function renderSeats(v) {
       }
     }
     el.innerHTML = `<span class="seat-fan">${fan}</span>
-      <span class="seat-name">${esc(o.p.name)} · ${n}${o.p.yielded ? ' 🕊' : ''}${(v.connections && v.connections[o.i] === false) ? ' ⏸' : ''}</span>`;
+      <span class="seat-name">${esc(o.p.name)} · ${n}${o.p.laidLow ? ' 🕊' : ''}${(v.connections && v.connections[o.i] === false) ? ' ⏸' : ''}</span>`;
+    if (o.p.laidLow) el.title = `${o.p.name} has lain low against this royal.`;
     if (choosing) el.onclick = () => sendAction({ type: 'chooseNext', target: o.i }, flashError);
     seats.appendChild(el);
   });
@@ -942,6 +1008,9 @@ function renderActions(v) {
     confirm.disabled = staged.length === 0 || engine.validatePlay(ps, you.index, staged) !== null;
     yield_.hidden = !!v.solo;
     yield_.disabled = !v.canYield;
+    yield_.title = v.canYield
+      ? 'Skip your turn entirely — no attack, and no strike against you. Once per royal.'
+      : 'You have already lain low against this royal.';
   } else if (v.phase === 'discard' && myTurn) {
     confirm.textContent = 'Sacrifice';
     const total = staged.reduce((s, c) => s + engine.cardValue(c), 0);
@@ -962,7 +1031,9 @@ function renderActions(v) {
   const left = v.regroupsRemaining ?? 0;
   regroup.hidden = !v.canRegroup || !myTurn;
   regroup.textContent = v.solo ? `Regroup (${left})` : `l'Assemblée (${left})`;
-  regroup.title = v.solo ? 'Discard your hand and draw a fresh one' : 'Move for a Regroup — the table votes';
+  regroup.title = v.solo
+    ? 'Shuffle everything outside the fight back into Le Peuple and draw a fresh hand'
+    : 'Move for a Regroup — the table votes, and every hand is dealt afresh';
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
   renderAssembly(v);
@@ -975,13 +1046,14 @@ function renderAssembly(v) {
   if (!a) return;
   const mover = v.players[a.caller]?.name ?? 'A citoyen';
   $('#assembly-motion').innerHTML =
-    `<strong>${esc(mover)}</strong> moves to Regroup — to discard their hand and draw afresh.
+    `<strong>${esc(mover)}</strong> moves to Regroup — every hand and all of La Prison back into Le Peuple,
+     shuffled, and fresh hands dealt all round.
      ${v.regroupsRemaining} remain${v.regroupsRemaining === 1 ? 's' : ''} in the pool.`;
   $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
     const answered = i === a.caller ? true : a.votes[i] !== undefined;
     const aye = i === a.caller ? true : a.votes[i];
     const mark = !answered ? '<span class="vote-pending">…</span>'
-      : `<span class="vote-${aye ? 'aye' : 'nay'}">${aye ? 'Pour' : 'Contre'}</span>`;
+      : `<span class="vote-${aye ? 'aye' : 'nay'}">${aye ? 'Yea' : 'Nay'}</span>`;
     return `<li><span>${esc(v.players[i]?.name ?? '—')}${i === a.caller ? ' <span class="tag">· mover</span>' : ''}</span>${mark}</li>`;
   }).join('');
   $('#assembly-actions').hidden = !a.youMayVote;
@@ -1020,7 +1092,8 @@ $('#btn-confirm').onclick = () => {
 $('#btn-yield').onclick = () => { audio.sfx('yield'); staged = []; sendAction({ type: 'yield' }, flashError); };
 $('#btn-regroup').onclick = () => {
   staged = [];
-  if (view?.solo) { audio.sfx('shuffle'); sendAction({ type: 'regroup' }, flashError); return; }
+  // No shuffle sfx here — the regroup event plays it for every citoyen alike.
+  if (view?.solo) { sendAction({ type: 'regroup' }, flashError); return; }
   audio.sfx('select');
   sendAction({ type: 'assembly' }, flashError);
 };
@@ -1441,6 +1514,52 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight') moveWalkthrough(1);
   else if (e.key === 'ArrowLeft') moveWalkthrough(-1);
 });
+
+// ── staying fresh ───────────────────────────────────────────────────────────
+// Mobile Safari will sit on a cached build for days, so the page carries the
+// build stamp it was served with and asks the server what it is running now —
+// on load, whenever the tab returns to the foreground, and on every socket
+// reconnect (the phone-unlock case). A stale tab reloads itself, unless a solo
+// game is in progress: that state lives only in this tab and reloading would
+// throw it away, so those players get a banner and choose their moment.
+const BUILD = document.querySelector('meta[name="build"]')?.content ?? '';
+const RELOADED_FOR = 'r1789_reloaded_for';
+let updatePending = false;
+
+function safeToReload() {
+  if (mode !== 'solo') return true; // a salon seat is rejoined silently on load
+  return !soloState || soloState.phase === 'won' || soloState.phase === 'lost';
+}
+
+function offerReload() {
+  const banner = $('#update-banner');
+  banner.hidden = false;
+  banner.onclick = () => location.reload();
+}
+
+async function checkForUpdate() {
+  // An unstamped page means the server did not render index.html (a file:// or
+  // static-host preview) — there is nothing to compare against.
+  if (updatePending || !BUILD || BUILD === '__BUILD__') return;
+  let latest = null;
+  try {
+    const res = await fetch('/version', { cache: 'no-store' });
+    latest = (await res.json())?.build;
+  } catch { return; } // offline, or the server is mid-restart — ask again later
+  if (!latest || latest === BUILD) return;
+  updatePending = true;
+  // If a reload has already been spent on this build and we are STILL stale,
+  // something upstream is serving the old document; ask rather than loop.
+  const spent = (() => { try { return sessionStorage.getItem(RELOADED_FOR); } catch { return null; } })();
+  if (spent === latest || !safeToReload()) { offerReload(); return; }
+  try { sessionStorage.setItem(RELOADED_FOR, latest); } catch {}
+  location.reload();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForUpdate();
+});
+checkForUpdate();
 
 // ── boot ────────────────────────────────────────────────────────────────────
 // Dev shortcuts: /?win jumps straight to the victory cutscene and end screen,

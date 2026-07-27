@@ -7,24 +7,24 @@ export const SUITS = ['S', 'H', 'D', 'C'];
 
 const HAND_SIZE = { 1: 8, 2: 7, 3: 6, 4: 6 };
 const JESTERS = { 1: 1, 2: 1, 3: 2, 4: 2 };
-// Rulebook Regroups, expressed as one pool shared by the table: solo sets two
-// Pamphleteers aside, a two-player table sets one aside each, larger tables none.
-const REGROUPS = { 1: 2, 2: 2, 3: 0, 4: 0 };
+// Default Regroups, as one pool shared by the table. The rulebook gives larger
+// tables none at all; here they get one, because a Regroup now resets the deck
+// for everybody and a table of three or four has no other way out of a dead hand.
+const REGROUPS = { 1: 2, 2: 2, 3: 1, 4: 1 };
 export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, health: 30 }, K: { attack: 20, health: 40 } };
 
 // ---- La Constitution (house rules) -----------------------------------------
 // A null count means "whatever the rulebook says for this table size", which is
 // what lets the host fill the menu in before knowing how many citoyens will join.
+// Three former options are now locked in at every table and are no longer
+// rules: the Pamphleteer always works alone, an exact kill always claims the
+// royal for the slayer's hand, and the turn always passes to the next citoyen
+// once a royal falls.
 export const DEFAULT_RULES = {
-  afterKill: 'slayer',          // 'slayer' | 'next' | 'choose'
-  regroups: null,               // 0..4, shared by the whole table
-  pamphleteers: null,           // 0..4 shuffled into Le Peuple
-  pamphleteerCompanion: false,  // may the Pamphleteer take one partner?
-  exactKillToHand: false,       // exact kill: to the slayer's hand, else top of Le Peuple
+  regroups: null,               // 0..3, shared by the whole table
+  pamphleteers: null,           // 0..3 shuffled into Le Peuple
   handSizeDelta: 0,             // -1 | 0 | 1
 };
-
-const AFTER_KILL = ['slayer', 'next', 'choose'];
 
 function clampInt(v, lo, hi, fallback) {
   const n = Math.trunc(Number(v));
@@ -36,14 +36,9 @@ function clampInt(v, lo, hi, fallback) {
 // object into concrete numbers for a table of n.
 export function resolveRules(rules, n) {
   const r = { ...DEFAULT_RULES, ...(rules ?? {}) };
-  // Alone, "the next citoyen" and "the slayer chooses" both resolve to yourself.
-  const afterKill = n === 1 ? 'slayer' : r.afterKill;
   return {
-    afterKill: AFTER_KILL.includes(afterKill) ? afterKill : DEFAULT_RULES.afterKill,
-    regroups: r.regroups == null ? REGROUPS[n] : clampInt(r.regroups, 0, 4, REGROUPS[n]),
-    pamphleteers: r.pamphleteers == null ? JESTERS[n] : clampInt(r.pamphleteers, 0, 4, JESTERS[n]),
-    pamphleteerCompanion: !!r.pamphleteerCompanion,
-    exactKillToHand: !!r.exactKillToHand,
+    regroups: r.regroups == null ? REGROUPS[n] : clampInt(r.regroups, 0, 3, REGROUPS[n]),
+    pamphleteers: r.pamphleteers == null ? JESTERS[n] : clampInt(r.pamphleteers, 0, 3, JESTERS[n]),
     handSizeDelta: clampInt(r.handSizeDelta, -1, 1, 0),
   };
 }
@@ -117,7 +112,7 @@ export function newGame(playerNames, opts = {}) {
     players: playerNames.map(name => ({
       name,
       hand: [],
-      yielded: false,
+      laidLow: false,     // has spent their one Lay Low against the royal on the table
     })),
     castle,
     tavern,
@@ -163,6 +158,8 @@ function revealEnemy(state) {
     threatVariant: Math.floor(state._rng() * 3),
   };
   state.playedCombos = [];
+  // Each citoyen may duck one royal in a fight; a new royal restores the right.
+  for (const p of state.players) p.laidLow = false;
 }
 
 export function enemyAttack(state) { return ENEMY_STATS[state.enemy.card.r].attack; }
@@ -220,9 +217,7 @@ export function validatePlay(state, playerIdx, cards) {
   if (jesters > 0) {
     if (jesters > 1) return 'Only one Pamphleteer may take the floor.';
     if (cards.length === 1) return null;
-    if (!state.rules.pamphleteerCompanion) return 'The Pamphleteer works alone.';
-    if (cards.length > 2) return 'The Pamphleteer may take only one partner.';
-    return null;
+    return 'The Pamphleteer works alone.';
   }
   if (cards.length === 1) return null;
   const companions = cards.filter(c => c.r === 'A').length;
@@ -263,9 +258,8 @@ export function previewPlay(state, cards) {
     shieldAdd: suits.includes('S') && active('S') ? value : 0,
     immuneSuits: cancelled ? [] : suits.filter(s => s === enemySuit),
     isJester,
-    exactKill,
     // Warn before committing: an exact kill claims the royal for your own hand.
-    toHand: exactKill && state.rules.exactKillToHand,
+    exactKill,
   };
 }
 
@@ -280,7 +274,6 @@ export function playCards(state, playerIdx, cards) {
   const healthBefore = Math.max(0, enemyHealth(state) - state.enemy.damage);
   const attackBefore = effectiveEnemyAttack(state);
   removeFromHand(player, cards);
-  player.yielded = false;
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
@@ -318,7 +311,7 @@ export function playCards(state, playerIdx, cards) {
   // kill that claims the royal for the slayer's hand. The slayer played at least
   // one card to get here, so a slot is free — Rally is the only thing that could
   // fill it, and it draws them one short to keep the royal's place.
-  const claimsRoyal = state.rules.exactKillToHand && state.enemy.damage === enemyHealth(state);
+  const claimsRoyal = state.enemy.damage === enemyHealth(state);
 
   // Step 2: resolve card powers before deciding whether anyone dies. This is
   // especially important for Rally: cards drawn here must count when checking
@@ -364,9 +357,10 @@ export function playCards(state, playerIdx, cards) {
   state.lastPlay.healthAfter = Math.max(0, enemyHealth(state) - state.enemy.damage);
   state.lastPlay.attackAfter = effectiveEnemyAttack(state);
 
-  // Step 3: only now decide whether the attack defeated the enemy.
+  // Step 3: only now decide whether the attack defeated the enemy. A Pamphleteer
+  // can never reach here — he is played alone, for nothing, and returns above.
   if (state.enemy.damage >= enemyHealth(state)) {
-    defeatEnemy(state, playerIdx, jester);
+    defeatEnemy(state, playerIdx);
     return state;
   }
 
@@ -396,50 +390,32 @@ function giveFloorToChooser(state, playerIdx) {
   log(state, `${state.players[playerIdx].name} chooses who acts next.`);
 }
 
-// viaPamphleteer: the killing play included a Pamphleteer, whose choice of the
-// next citoyen outranks whatever La Constitution says about the slayer's right.
-function defeatEnemy(state, playerIdx, viaPamphleteer = false) {
+function defeatEnemy(state, playerIdx) {
+  // An exact kill always wins the royal over to the slayer's own hand.
   const exact = state.enemy.damage === enemyHealth(state);
-  const toHand = exact && state.rules.exactKillToHand;
   const enemyCard = state.enemy.card;
   // The client keeps this public history long enough to animate the committed
   // cards from In Play into La Prison after the royal falls.
   const playedCards = state.playedCombos.flatMap(combo => combo.cards);
-  if (toHand) {
-    state.players[playerIdx].hand.push(enemyCard); // won over, and takes up arms at once
-  } else if (exact) {
-    state.tavern.push(enemyCard); // facedown on top — the royal is won over to the Revolution
-  } else {
-    state.discard.push(enemyCard);
-  }
+  if (exact) state.players[playerIdx].hand.push(enemyCard); // won over, and takes up arms at once
+  else state.discard.push(enemyCard);
   for (const combo of state.playedCombos) state.discard.push(...combo.cards);
-  if (toHand) {
-    log(state, `${cardName(enemyCard)} falls with surgical precision — and joins ${state.players[playerIdx].name}'s hand!`);
-  } else {
-    log(state, exact
-      ? `${cardName(enemyCard)} falls with surgical precision — won over to the Revolution! (top of Le Peuple)`
-      : `${cardName(enemyCard)} is sent to the guillotine!`);
-  }
+  log(state, exact
+    ? `${cardName(enemyCard)} falls with surgical precision — and joins ${state.players[playerIdx].name}'s hand!`
+    : `${cardName(enemyCard)} is sent to the guillotine!`);
 
   if (state.castle.length === 0) {
     state.phase = 'won';
     state.enemy = null;
-    state.lastEvent = { type: 'victory', exact, toHand, card: enemyCard, playedCards };
+    state.lastEvent = { type: 'victory', exact, card: enemyCard, playedCards };
     log(state, 'The last King is dead. Vive la République!');
     return;
   }
   revealEnemy(state);
-  state.lastEvent = { type: 'defeatAndReveal', exact, toHand, seq: state.revealSeq, card: enemyCard, playedCards };
-  // The slayer skips Step 4 either way; La Constitution decides who faces the newcomer.
-  if ((viaPamphleteer || state.rules.afterKill === 'choose') && !state.solo) {
-    state.current = playerIdx;
-    state.phase = 'jesterChoose';
-    log(state, `${state.players[playerIdx].name} chooses who faces the newcomer.`);
-    return;
-  }
-  state.current = state.rules.afterKill === 'next'
-    ? (playerIdx + 1) % state.players.length
-    : playerIdx;
+  state.lastEvent = { type: 'defeatAndReveal', exact, seq: state.revealSeq, card: enemyCard, playedCards };
+  // The slayer skips the counterattack and hands on: the newcomer is faced by
+  // the next citoyen round the table (alone, that is the slayer again).
+  state.current = (playerIdx + 1) % state.players.length;
   state.phase = 'play';
   checkTurnStart(state);
 }
@@ -464,28 +440,33 @@ function beginSuffering(state, playerIdx) {
   log(state, `${cardName(state.enemy.card)} strikes ${player.name} for ${atk}!`);
 }
 
+// Lying low is a true duck: no attack, and the royal finds nobody to strike.
+// It is rationed instead of paid for — once per citoyen per royal. That keeps
+// it available to whoever is handed a fresh royal on an empty hand (the one
+// player a counterattack-paying Lay Low could never actually save), while
+// still costing the table a turn of damage it did not deal.
 export function canYield(state, playerIdx) {
   if (state.phase !== 'play' || playerIdx !== state.current) return false;
   // Lying low only ever helps by passing the turn to someone else — with no
-  // other citoyen to pass to, solo play gets nothing from it but a free hit.
+  // other citoyen to pass to, solo play gets nothing from it at all.
   if (state.solo) return false;
-  const others = state.players.filter((_, i) => i !== playerIdx);
-  return !others.every(p => p.yielded);
+  return !state.players[playerIdx].laidLow;
 }
 
 export function yieldTurn(state, playerIdx) {
   if (state.assembly) throw new Error('l’Assemblée is in session.');
   if (state.phase !== 'play' || playerIdx !== state.current) throw new Error('It is not your turn.');
-  if (!canYield(state, playerIdx)) throw new Error('You cannot lie low — every other citoyen already has.');
+  if (state.solo) throw new Error('You cannot lie low — there is no fellow citoyen to act in your place.');
+  if (!canYield(state, playerIdx)) throw new Error('You have already lain low against this royal.');
   const player = state.players[playerIdx];
-  player.yielded = true;
+  player.laidLow = true;
   state.lastEvent = null;
   state.actionSeq++;
   state.lastEffects = null;
   state.lastPlay = null;
   state.lastSacrifice = null;
-  log(state, `${player.name} lies low.`);
-  beginSuffering(state, playerIdx);
+  log(state, `${player.name} lies low — ${cardName(state.enemy.card)} finds nobody to strike.`);
+  advanceTurn(state);
   return state;
 }
 
@@ -574,8 +555,9 @@ function checkTurnStart(state) {
 
 // ---- Regroup ---------------------------------------------------------------
 // The table shares one pool of Regroups. Alone you simply spend one; at a table
-// l'Assemblée must carry the motion first (see below). Only the acting player's
-// hand changes, and a Regroup does NOT cancel enemy immunity.
+// l'Assemblée must carry the motion first (see below). A Regroup resets the
+// deck for EVERYONE — every card that is not committed in play returns to Le
+// Peuple to be shuffled and dealt afresh — and does NOT cancel enemy immunity.
 export function canRegroup(state, playerIdx) {
   return playerIdx === state.current
     && !state.assembly
@@ -591,20 +573,37 @@ export function regroup(state, playerIdx = state.current) {
   return applyRegroup(state, playerIdx);
 }
 
+// Everything except the cards committed against the current royal goes back
+// into Le Peuple: every citoyen's hand and all of La Prison. Le Régime and the
+// royal on the table are untouched.
 function applyRegroup(state, playerIdx) {
   const p = state.players[playerIdx];
-  state.discard.push(...p.hand);
-  p.hand = [];
-  drawTo(state, p);
+  state.tavern.push(...state.discard);
+  state.discard = [];
+  for (const q of state.players) {
+    state.tavern.push(...q.hand);
+    q.hand = [];
+  }
+  shuffle(state.tavern, state._rng);
+  // Dealt round by round from the citoyen who called it, so a deck too short to
+  // fill every hand still spreads what is left evenly rather than by seat.
+  for (let round = 0; round < state.handSize; round++) {
+    for (let k = 0; k < state.players.length && state.tavern.length > 0; k++) {
+      const q = state.players[(playerIdx + k) % state.players.length];
+      if (q.hand.length < state.handSize) q.hand.push(state.tavern.pop());
+    }
+  }
   state.regroupsRemaining--;
   state.regroupsUsed++;
-  state.lastEvent = null;
   state.actionSeq++;
+  state.lastEvent = { type: 'regroup', seq: state.actionSeq };
   state.lastEffects = null;
   state.lastPlay = null;
   state.lastSacrifice = null;
   const remaining = regroupsLeft(state);
-  log(state, `Regroup! ${p.name} discards their hand and rallies ${p.hand.length} fresh card${p.hand.length === 1 ? '' : 's'}. (${remaining} left)`);
+  log(state, state.solo
+    ? `Regroup! Every card outside the fight returns to Le Peuple, shuffled — ${p.name} draws ${p.hand.length} fresh. (${remaining} left)`
+    : `Regroup! ${p.name} calls the table in: every hand and all of La Prison return to Le Peuple, shuffled, and fresh hands are dealt all round. (${remaining} left)`);
   if (state.phase === 'discard' && handValue(p) < state.pendingDamage) {
     state.phase = 'lost';
     state.result = { reason: `Even regrouped, you could not withstand ${state.pendingDamage} damage. The Revolution is crushed.` };
@@ -619,8 +618,8 @@ function applyRegroup(state, playerIdx) {
 // ---- l'Assemblée (the regroup vote) ----------------------------------------
 // Only the citoyen holding the floor may move for a Regroup — including while
 // suffering a blow, which is exactly when it saves a game. Moving the motion is
-// the caller's own aye; every other connected citoyen answers Pour or Contre,
-// and the motion carries on a strict majority of the connected table.
+// the caller's own Yea; every other connected citoyen answers Yea or Nay, and
+// the motion carries on a strict majority of the connected table.
 
 export function canCallAssembly(state, playerIdx) {
   return !state.solo && canRegroup(state, playerIdx);
@@ -649,7 +648,7 @@ export function callAssembly(state, playerIdx, eligible = null) {
 export function castVote(state, playerIdx, aye) {
   const a = state.assembly;
   if (!a) throw new Error('l’Assemblée is not in session.');
-  if (playerIdx === a.caller) throw new Error('Moving the motion is your own aye.');
+  if (playerIdx === a.caller) throw new Error('Moving the motion is your own Yea.');
   if (!a.voters.includes(playerIdx)) throw new Error('You have no vote in this motion.');
   a.votes[playerIdx] = !!aye;
   state.actionSeq++;
@@ -721,7 +720,7 @@ export function viewFor(state, playerIdx) {
     players: state.players.map((p, i) => ({
       name: p.name,
       handCount: p.hand.length,
-      yielded: p.yielded,
+      laidLow: p.laidLow,
       you: i === playerIdx,
     })),
     you: playerIdx != null ? {

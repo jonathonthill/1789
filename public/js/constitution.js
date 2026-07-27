@@ -7,70 +7,43 @@ const STORE_KEY = 'r1789_rules';
 
 // `null` on a count means "whatever the rulebook says for this table size" —
 // which is what lets the host fill the menu in before anyone has joined.
-const counts = extra => [{ value: null, label: 'Rulebook' }, ...extra.map(n => ({ value: n, label: String(n) }))];
+const counts = extra => [{ value: null, label: 'Défaut' }, ...extra.map(n => ({ value: n, label: String(n) }))];
 
 export const SETTINGS = [
-  {
-    key: 'afterKill',
-    label: 'After a kill',
-    hint: 'Who faces the royal that steps up when one falls.',
-    soloOnly: false,
-    hideForSolo: true,
-    options: [
-      { value: 'slayer', label: 'Slayer again', note: 'rulebook' },
-      { value: 'next', label: 'Next citoyen' },
-      { value: 'choose', label: 'Slayer chooses' },
-    ],
-  },
   {
     key: 'regroups',
     label: 'Regroups',
     hint: 'A pool shared by the whole table. At a table, l’Assemblée must carry the motion before one is spent.',
-    options: counts([0, 1, 2, 3, 4]),
+    slider: true,
+    options: counts([0, 1, 2, 3]),
   },
   {
     key: 'pamphleteers',
     label: 'Pamphleteers',
     hint: 'How many shuffle into Le Peuple. At zero, no royal ever loses its suit immunity — the hardest setting here.',
-    options: counts([0, 1, 2, 3, 4]),
-  },
-  {
-    key: 'pamphleteerCompanion',
-    label: 'Pamphleteer partner',
-    hint: 'A Pamphleteer may take one other card along. It attacks through the shattered immunity, and still draws no reprisal.',
-    options: [
-      { value: false, label: 'Works alone', note: 'rulebook' },
-      { value: true, label: 'May take one' },
-    ],
-  },
-  {
-    key: 'exactKillToHand',
-    label: 'Exact kill',
-    hint: 'A royal felled to exactly zero is won over to the Revolution. Where does it go?',
-    options: [
-      { value: false, label: 'Top of Le Peuple', note: 'rulebook' },
-      { value: true, label: 'Slayer’s hand' },
-    ],
+    slider: true,
+    options: counts([0, 1, 2, 3]),
   },
   {
     key: 'handSizeDelta',
     label: 'Hand size',
-    hint: 'Shifts every citoyen’s limit up or down from the rulebook default.',
+    hint: 'Shifts every citoyen’s limit up or down from the default for the table size.',
+    slider: true,
     options: [
       { value: -1, label: '−1' },
-      { value: 0, label: 'Standard', note: 'rulebook' },
+      { value: 0, label: 'Défaut' },
       { value: 1, label: '+1' },
     ],
   },
 ];
 
-// Which engine table each "Rulebook" option actually reads from.
+// Which engine table each "Défaut" option actually reads from.
 const RULEBOOK_KEYS = { regroups: 'regroups', pamphleteers: 'pamphleteers', handSizeDelta: 'handSize' };
 
-// Spell out what "Rulebook" means at every table size, collapsing table sizes
+// Spell out what "Défaut" means at every table size, collapsing table sizes
 // that share a value into one run (1–2 → 2, 3–4 → 0). Derived from the engine
 // rather than written out, so the hint can never drift from the tables it
-// describes. Returns null for settings whose rulebook value is a fixed option
+// describes. Returns null for settings whose default value is a fixed option
 // already marked as such.
 export function rulebookRuns(settingKey) {
   const key = RULEBOOK_KEYS[settingKey];
@@ -85,10 +58,21 @@ export function rulebookRuns(settingKey) {
   return runs;
 }
 
+// Keep only values the menu can actually still offer. Rules saved by an older
+// build (a since-retired option, or a count beyond the slider's range) fall
+// back to the défaut rather than sticking at a value nothing can display.
+function sanitize(rules) {
+  const out = { ...DEFAULT_RULES };
+  for (const s of SETTINGS) {
+    const v = rules?.[s.key];
+    if (s.options.some(o => o.value === v)) out[s.key] = v;
+  }
+  return out;
+}
+
 export function loadRules() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    return saved ? { ...DEFAULT_RULES, ...saved } : { ...DEFAULT_RULES };
+    return sanitize(JSON.parse(localStorage.getItem(STORE_KEY)));
   } catch { return { ...DEFAULT_RULES }; }
 }
 
@@ -101,13 +85,12 @@ export function isRulebook(rules) {
 }
 
 // Short "label: value" pairs for the lobby badge row and the help sheet. Pass the
-// table size to turn every "Rulebook" into the number it actually resolves to.
+// table size to turn every "Défaut" into the number it actually resolves to.
 export function summarize(rules, playerCount) {
   const n = Math.min(4, Math.max(1, playerCount || 2));
   const resolved = resolveRules(rules, n);
   const book = rulebookFor(n);
   return SETTINGS
-    .filter(s => !(n === 1 && s.hideForSolo))
     .map(s => {
       let value = resolved[s.key];
       if (s.key === 'handSizeDelta') {
