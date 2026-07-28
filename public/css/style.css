@@ -221,8 +221,8 @@ input { user-select: text; -webkit-user-select: text; }
 /* Difficulté gets a French tricolour cockade instead of the generic dot. The
    real range input remains on top, transparent, so mouse, touch and keyboard
    behavior stay native and accessible. */
-.difficulty-slider { --thumb: 42px; }
-.difficulty-slider .rule-track { height: 72px; }
+.difficulty-slider { --thumb: 25.5px; }
+.difficulty-slider .rule-track { height: 66px; }
 .difficulty-slider .rule-range { z-index: 3; }
 .difficulty-slider .rule-range::-webkit-slider-thumb {
   width: var(--thumb); height: var(--thumb);
@@ -233,13 +233,13 @@ input { user-select: text; -webkit-user-select: text; }
   background: transparent; box-shadow: none;
 }
 .difficulty-cockade {
-  position: absolute; z-index: 2; top: 15px;
-  width: 42px; height: 56px; transform: translateX(-50%);
+  position: absolute; z-index: 2; top: 20px;
+  width: 36px; height: 50px; transform: translateX(-50%);
   transition: left .18s ease;
 }
 .difficulty-cockade i {
-  position: absolute; z-index: 2; inset: 0 auto auto 0;
-  display: block; width: 42px; height: 42px;
+  position: absolute; z-index: 2; top: 0; left: 5.25px;
+  display: block; width: 25.5px; height: 25.5px;
   border-radius: 48% 52% 46% 54% / 51% 47% 53% 49%;
   background:
     repeating-conic-gradient(from 2deg, rgba(255,255,255,.14) 0 7deg, rgba(8,10,25,.12) 7deg 14deg),
@@ -247,16 +247,6 @@ input { user-select: text; -webkit-user-select: text; }
   box-shadow: 0 2px 5px rgba(20,12,8,.38), inset 0 0 0 1px rgba(40,25,15,.12);
   filter: drop-shadow(0 1px 0 rgba(255,255,255,.25));
 }
-.difficulty-cockade::before,
-.difficulty-cockade::after {
-  content: ''; position: absolute; z-index: 1; top: 31px;
-  width: 11px; height: 23px;
-  background: linear-gradient(90deg, #182766 0 33%, #fffdf5 34% 66%, #d11f35 67%);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
-  box-shadow: 0 2px 2px rgba(20,12,8,.2);
-}
-.difficulty-cockade::before { left: 8px; transform: rotate(11deg); transform-origin: top center; }
-.difficulty-cockade::after { right: 8px; transform: rotate(-11deg); transform-origin: top center; }
 .difficulty-slider .rule-tick.on { color: var(--royal); }
 .difficulty-slider:has(.rule-range:focus-visible) .difficulty-cockade {
   filter: drop-shadow(0 0 2px var(--gold));
