@@ -5,48 +5,15 @@
 
 export const SUITS = ['S', 'H', 'D', 'C'];
 
-const HAND_SIZE = { 1: 8, 2: 7, 3: 6, 4: 6 };
-const JESTERS = { 1: 1, 2: 1, 3: 2, 4: 2 };
-// Default Regroups, as one pool shared by the table. The rulebook gives larger
-// tables none at all; here they get one, because a Regroup now resets the deck
-// for everybody and a table of three or four has no other way out of a dead hand.
-const REGROUPS = { 1: 2, 2: 2, 3: 1, 4: 1 };
+// La Constitution's rules live in one register, shared/rules.js — see there for
+// what each one means and which ones the menu currently offers. Two decisions
+// remain locked in at every table and are not rules: the Pamphleteer always
+// works alone, and the turn always passes to the next citoyen once a royal falls.
+import { HAND_SIZE, DEFAULT_RULES, resolveRules, rulebookFor } from './rules.js';
+export { DEFAULT_RULES, resolveRules, rulebookFor };
+export { RULE_SPEC, RULE_KEYS, EXPOSED_RULE_KEYS } from './rules.js';
+
 export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, health: 30 }, K: { attack: 20, health: 40 } };
-
-// ---- La Constitution (house rules) -----------------------------------------
-// A null count means "whatever the rulebook says for this table size", which is
-// what lets the host fill the menu in before knowing how many citoyens will join.
-// Three former options are now locked in at every table and are no longer
-// rules: the Pamphleteer always works alone, an exact kill always claims the
-// royal for the slayer's hand, and the turn always passes to the next citoyen
-// once a royal falls.
-export const DEFAULT_RULES = {
-  regroups: null,               // 0..3, shared by the whole table
-  pamphleteers: null,           // 0..3 shuffled into Le Peuple
-  handSizeDelta: 0,             // -1 | 0 | 1
-};
-
-function clampInt(v, lo, hi, fallback) {
-  const n = Math.trunc(Number(v));
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(hi, Math.max(lo, n));
-}
-
-// Fold a partial (and possibly hostile — this runs on the server too) rules
-// object into concrete numbers for a table of n.
-export function resolveRules(rules, n) {
-  const r = { ...DEFAULT_RULES, ...(rules ?? {}) };
-  return {
-    regroups: r.regroups == null ? REGROUPS[n] : clampInt(r.regroups, 0, 3, REGROUPS[n]),
-    pamphleteers: r.pamphleteers == null ? JESTERS[n] : clampInt(r.pamphleteers, 0, 3, JESTERS[n]),
-    handSizeDelta: clampInt(r.handSizeDelta, -1, 1, 0),
-  };
-}
-
-// What the rulebook would give this table — the menu renders these as "Rulebook (n)".
-export function rulebookFor(n) {
-  return { regroups: REGROUPS[n] ?? 0, pamphleteers: JESTERS[n] ?? 0, handSize: HAND_SIZE[n] ?? 6 };
-}
 
 export function cardValue(c) {
   if (c.r === 'X') return 0;
@@ -122,6 +89,9 @@ export function newGame(playerNames, opts = {}) {
     current: 0,
     phase: 'play',        // 'play' | 'discard' | 'jesterChoose' | 'won' | 'lost'
     pendingDamage: 0,
+    // Set when a blow interrupts something that must still happen once it is
+    // paid — an unprotected Pamphleteer still names who takes the floor.
+    pendingAfterDamage: null,
     revealSeq: 0,
     actionSeq: 0,
     lastEffects: null,    // { healed, drawn } from the most recent play, for client animation
@@ -217,7 +187,9 @@ export function validatePlay(state, playerIdx, cards) {
   if (jesters > 0) {
     if (jesters > 1) return 'Only one Pamphleteer may take the floor.';
     if (cards.length === 1) return null;
-    return 'The Pamphleteer works alone.';
+    if (!state.rules.pamphleteerCompanion) return 'The Pamphleteer works alone.';
+    if (cards.length === 2) return null; // the Pamphleteer and one other voice
+    return 'The Pamphleteer may bring only one companion.';
   }
   if (cards.length === 1) return null;
   const companions = cards.filter(c => c.r === 'A').length;
@@ -279,6 +251,7 @@ export function playCards(state, playerIdx, cards) {
   state.lastEffects = null;
   state.lastPlay = { playerIdx, cards, healthBefore, attackBefore, healthAfter: healthBefore, attackAfter: attackBefore };
   state.lastSacrifice = null;
+  state.pendingAfterDamage = null;
 
   // The Pamphleteer shatters immunity the moment he takes the floor — before a
   // partner resolves, so the partner's suit power lands even on a matching enemy.
@@ -289,6 +262,13 @@ export function playCards(state, playerIdx, cards) {
   if (jester && attackCards.length === 0) {
     state.playedCombos.push({ cards, value: 0, suits: [] });
     log(state, `${player.name} unleashes the Pamphleteer — the enemy's immunity is shattered!`);
+    // Unprotected, the Pamphleteer's player still takes the blow — and still
+    // names who takes the floor once it is paid.
+    if (!state.rules.pamphleteerImmune) {
+      state.pendingAfterDamage = 'chooseNext';
+      beginSuffering(state, playerIdx);
+      return state;
+    }
     giveFloorToChooser(state, playerIdx);
     return state;
   }
@@ -310,8 +290,9 @@ export function playCards(state, playerIdx, cards) {
   // Damage lands before powers do, so we already know whether this is the exact
   // kill that claims the royal for the slayer's hand. The slayer played at least
   // one card to get here, so a slot is free — Rally is the only thing that could
-  // fill it, and it draws them one short to keep the royal's place.
-  const claimsRoyal = state.enemy.damage === enemyHealth(state);
+  // fill it, and it draws them one short to keep the royal's place. When exact
+  // kills go atop Le Peuple instead, no slot needs holding open.
+  const claimsRoyal = state.rules.exactKillTo === 'hand' && state.enemy.damage === enemyHealth(state);
 
   // Step 2: resolve card powers before deciding whether anyone dies. This is
   // especially important for Rally: cards drawn here must count when checking
@@ -364,13 +345,17 @@ export function playCards(state, playerIdx, cards) {
     return state;
   }
 
-  // Step 4: a survivor counterattacks — unless the Pamphleteer is on the floor,
-  // whose protection covers the whole play. beginSuffering reads the attacker's
+  // Step 4: a survivor counterattacks. A protected Pamphleteer's shield covers
+  // the whole play, companion and all; unprotected, the blow lands and only then
+  // does he name who takes the floor. beginSuffering reads the attacker's
   // post-Rally hand, so a heart draw can prevent a premature loss.
   if (jester) {
-    log(state, `The Pamphleteer shields ${player.name} from reprisal.`);
-    giveFloorToChooser(state, playerIdx);
-    return state;
+    if (state.rules.pamphleteerImmune) {
+      log(state, `The Pamphleteer shields ${player.name} from reprisal.`);
+      giveFloorToChooser(state, playerIdx);
+      return state;
+    }
+    state.pendingAfterDamage = 'chooseNext';
   }
   beginSuffering(state, playerIdx);
   return state;
@@ -391,26 +376,39 @@ function giveFloorToChooser(state, playerIdx) {
 }
 
 function defeatEnemy(state, playerIdx) {
-  // An exact kill always wins the royal over to the slayer's own hand.
+  // An exact kill either wins the royal over to the slayer's own hand or sets
+  // them face down atop Le Peuple for whoever draws next.
   const exact = state.enemy.damage === enemyHealth(state);
+  const toHand = exact && state.rules.exactKillTo === 'hand';
   const enemyCard = state.enemy.card;
   // The client keeps this public history long enough to animate the committed
   // cards from In Play into La Prison after the royal falls.
   const playedCards = state.playedCombos.flatMap(combo => combo.cards);
-  if (exact) state.players[playerIdx].hand.push(enemyCard); // won over, and takes up arms at once
-  else state.discard.push(enemyCard);
+  // Won over, the royal takes up arms at once — before the spoils are shared, so
+  // the slot Rally held open is filled by them and not by a spoil.
+  if (toHand) state.players[playerIdx].hand.push(enemyCard);
+  else if (!exact) state.discard.push(enemyCard);
   for (const combo of state.playedCombos) state.discard.push(...combo.cards);
   log(state, exact
-    ? `${cardName(enemyCard)} falls with surgical precision — and joins ${state.players[playerIdx].name}'s hand!`
+    ? (toHand
+      ? `${cardName(enemyCard)} falls with surgical precision — and joins ${state.players[playerIdx].name}'s hand!`
+      : `${cardName(enemyCard)} falls with surgical precision — and slips into Le Peuple to fight on.`)
     : `${cardName(enemyCard)} is sent to the guillotine!`);
 
   if (state.castle.length === 0) {
+    // Nothing follows, but every card stays accounted for.
+    if (exact && !toHand) state.tavern.push(enemyCard);
     state.phase = 'won';
     state.enemy = null;
     state.lastEvent = { type: 'victory', exact, card: enemyCard, playedCards };
     log(state, 'The last King is dead. Vive la République!');
     return;
   }
+  claimSpoils(state, playerIdx);
+  // A royal felled to the last point is laid on Le Peuple only once the spoils
+  // have been gathered from it — otherwise the table would simply draw them
+  // straight back, and the rule would mean nothing.
+  if (exact && !toHand) state.tavern.push(enemyCard);
   revealEnemy(state);
   state.lastEvent = { type: 'defeatAndReveal', exact, seq: state.revealSeq, card: enemyCard, playedCards };
   // The slayer skips the counterattack and hands on: the newcomer is faced by
@@ -420,11 +418,31 @@ function defeatEnemy(state, playerIdx) {
   checkTurnStart(state);
 }
 
+// Deal a share of Le Peuple round the table, never past anyone's hand limit,
+// starting from one citoyen so a Peuple too thin to pay everyone still spreads
+// what is left rather than emptying by seat.
+function shareDraw(state, fromIdx, share) {
+  let drawn = 0;
+  for (let round = 0; round < share; round++) {
+    for (let k = 0; k < state.players.length && state.tavern.length > 0; k++) {
+      const q = state.players[(fromIdx + k) % state.players.length];
+      if (q.hand.length < state.handSize) { q.hand.push(state.tavern.pop()); drawn++; }
+    }
+  }
+  return drawn;
+}
+
+// Les Dépouilles: a fallen royal leaves the streets richer.
+function claimSpoils(state, playerIdx) {
+  const drawn = shareDraw(state, playerIdx, state.rules.drawOnVictory);
+  if (drawn) log(state, `The spoils are shared — the citoyens take up ${drawn} card${drawn === 1 ? '' : 's'}.`);
+}
+
 function beginSuffering(state, playerIdx) {
   const atk = effectiveEnemyAttack(state);
   if (atk === 0) {
     log(state, `The barricades hold — ${state.players[playerIdx].name} suffers nothing.`);
-    advanceTurn(state);
+    resumeAfterDamage(state, playerIdx);
     return;
   }
   const player = state.players[playerIdx];
@@ -470,6 +488,7 @@ export function yieldTurn(state, playerIdx) {
   return state;
 }
 
+
 export function validateDiscard(state, playerIdx, cards) {
   if (state.assembly) return 'l’Assemblée is in session.';
   if (state.phase !== 'discard') return 'No damage to suffer.';
@@ -498,8 +517,18 @@ export function discardForDamage(state, playerIdx, cards) {
   state.lastSacrifice = { playerIdx, cards };
   log(state, `${player.name} sacrifices ${cards.length} card${cards.length === 1 ? '' : 's'} to survive.`);
   state.pendingDamage = 0;
-  advanceTurn(state);
+  resumeAfterDamage(state, playerIdx);
   return state;
+}
+
+// A blow paid, the turn carries on — unless it interrupted something. An
+// unprotected Pamphleteer's player survives the reprisal and only then names
+// the citoyen who takes the floor.
+function resumeAfterDamage(state, playerIdx) {
+  const pending = state.pendingAfterDamage;
+  state.pendingAfterDamage = null;
+  if (pending === 'chooseNext') giveFloorToChooser(state, playerIdx);
+  else advanceTurn(state);
 }
 
 export function surrenderGame(state, playerIdx) {
@@ -578,9 +607,24 @@ export function regroup(state, playerIdx = state.current) {
 // royal on the table are untouched.
 function applyRegroup(state, playerIdx) {
   const p = state.players[playerIdx];
-  state.tavern.push(...state.discard);
-  state.discard = [];
-  for (const q of state.players) {
+  const scope = state.rules.regroupScope;
+  // At its narrowest a Regroup resets nothing at all: the table simply takes a
+  // few cards from Le Peuple. No shuffle, La Prison untouched — a top-up rather
+  // than a fresh start, and a far smaller step than any reshuffle.
+  if (scope === 'draw') {
+    const drawn = shareDraw(state, playerIdx, state.rules.regroupDraw);
+    finishRegroup(state, p, `${p.name} calls the citoyens together — ${drawn} card${drawn === 1 ? '' : 's'} come up from Le Peuple`);
+    return state;
+  }
+  // La Prison empties back into Le Peuple for every scope but the narrowest,
+  // where a Regroup reaches no further than the caller's own hand.
+  if (scope !== 'caller') {
+    state.tavern.push(...state.discard);
+    state.discard = [];
+  }
+  // Whose hands go back. Only those who gave a hand up draw a fresh one.
+  const rejoining = scope === 'table' ? state.players : [p];
+  for (const q of rejoining) {
     state.tavern.push(...q.hand);
     q.hand = [];
   }
@@ -590,9 +634,24 @@ function applyRegroup(state, playerIdx) {
   for (let round = 0; round < state.handSize; round++) {
     for (let k = 0; k < state.players.length && state.tavern.length > 0; k++) {
       const q = state.players[(playerIdx + k) % state.players.length];
+      if (!rejoining.includes(q)) continue;
       if (q.hand.length < state.handSize) q.hand.push(state.tavern.pop());
     }
   }
+  const scopeTold = {
+    caller: `${p.name}'s hand returns to Le Peuple, shuffled, and is dealt afresh`,
+    callerAndPrison: `${p.name}'s hand and all of La Prison return to Le Peuple, shuffled, and a fresh hand is dealt`,
+    table: state.solo
+      ? 'Every card outside the fight returns to Le Peuple, shuffled'
+      : `${p.name} calls the table in: every hand and all of La Prison return to Le Peuple, shuffled, and fresh hands are dealt all round`,
+  }[scope];
+  finishRegroup(state, p, scopeTold);
+  return state;
+}
+
+// Spend the Regroup and see whether it was enough. Shared by every scope, so a
+// narrow Regroup and a wide one are accounted for and checked identically.
+function finishRegroup(state, p, told) {
   state.regroupsRemaining--;
   state.regroupsUsed++;
   state.actionSeq++;
@@ -600,10 +659,7 @@ function applyRegroup(state, playerIdx) {
   state.lastEffects = null;
   state.lastPlay = null;
   state.lastSacrifice = null;
-  const remaining = regroupsLeft(state);
-  log(state, state.solo
-    ? `Regroup! Every card outside the fight returns to Le Peuple, shuffled — ${p.name} draws ${p.hand.length} fresh. (${remaining} left)`
-    : `Regroup! ${p.name} calls the table in: every hand and all of La Prison return to Le Peuple, shuffled, and fresh hands are dealt all round. (${remaining} left)`);
+  log(state, `Regroup! ${told}. (${regroupsLeft(state)} left)`);
   if (state.phase === 'discard' && handValue(p) < state.pendingDamage) {
     state.phase = 'lost';
     state.result = { reason: `Even regrouped, you could not withstand ${state.pendingDamage} damage. The Revolution is crushed.` };
@@ -612,7 +668,6 @@ function applyRegroup(state, playerIdx) {
   } else if (state.phase === 'play') {
     checkTurnStart(state);
   }
-  return state;
 }
 
 // ---- l'Assemblée (the regroup vote) ----------------------------------------

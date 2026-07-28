@@ -1,7 +1,7 @@
 // La Constitution — the house-rules menu the host adopts before the Revolution.
 // One descriptor table drives the menu, the lobby badges and the help sheet, so
 // a rule is only ever named in one place.
-import { DEFAULT_RULES, resolveRules, rulebookFor } from '/shared/engine.js';
+import { DEFAULT_RULES, RULE_SPEC, resolveRules, rulebookFor } from '/shared/engine.js';
 
 const STORE_KEY = 'r1789_rules';
 
@@ -9,7 +9,32 @@ const STORE_KEY = 'r1789_rules';
 // which is what lets the host fill the menu in before anyone has joined.
 const counts = extra => [{ value: null, label: 'Défaut' }, ...extra.map(n => ({ value: n, label: String(n) }))];
 
-export const SETTINGS = [
+// Every rule the register knows how to describe. Which of them the menu
+// actually offers is decided by `exposed` in shared/rules.js — a rule can be
+// carried here indefinitely, tuned in simulation, and switched on for the table
+// by a single word there.
+const ALL_SETTINGS = [
+  {
+    key: 'difficulty',
+    label: 'Difficulté',
+    hint: 'How often the table may Regroup, and how much a Regroup gives. Alone, a Regroup throws your hand away and deals you a fresh one; at a table it deals every citoyen a few cards instead, so nobody loses a hand they were holding for a reason.',
+    slider: true,
+    options: [
+      { value: 'hard', label: 'Hard' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'easy', label: 'Easy' },
+    ],
+  },
+  {
+    key: 'drawOnVictory',
+    label: 'Spoils of Victory',
+    hint: 'Every citoyen draws a card when a royal falls, never past their hand limit. Taking the spoils away is the single hardest change on this page — harder than anything the Difficulté slider does.',
+    slider: true,
+    options: [
+      { value: 0, label: 'No' },
+      { value: 1, label: 'Yes' },
+    ],
+  },
   {
     key: 'regroups',
     label: 'Regroups',
@@ -35,10 +60,34 @@ export const SETTINGS = [
       { value: 1, label: '+1' },
     ],
   },
+  {
+    key: 'exactKillTo',
+    label: 'Exact kill',
+    hint: 'Where a royal felled to the last point goes: won over to the slayer’s own hand, or face down atop Le Peuple.',
+    slider: true,
+    options: [
+      { value: 'hand', label: 'To hand' },
+      { value: 'peuple', label: 'Le Peuple' },
+    ],
+  },
+  {
+    key: 'pamphleteerImmune',
+    label: 'The Pamphleteer’s protection',
+    hint: 'Whether the citoyen who unleashes the Pamphleteer escapes the reprisal, or takes the blow and still names who acts next.',
+    slider: true,
+    options: [
+      { value: true, label: 'Shielded' },
+      { value: false, label: 'Exposed' },
+    ],
+  },
 ];
 
-// Which engine table each "Défaut" option actually reads from.
-const RULEBOOK_KEYS = { regroups: 'regroups', pamphleteers: 'pamphleteers', handSizeDelta: 'handSize' };
+export const SETTINGS = ALL_SETTINGS.filter(s => RULE_SPEC[s.key]?.exposed);
+
+// Which engine table each "Défaut" option actually reads from. Only rules whose
+// default follows the size of the table belong here; the rest say what they mean
+// on the option itself.
+const RULEBOOK_KEYS = { pamphleteers: 'pamphleteers', handSizeDelta: 'handSize' };
 
 // Spell out what "Défaut" means at every table size, collapsing table sizes
 // that share a value into one run (1–2 → 2, 3–4 → 0). Derived from the engine
@@ -104,4 +153,22 @@ export function summarize(rules, playerCount) {
         standard: value === resolveRules(null, n)[s.key],
       };
     });
+}
+
+// The opening briefing is intentionally about the concrete game at hand, not
+// menu controls. It is the player-count column resolved after everyone sits.
+export function gameRulesSummary(rules, playerCount) {
+  const n = Math.min(4, Math.max(1, playerCount || 1));
+  const resolved = resolveRules(rules, n);
+  const regroup = n === 1
+    ? `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — discard and refill to ${rulebookFor(n).handSize + resolved.handSizeDelta}`
+    : `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — each citoyen draws ${resolved.regroupDraw}`;
+  return [
+    ['Hand limit', `${rulebookFor(n).handSize + resolved.handSizeDelta} cards`],
+    ['Pamphleteers', `${resolved.pamphleteers}, exposed, and alone`],
+    ['Regroup', regroup],
+    ['Spoils', resolved.drawOnVictory ? 'Each citoyen draws 1 after a royal falls' : 'None'],
+    ['Exact kill', resolved.exactKillTo === 'hand' ? 'The royal joins the slayer’s hand' : 'The royal returns to Le Peuple'],
+    ['Lay Low', n === 1 ? 'Unavailable alone' : 'Each citoyen may use it once per royal'],
+  ];
 }

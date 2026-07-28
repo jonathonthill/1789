@@ -202,9 +202,13 @@ function companionArt() {
     ${powerBox('CALL LES RENFORTS!', 'ADD 1 ATTACK', {
       fill: RED, stroke: GOLD, titleFill: '#fbf3dc', actionFill: '#fbf3dc', actionOpacity: '.85', titleSize: 16 })}`;
 }
-// Alone there is nobody to hand the floor to, so the card promises what it
-// actually delivers in that game: a strike the royal cannot answer.
-function pamphleteerArt({ solo = false } = {}) {
+// The card promises only what the rules in force actually deliver: alone there
+// is nobody to hand the floor to, and whether the royal answers depends on
+// whether the Pamphleteer is shielded.
+function pamphleteerArt({ solo = false, shielded = true } = {}) {
+  const second = solo
+    ? (shielded ? 'NO REPRISAL' : 'THEN THEY STRIKE')
+    : "CHOOSE WHO'S NEXT";
   return `
     <image href="/img/specials/pamphleteer.png" x="60" y="58" width="120" height="149"/>
     <rect x="17" y="239" width="206" height="80" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
@@ -213,7 +217,7 @@ function pamphleteerArt({ solo = false } = {}) {
     <text x="120" y="287" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
       font-family="${SERIF}" font-weight="700" letter-spacing=".3">SHATTERS IMMUNITY</text>
     <text x="120" y="306" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".3">${solo ? 'NO REPRISAL' : "CHOOSE WHO'S NEXT"}</text>`;
+      font-family="${SERIF}" font-weight="700" letter-spacing=".3">${second}</text>`;
 }
 
 export function cardSVG(card, opts = {}) {

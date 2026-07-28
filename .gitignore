@@ -38,3 +38,8 @@ Thumbs.db
 
 # Machine-local assistant settings; shared launch configuration stays tracked.
 .claude/settings.local.json
+
+# Balance-study raw sweep data — large, regenerable with scripts/sim/sweep.js.
+# The tuned bot weights and the written findings are kept.
+scripts/sim/results/*.json
+!scripts/sim/results/weights.json

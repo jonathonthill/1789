@@ -6,7 +6,8 @@ import { cardSVG, cardBackSVG } from '/js/cards.js';
 import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
-import { SETTINGS, loadRules, saveRules, summarize, rulebookRuns } from '/js/constitution.js';
+import { SETTINGS, gameRulesSummary, loadRules, saveRules, summarize, rulebookRuns } from '/js/constitution.js';
+import * as news from '/js/news.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -27,6 +28,7 @@ let animBusy = false;
 let pendingView = null;
 let lastHandCount = 0;       // "your" hand size as of the last processed view
 let lobbyCount = 2;          // citoyens in the salon, floored at 2 for rule display
+let dismissGameRules = null;
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
@@ -186,6 +188,18 @@ function sendAction(action, cb) {
 }
 
 // ── home ────────────────────────────────────────────────────────────────────
+// What changed since this citoyen last played — shown once, on the home screen,
+// before they pick a game. Cleared by reading it.
+function showRulesNews() {
+  if (!news.shouldShow()) return;
+  $('#rules-news-body').innerHTML = news.render();
+  $('#rules-news').hidden = false;
+}
+$('#rules-news-go').onclick = () => {
+  news.markSeen();
+  $('#rules-news').hidden = true;
+};
+
 function homeError(msg) { const el = $('#home-error'); el.textContent = msg; el.hidden = !msg; }
 function myName() {
   const n = $('#name-input').value.trim() || 'Citoyen';
@@ -212,14 +226,14 @@ function closeConstitution() { $('#constitution').hidden = true; constitutionCtx
 
 function renderConstitution() {
   const seats = constitutionCtx?.playerCount ?? 2;
-  $('#constitution-rules').innerHTML = SETTINGS
+  $('#constitution-rules').innerHTML = SETTINGS.length ? SETTINGS
     .map(s => `
       <div class="rule-row">
         <span class="rule-label">${esc(s.label)}</span>
         ${s.slider ? sliderControl(s) : buttonControl(s)}
         ${rulebookLine(s.key, seats)}
         <p class="rule-hint">${esc(s.hint)}</p>
-      </div>`).join('');
+      </div>`).join('') : `<p class="constitution-fixed-copy">The current Constitution is fixed for this ruleset. The exact table-size column will be shown when the Revolution begins.</p>`;
 }
 
 function buttonControl(s) {
@@ -398,6 +412,20 @@ $('#btn-edit-rules').onclick = () => openConstitution({
 $('#btn-start').onclick = () => net().emit('start', {}, res => {
   if (!res.ok) { $('#lobby-error').textContent = res.error; $('#lobby-error').hidden = false; }
 });
+
+function showGameRules(v, done) {
+  $('#game-rules-sub').textContent = `${v.playerCount} citoyen${v.playerCount === 1 ? '' : 's'} take to the streets under these rules.`;
+  $('#game-rules-list').innerHTML = gameRulesSummary(v.rules, v.playerCount)
+    .map(([label, value]) => `<li><b>${esc(label)}</b><span>${esc(value)}</span></li>`).join('');
+  dismissGameRules = done;
+  $('#game-rules').hidden = false;
+}
+$('#game-rules-go').onclick = () => {
+  $('#game-rules').hidden = true;
+  const done = dismissGameRules;
+  dismissGameRules = null;
+  done?.();
+};
 $('#btn-leave').onclick = () => {
   saveSession(null); session = null;
   socket?.disconnect(); socket = null;
@@ -529,7 +557,13 @@ function routeView(v) {
 
   if (freshGame) {
     audio.setScene('game'); // let the music carry straight through the cutscene
-    withAnim(done => playCutscene('begin', done), proceed);
+    // Let the opening flourish establish the scene first, then pause on the
+    // board with the exact table-size column before anyone can act.
+    withAnim(done => playCutscene('begin', () => {
+      show('game');
+      renderGame(v);
+      showGameRules(v, done);
+    }), proceed);
   } else {
     proceed();
   }
@@ -924,7 +958,7 @@ function renderHand(v, holdBack = 0) {
   hand.forEach((card, i) => {
     const el = document.createElement('div');
     el.className = 'hand-card';
-    el.innerHTML = cardSVG(card, { solo: !!v.solo });
+    el.innerHTML = cardSVG(card, { solo: !!v.solo, shielded: v.rules?.pamphleteerImmune !== false });
     el.dataset.card = engine.cardId(card); // lets the play animation find this card's on-screen origin
     if (card.s && card.s === immuneSuit) {
       el.classList.add('power-off');
@@ -1031,9 +1065,10 @@ function renderActions(v) {
   const left = v.regroupsRemaining ?? 0;
   regroup.hidden = !v.canRegroup || !myTurn;
   regroup.textContent = v.solo ? `Regroup (${left})` : `l'Assemblée (${left})`;
+  const drawn = v.rules?.regroupDraw ?? 3;
   regroup.title = v.solo
-    ? 'Shuffle everything outside the fight back into Le Peuple and draw a fresh hand'
-    : 'Move for a Regroup — the table votes, and every hand is dealt afresh';
+    ? 'Put your hand back into Le Peuple, shuffle, and draw a fresh one'
+    : `Move for a Regroup — the table votes, and every citoyen draws ${drawn} card${drawn === 1 ? '' : 's'}`;
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
   renderAssembly(v);
@@ -1045,9 +1080,10 @@ function renderAssembly(v) {
   $('#assembly').hidden = !a;
   if (!a) return;
   const mover = v.players[a.caller]?.name ?? 'A citoyen';
+  const draw = v.rules?.regroupDraw ?? 3;
   $('#assembly-motion').innerHTML =
-    `<strong>${esc(mover)}</strong> moves to Regroup — every hand and all of La Prison back into Le Peuple,
-     shuffled, and fresh hands dealt all round.
+    `<strong>${esc(mover)}</strong> moves to Regroup — ${draw} card${draw === 1 ? '' : 's'} from Le Peuple
+     to every citoyen, up to their limit.
      ${v.regroupsRemaining} remain${v.regroupsRemaining === 1 ? 's' : ''} in the pool.`;
   $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
     const answered = i === a.caller ? true : a.votes[i] !== undefined;
@@ -1595,6 +1631,7 @@ if (debugParams.has('win')) {
     tryRejoin(false);
   } else {
     show('home');
+    showRulesNews();
     if (session?.code) {
       const btn = $('#btn-resume');
       btn.innerHTML = `Rejoin salon ${esc(session.code)} <small>as ${esc(session.name ?? 'Citoyen')}</small>`;

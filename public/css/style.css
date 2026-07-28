@@ -122,9 +122,43 @@ input { user-select: text; -webkit-user-select: text; }
   border-color: var(--gold-hi);
 }
 
+.game-rules-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--parchment-deep); }
+.game-rules-list li {
+  display: grid; grid-template-columns: minmax(92px, .8fr) minmax(0, 1.5fr); gap: 10px;
+  padding: 9px 2px; border-bottom: 1px solid var(--parchment-deep); align-items: baseline;
+  font-family: var(--serif-fell); font-size: .92rem; line-height: 1.25;
+}
+.game-rules-list b { color: var(--royal); font-family: var(--serif-display); font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
+.game-rules-list span { color: var(--ink-soft); }
+
 .constitution-rules {
   display: flex; flex-direction: column; gap: 14px;
   overflow-y: auto; min-height: 0; padding: 2px;
+}
+.constitution-fixed-copy {
+  margin: 8px 2px 4px; padding: 14px 12px; text-align: center;
+  color: var(--ink-soft); font-family: var(--serif-fell); font-style: italic;
+  line-height: 1.45; background: var(--paper); border: 1px solid var(--parchment-deep);
+  border-radius: 9px;
+}
+
+/* The one-time notice of what has changed since a citoyen last played. */
+.news-body {
+  display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto; min-height: 0; padding: 2px 2px 4px;
+}
+.news-item {
+  background: var(--paper); border: 1px solid var(--parchment-deep);
+  border-radius: 8px; padding: 10px 12px;
+}
+.news-item h3 {
+  margin: 0 0 3px; font-family: var(--serif-display);
+  font-size: 15px; letter-spacing: .02em; color: var(--crimson);
+}
+.news-item p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-soft); }
+.news-foot {
+  margin: 0; font-size: 12.5px; line-height: 1.45;
+  color: var(--ink-soft); font-style: italic; text-align: center;
 }
 .rule-row {
   background: var(--paper); border: 1px solid var(--parchment-deep);

@@ -56,7 +56,7 @@ export function statusText(view, stagedCount) {
     if (!yourTurn) return `Waiting for <span class="em">${cur.name}</span> to attack or Lay Low.`;
     if (view.you.hand.length === 0) {
       if (view.canYield) return `You hold no cards. You must <span class="em">Lay Low</span>.`;
-      if (view.players.length === 1) return `You hold no cards. <span class="em">Regroup</span> to reshuffle Le Peuple back into play.`;
+      if (view.players.length === 1) return `You hold no cards. <span class="em">Regroup</span> to draw a fresh hand.`;
       return `You hold no cards. <span class="em">You cannot act…</span>`;
     }
     if (stagedCount > 0) return `Attack staged. Review the preview, then press <span class="em">Attaquez!</span>`;
@@ -75,7 +75,7 @@ export function cardInfo(card, view) {
   if (card.r === 'X') {
     html = `<h3>0✒ The Pamphleteer</h3>
       <p>Attack 0, played <b>alone</b>. His exposé <b>shatters the enemy's immunity</b> — suit powers matching the enemy's suit work from then on (even barricades already built).</p>
-      <p>You skip the enemy's counterattack and <b>choose any citoyen</b> (or yourself) to act next. Until they act, everyone may hint whether they want the floor — but never what they hold.</p>
+      <p>You then face the enemy's counterattack. If you survive, <b>choose any citoyen</b> (or yourself) to act next. Until they act, everyone may hint whether they want the floor — but never what they hold.</p>
       <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;
   } else if (card.r === 'A') {
     html = `<h3>${miniLabel(card)} Sans-Culotte</h3>
@@ -109,7 +109,7 @@ export function pileInfo(kind, view) {
   if (kind === 'tavern') {
     return `<h3>🥖 ${TERMS.tavern}</h3>
       <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally Le Peuple draws from it; ♦ Raid La Prison slips the freed and shuffled prisoners <i>under</i> it.</p>
-      <p>A <b>Regroup</b> pours everything outside the fight back in here — every hand and all of La Prison — to be shuffled and dealt out afresh.</p>
+      <p>A <b>Regroup</b> draws from here: alone it takes back your hand, shuffles, and deals you a fresh one; at a table it simply deals every citoyen a few cards.</p>
       <p>An empty deck is no defeat — you simply draw nothing.</p>`;
   }
   if (kind === 'discard') {
@@ -165,7 +165,7 @@ export function contextHelp(view) {
     play: `<p>Play one card, a legal same-number combo, or a Sans-Culotte pair, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value.</p>
       <p>Or <b>Lay Low</b>: skip the turn outright, taking no strike — once against each royal.${view.solo ? ' (Not offered alone.)' : ''} Fell a royal and you take no strike either; the <b>next citoyen</b> faces whoever steps up.</p>`,
     discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Sans-Culottes count 1, the Pamphleteer 0, captured royals 10 / 15 / 20.</p>`,
-    jesterChoose: `<p>A Pamphleteer shattered the royal's immunity and skipped their counterattack. Choose any citoyen — even yourself — to act next.</p>`,
+    jesterChoose: `<p>A Pamphleteer shattered the royal's immunity and its player survived the counterattack. Choose any citoyen — even yourself — to act next.</p>`,
     won: `<p><b>Vive la République!</b> Every royal has fallen.</p>`,
     lost: `<p><b>The Revolution has been crushed.</b></p>`,
   }[view.phase] ?? '';
@@ -178,7 +178,7 @@ export function contextHelp(view) {
       `Worth 1. Fights alone or pairs with exactly one other non-Pamphleteer card — even another Sans-Culotte. The pair's full value fires every represented suit power; never joins a same-number combo.`,
       hasSansCulotte)}
     ${specialGuide({ r: 'X', s: null }, 'The Pamphleteer',
-      `Played alone for 0. Shatters the royal's immunity, skips their counterattack, and lets you choose who acts next — even yourself.`,
+      `Worth 0. Fights alone, shatters the royal's immunity, takes the counterattack, and then lets you choose who acts next — even yourself.`,
       hasPamphleteer)}
     ${specialGuide({ r: 'J', s: 'H' }, 'Captured Royals',
       `A defeated Officer, Queen, or King you've recruited attacks at a fixed value — 10 / 15 / 20 — with its full suit power, and is worth the same if sacrificed.`,
@@ -231,7 +231,7 @@ export function projectionText(view, staged, pseudoState) {
   if (remaining === 0) {
     bits.push(`<b>exact — the royal joins your hand!</b>`);
   } else if (remaining < 0) bits.push(`<b>the guillotine awaits</b>`);
-  else if (p.isJester) bits.push('no reprisal — you choose who goes next');
+  else if (p.isJester) bits.push('immunity shattered — you choose who goes next');
   return bits.join(' · ');
 }
 
@@ -274,7 +274,7 @@ ${constitutionSection(view)}
 
     <h3 class="${here('turn')}">Your Turn</h3>
     <div class="help-turn-flow">
-      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em>.</span></div>
+      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
       <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
       <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine.</span></div>
       <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back, and the next citoyen faces their successor. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
@@ -306,7 +306,7 @@ ${constitutionSection(view)}
     <h3 class="${here('jester')}">The Pamphleteer</h3>
     <div class="help-example-row">
       <div class="help-example-cards help-single" aria-hidden="true">${helpCard({ r: 'X', s: null }, 'Pamphleteer')}</div>
-      <p>Play alone for attack 0 — he never takes a partner. The Pamphleteer shatters immunity, skips the counterattack, and lets you choose any citoyen—including yourself—to act next. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. By default one is shuffled into Le Peuple with 1–2 players and two with 3–4; La Constitution can set any number from none to three.</p>
+      <p>The Pamphleteer is worth 0 and fights <b>alone</b>. He shatters the royal's immunity but does not escape the reprisal: the royal strikes, and only then does he name who follows. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table.</p>
     </div>
 
     <h3>Defeating a Royal</h3>
@@ -332,7 +332,9 @@ ${constitutionSection(view)}
     <p>Never reveal or hint at what you hold. Public facts are fair game (“I have two cards,” “Le Peuple runs low”). After a Pamphleteer, you may say whether you would like to act next—nothing more.</p>
 
     <h3>Regroup</h3>
-    <p>A Regroup <b>resets the deck</b>: your hand, every other citoyen's hand, and all of ${TERMS.discard} go back into ${TERMS.tavern}, which is shuffled and dealt out afresh to everyone. Only the cards already committed against the current royal stay where they are. It may be called before attacking or while facing damage, and it does not shatter royal immunity.</p>
+    <p>A Regroup is the table's way of catching its breath. ${view?.solo
+      ? `Alone it is a fresh start: your hand goes back into ${TERMS.tavern}, which is shuffled, and you draw a full hand again.`
+      : `At a table every citoyen draws ${view?.rules?.regroupDraw ?? 3} card${(view?.rules?.regroupDraw ?? 3) === 1 ? '' : 's'} from ${TERMS.tavern} — nobody has to give up a hand they were keeping for a reason.`} It may be called before attacking or while facing damage, and it does not shatter royal immunity.</p>
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
     <p>You fight alone with ${view.handSize ?? 8} cards and the ${view.rules?.regroups ?? 2} Regroup${(view.rules?.regroups ?? 2) === 1 ? '' : 's'} La Constitution granted you — spent freely, with no Assemblée to convince. Finish having spent none for <b>Gold</b>, one for <b>Silver</b>, two for <b>Bronze</b>. Lay Low is not offered alone: there is no fellow citoyen for a skipped turn to help.</p>` : ''}
     ${view && !view.solo ? `<h3>l'Assemblée</h3>
@@ -350,9 +352,10 @@ function walkCard(card, label, className = '') {
 
 export function walkthroughSteps(view) {
   const left = view?.regroupsRemaining ?? 0;
+  const draw = view?.rules?.regroupDraw ?? 3;
   const regroupCopy = view?.solo
-    ? `A Regroup resets the deck: everything outside the fight returns to Le Peuple, shuffled, and you draw a fresh hand. You have ${left} left; La Constitution sets how many the game begins with.`
-    : `The table shares a pool of Regroups — ${left} left. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
+    ? `A Regroup is a fresh start: your hand goes back into Le Peuple, which is shuffled, and you draw a full hand again. You have ${left} left; La Constitution sets how many the game begins with.`
+    : `The table shares a pool of Regroups — ${left} left. Spending one deals every citoyen ${draw} card${draw === 1 ? '' : 's'}. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
 
   return [
     {
@@ -435,7 +438,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 2 continued · Immunity',
       title: 'Phase 2: Check the royal’s immunity',
       body: `<p>A royal is immune to the <b>power</b> of cards matching their suit, but those cards still deal their normal damage.</p>
-        <p>The <b>Pamphleteer</b> must be played alone for 0. It permanently shatters that royal's immunity, skips the counterattack, and lets its player choose who acts next. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. By default games use one with 1–2 players and two with 3–4. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
+        <p>The <b>Pamphleteer</b> is worth 0, fights alone, and permanently shatters that royal's immunity. The royal still strikes back; if the player survives, they choose who acts next. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
       stage: `<div class="walk-immunity">
         <div class="walk-immune-royal">${walkCard({ r: 'Q', s: 'H' }, 'immune to ♥')}</div>
         <div class="walk-immune-card">${walkCard({ r: 6, s: 'H' }, '6 damage · no draw')}<span class="walk-block">×</span></div>
@@ -474,12 +477,12 @@ export function walkthroughSteps(view) {
     {
       eyebrow: 'Your safety net',
       title: 'Regroup, read the status, ask for help',
-      body: `<p>${regroupCopy} It empties every hand and all of La Prison back into Le Peuple, and can be called before attacking or while suffering damage. It does not shatter immunity.</p>
+      body: `<p>${regroupCopy} It can be called before attacking or while suffering damage, and it does not shatter immunity.</p>
         <p>The status strip always tells you what happens next. Tap cards to stage an attack, or drag one sideways to reorder your hand. Tap a royal or a deck for details, or tap <b>? Help</b> any time for a quick reference on your hand and the current phase — plus a link to these full instructions.</p>`,
       stage: `<div class="walk-regroup">
-        <div class="walk-regroup-hand old-hand"><div class="walk-regroup-cards">${walkCard({ r: 2, s: 'D' }, '')}${walkCard({ r: 'A', s: 'C' }, '')}</div><strong>Every hand · La Prison</strong><small>back into Le Peuple</small></div>
+        <div class="walk-regroup-hand old-hand"><div class="walk-regroup-cards">${walkCard({ r: 2, s: 'D' }, '')}${walkCard({ r: 'A', s: 'C' }, '')}</div><strong>${view?.solo ? 'Your hand' : 'Le Peuple'}</strong><small>${view?.solo ? 'back into Le Peuple' : 'deals to everyone'}</small></div>
         <div class="walk-regroup-arrow"><span>↻</span><b>Regroup</b></div>
-        <div class="walk-regroup-hand new-hand"><div class="walk-regroup-cards">${walkCard({ r: 8, s: 'S' }, '')}${walkCard({ r: 10, s: 'H' }, '')}</div><strong>Fresh hands</strong><small>shuffled and redealt</small></div>
+        <div class="walk-regroup-hand new-hand"><div class="walk-regroup-cards">${walkCard({ r: 8, s: 'S' }, '')}${walkCard({ r: 10, s: 'H' }, '')}</div><strong>${view?.solo ? 'A fresh hand' : 'Cards all round'}</strong><small>${view?.solo ? 'shuffled and redealt' : 'nobody loses a card'}</small></div>
       </div><div class="walk-ready-status"><i></i><span>Your turn, citoyen. Tap cards to stage an attack.</span></div>`,
     },
   ];
