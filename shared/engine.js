@@ -1,6 +1,6 @@
 // Régicide 1789 — pure rules engine (rulebook-faithful Regicide).
 // Runs identically in Node (server-authoritative multiplayer) and the browser (solo).
-// Cards: { r, s } where r ∈ 2..10 | 'A' (Sans-Culotte) | 'J' | 'Q' | 'K' | 'X' (Pamphleteer, s=null)
+// Cards: { r, s } where r ∈ 2..10 | 'A' (Les Renforts) | 'J' | 'Q' | 'K' | 'X' (Pamphleteer, s=null)
 // Suits: 'S' | 'H' | 'D' | 'C'
 
 export const SUITS = ['S', 'H', 'D', 'C'];
@@ -132,7 +132,9 @@ function revealEnemy(state) {
   for (const p of state.players) p.laidLow = false;
 }
 
-export function enemyAttack(state) { return ENEMY_STATS[state.enemy.card.r].attack; }
+export function enemyAttack(state) {
+  return Math.max(0, ENEMY_STATS[state.enemy.card.r].attack + state.rules.royalStrikeBonus);
+}
 export function enemyHealth(state) { return ENEMY_STATS[state.enemy.card.r].health; }
 
 // Spades shield is dynamic: vs a Spades enemy, spade plays only count once the
@@ -194,8 +196,8 @@ export function validatePlay(state, playerIdx, cards) {
   if (cards.length === 1) return null;
   const companions = cards.filter(c => c.r === 'A').length;
   if (companions > 0) {
-    if (cards.length === 2) return null; // Sans-Culotte + any one card (or two Sans-Culottes)
-    return 'A Sans-Culotte may join only one other card.';
+    if (cards.length === 2) return null; // Les Renforts + any one card (or two Renforts)
+    return 'Les Renforts may join only one other card.';
   }
   // Combo: 2-4 of the same numeric rank, with a combined value of at most 20.
   const r = cards[0].r;
@@ -404,7 +406,10 @@ function defeatEnemy(state, playerIdx) {
     log(state, 'The last King is dead. Vive la République!');
     return;
   }
-  claimSpoils(state, playerIdx);
+  // A royal won over by exact damage is the slayer's spoil, not a bonus on
+  // top of it. Other citoyens still receive their normal share. With the
+  // standard one-spoil rule this means solo receives only the captured royal.
+  claimSpoils(state, playerIdx, toHand ? 1 : 0);
   // A royal felled to the last point is laid on Le Peuple only once the spoils
   // have been gathered from it — otherwise the table would simply draw them
   // straight back, and the rule would mean nothing.
@@ -421,11 +426,16 @@ function defeatEnemy(state, playerIdx) {
 // Deal a share of Le Peuple round the table, never past anyone's hand limit,
 // starting from one citoyen so a Peuple too thin to pay everyone still spreads
 // what is left rather than emptying by seat.
-function shareDraw(state, fromIdx, share) {
+function shareDraw(state, fromIdx, share, credits = 0) {
   let drawn = 0;
   for (let round = 0; round < share; round++) {
     for (let k = 0; k < state.players.length && state.tavern.length > 0; k++) {
-      const q = state.players[(fromIdx + k) % state.players.length];
+      const idx = (fromIdx + k) % state.players.length;
+      // A captured royal has already paid this many rounds of the slayer's
+      // spoil. The credit applies only to them; it does not reduce anyone
+      // else's draw.
+      if (idx === fromIdx && round < credits) continue;
+      const q = state.players[idx];
       if (q.hand.length < state.handSize) { q.hand.push(state.tavern.pop()); drawn++; }
     }
   }
@@ -433,8 +443,8 @@ function shareDraw(state, fromIdx, share) {
 }
 
 // Les Dépouilles: a fallen royal leaves the streets richer.
-function claimSpoils(state, playerIdx) {
-  const drawn = shareDraw(state, playerIdx, state.rules.drawOnVictory);
+function claimSpoils(state, playerIdx, slayerCredits = 0) {
+  const drawn = shareDraw(state, playerIdx, state.rules.drawOnVictory, slayerCredits);
   if (drawn) log(state, `The spoils are shared — the citoyens take up ${drawn} card${drawn === 1 ? '' : 's'}.`);
 }
 

@@ -6,7 +6,7 @@ import { cardSVG, cardBackSVG } from '/js/cards.js';
 import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
-import { SETTINGS, gameRulesSummary, loadRules, saveRules, summarize, rulebookRuns } from '/js/constitution.js';
+import { SETTINGS, loadRules, saveRules, settingHelp, summarize, rulebookRuns } from '/js/constitution.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -27,7 +27,6 @@ let animBusy = false;
 let pendingView = null;
 let lastHandCount = 0;       // "your" hand size as of the last processed view
 let lobbyCount = 2;          // citoyens in the salon, floored at 2 for rule display
-let dismissGameRules = null;
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
@@ -219,7 +218,7 @@ function renderConstitution() {
         <span class="rule-label">${esc(s.label)}</span>
         ${s.slider ? sliderControl(s) : buttonControl(s)}
         ${rulebookLine(s.key, seats)}
-        <p class="rule-hint">${esc(s.hint)}</p>
+        ${settingHelp(s)}
       </div>`).join('') : `<p class="constitution-fixed-copy">The current Constitution is fixed for this ruleset. The exact table-size column will be shown when the Revolution begins.</p>`;
 }
 
@@ -242,10 +241,12 @@ function sliderControl(s) {
   // stop dots and their labels are placed on that same inset track rather than
   // on evenly divided columns — otherwise the outer two would never line up.
   const at = i => `left:calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${(i / last).toFixed(4)})`;
-  return `<div class="rule-slider" data-key="${s.key}">
+  const difficulty = s.key === 'difficulty';
+  return `<div class="rule-slider${difficulty ? ' difficulty-slider' : ''}" data-key="${s.key}">
     <div class="rule-track">
       <span class="rule-track-line" aria-hidden="true"></span>
       ${s.options.map((_, i) => `<span class="rule-stop" style="${at(i)}" aria-hidden="true"></span>`).join('')}
+      ${difficulty ? `<span class="difficulty-cockade" style="${at(idx)}" aria-hidden="true"><i></i></span>` : ''}
       <input type="range" class="rule-range" min="0" max="${last}" step="1"
              value="${idx}" aria-label="${esc(s.label)}">
     </div>
@@ -254,7 +255,7 @@ function sliderControl(s) {
         // The two end labels are flush with the row's text column rather than
         // centred on their dot, which would hang them past the card's edge —
         // "Défaut" is far wider than the half-thumb of track it sits above.
-        const edge = i === 0 ? ' at-start' : (i === last ? ' at-end' : '');
+        const edge = difficulty ? '' : (i === 0 ? ' at-start' : (i === last ? ' at-end' : ''));
         return `<button type="button" class="rule-tick${i === idx ? ' on' : ''}${edge}"
           style="${edge ? '' : at(i)}" data-idx="${i}">${esc(o.label)}</button>`;
       }).join('')}
@@ -293,6 +294,11 @@ function setRule(key, idx) {
   const row = $(`.rule-slider[data-key="${key}"]`);
   row.querySelector('.rule-range').value = idx;
   row.querySelectorAll('.rule-tick').forEach((t, i) => t.classList.toggle('on', i === idx));
+  const cockade = row.querySelector('.difficulty-cockade');
+  if (cockade) {
+    const last = setting.options.length - 1;
+    cockade.style.left = `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${(idx / last).toFixed(4)})`;
+  }
 }
 
 $('#constitution-rules').onclick = e => {
@@ -400,19 +406,6 @@ $('#btn-start').onclick = () => net().emit('start', {}, res => {
   if (!res.ok) { $('#lobby-error').textContent = res.error; $('#lobby-error').hidden = false; }
 });
 
-function showGameRules(v, done) {
-  $('#game-rules-sub').textContent = `${v.playerCount} citoyen${v.playerCount === 1 ? '' : 's'} take to the streets under these rules.`;
-  $('#game-rules-list').innerHTML = gameRulesSummary(v.rules, v.playerCount)
-    .map(([label, value]) => `<li><b>${esc(label)}</b><span>${esc(value)}</span></li>`).join('');
-  dismissGameRules = done;
-  $('#game-rules').hidden = false;
-}
-$('#game-rules-go').onclick = () => {
-  $('#game-rules').hidden = true;
-  const done = dismissGameRules;
-  dismissGameRules = null;
-  done?.();
-};
 $('#btn-leave').onclick = () => {
   saveSession(null); session = null;
   socket?.disconnect(); socket = null;
@@ -544,12 +537,13 @@ function routeView(v) {
 
   if (freshGame) {
     audio.setScene('game'); // let the music carry straight through the cutscene
-    // Let the opening flourish establish the scene first, then pause on the
-    // board with the exact table-size column before anyone can act.
+    // Let the opening flourish establish the scene, then move straight to the
+    // board. The exact table rules remain available at the bottom of contextual
+    // help without interrupting every new game.
     withAnim(done => playCutscene('begin', () => {
       show('game');
       renderGame(v);
-      showGameRules(v, done);
+      done();
     }), proceed);
   } else {
     proceed();
@@ -682,15 +676,16 @@ function wonOverTo(v, ev) {
 
 function setEnemyBarsForCard(card, hp, atk) {
   const stats = engine.ENEMY_STATS[card.r];
+  const maxAttack = Math.max(0, stats.attack + (view?.rules?.royalStrikeBonus ?? 0));
   const hpRatio = hp / stats.health;
   const hpWrap = $('.hp-wrap');
   $('#hp-bar').style.width = `${hpRatio * 100}%`;
   $('#hp-text').textContent = `${hp} / ${stats.health}`;
   hpWrap.classList.toggle('low', hpRatio <= .5);
   hpWrap.classList.toggle('critical', hpRatio <= .25);
-  const atkRatio = stats.attack > 0 ? atk / stats.attack : 0;
+  const atkRatio = maxAttack > 0 ? atk / maxAttack : 0;
   $('#strike-bar').style.width = `${atkRatio * 100}%`;
-  $('#strike-text').textContent = `${atk} / ${stats.attack}`;
+  $('#strike-text').textContent = `${atk} / ${maxAttack}`;
 }
 
 function animateKillingBlow(v, prevHandCount, done) {

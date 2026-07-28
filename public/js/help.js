@@ -3,7 +3,7 @@
 import { SUIT_META, TERMS, enemyMeta, suitPowerLine } from '/shared/theme.js';
 import { cardSVG, cardBackSVG, miniLabel } from '/js/cards.js';
 import { cardValue, previewPlay } from '/shared/engine.js';
-import { summarize } from '/js/constitution.js';
+import { gameRulesSummary, summarize } from '/js/constitution.js';
 
 const RANKS = { J: 'Officer', Q: 'Queen', K: 'King' };
 
@@ -78,8 +78,8 @@ export function cardInfo(card, view) {
       <p>You then face the enemy's counterattack. If you survive, <b>choose any citoyen</b> (or yourself) to act next. Until they act, everyone may hint whether they want the floor — but never what they hold.</p>
       <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;
   } else if (card.r === 'A') {
-    html = `<h3>${miniLabel(card)} Sans-Culotte</h3>
-      <p>Worth <b>1</b>. May fight alone or join exactly one other non-Pamphleteer card (even another Sans-Culotte). The pair's full value fuels every suit power.</p>
+    html = `<h3>${miniLabel(card)} Les Renforts</h3>
+      <p>Worth <b>1</b>. May fight alone or join exactly one other non-Pamphleteer card (even another Renfort). The pair's full value fuels every suit power.</p>
       <p>${suitPowerLine(card.s)}</p>
       <p>Cannot join a same-number combo.</p>`;
   } else if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
@@ -149,7 +149,7 @@ export function enemyInfo(view) {
 }
 
 // ── the "?" quick-help sheet: always the same seven card tiles (four suits,
-// Sans-Culotte, Pamphleteer, captured royals) plus the turn phase and all
+// Les Renforts, Pamphleteer, captured royals) plus the turn phase and all
 // four decks — whatever's actually in the player's hand just gets a
 // brighter border. Replaces hand-card long-press entirely (it was fighting
 // drag-detection for the same gesture, especially on touch); nothing needs
@@ -157,14 +157,14 @@ export function enemyInfo(view) {
 export function contextHelp(view) {
   const hand = view.you?.hand ?? [];
   const heldSuits = new Set(hand.filter(c => c.s).map(c => c.s));
-  const hasSansCulotte = hand.some(c => c.r === 'A');
+  const hasRenforts = hand.some(c => c.r === 'A');
   const hasPamphleteer = hand.some(c => c.r === 'X');
   const hasCapturedRoyal = hand.some(c => c.r === 'J' || c.r === 'Q' || c.r === 'K');
 
   const phaseCopy = {
-    play: `<p>Play one card, a legal same-number combo, or a Sans-Culotte pair, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value.</p>
+    play: `<p>Play one card, a legal same-number combo, or a Les Renforts pair, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value.</p>
       <p>Or <b>Lay Low</b>: skip the turn outright, taking no strike — once against each royal.${view.solo ? ' (Not offered alone.)' : ''} Fell a royal and you take no strike either; the <b>next citoyen</b> faces whoever steps up.</p>`,
-    discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Sans-Culottes count 1, the Pamphleteer 0, captured royals 10 / 15 / 20.</p>`,
+    discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Les Renforts count 1, the Pamphleteer 0, captured royals 10 / 15 / 20.</p>`,
     jesterChoose: `<p>A Pamphleteer shattered the royal's immunity and its player survived the counterattack. Choose any citoyen — even yourself — to act next.</p>`,
     won: `<p><b>Vive la République!</b> Every royal has fallen.</p>`,
     lost: `<p><b>The Revolution has been crushed.</b></p>`,
@@ -174,9 +174,9 @@ export function contextHelp(view) {
   // leaving a lonely half-empty row — see .help-power-grid.ref-grid.
   const cardsSection = `<h3>Card Reference</h3><div class="help-power-grid ref-grid">
     ${['H', 'D', 'C', 'S'].map(s => powerGuide(s, heldSuits.has(s))).join('')}
-    ${specialGuide({ r: 'A', s: 'S' }, 'Sans-Culotte',
-      `Worth 1. Fights alone or pairs with exactly one other non-Pamphleteer card — even another Sans-Culotte. The pair's full value fires every represented suit power; never joins a same-number combo.`,
-      hasSansCulotte)}
+    ${specialGuide({ r: 'A', s: 'S' }, 'Les Renforts',
+      `Worth 1. Fights alone or pairs with exactly one other non-Pamphleteer card — even another Renfort. The pair's full value fires every represented suit power; never joins a same-number combo.`,
+      hasRenforts)}
     ${specialGuide({ r: 'X', s: null }, 'The Pamphleteer',
       `Worth 0. Fights alone, shatters the royal's immunity, takes the counterattack, and then lets you choose who acts next — even yourself.`,
       hasPamphleteer)}
@@ -193,11 +193,18 @@ export function contextHelp(view) {
     <div><dt>In Play</dt><dd>${playedCount} card${playedCount === 1 ? '' : 's'} committed against the current royal.</dd></div>
   </dl>`;
 
+  const rulesSection = view?.rules
+    ? `<h3>Rules of This Revolution</h3>
+      <dl class="help-decks help-rules-list">${gameRulesSummary(view.rules, view.playerCount)
+        .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`
+    : '';
+
   return `
     <h2>Right now</h2>
     ${phaseCopy}
     ${cardsSection}
     ${decksSection}
+    ${rulesSection}
     <button class="help-walkthrough-link" type="button" data-open-full-help>
       <span class="help-walkthrough-icon" aria-hidden="true">📖</span>
       <span><b>Full instructions</b><small>The complete rulebook</small></span>
@@ -274,7 +281,7 @@ ${constitutionSection(view)}
 
     <h3 class="${here('turn')}">Your Turn</h3>
     <div class="help-turn-flow">
-      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Sans-Culotte pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
+      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Les Renforts pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
       <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
       <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine.</span></div>
       <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back, and the next citoyen faces their successor. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
@@ -286,10 +293,10 @@ ${constitutionSection(view)}
     <p class="help-rule-note"><b>Immunity:</b> each royal blocks the power of their own suit—the crossed-out suit on affected cards—but their damage still counts. A Pamphleteer shatters that immunity for the rest of the fight.</p>
 
     <h3 class="${here('discard')}">Suffering Damage</h3>
-    <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Sans-Culottes are worth 1, Pamphleteers 0, and captured royals 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
+    <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Les Renforts are worth 1, Pamphleteers 0, and captured royals 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
     <p><b>Lay Low:</b> skip your turn outright — you make no attack, and the royal finds nobody to strike. Each citoyen may lie low <b>once against each royal</b>; the right returns when the next royal steps up. It is a multiplayer option only, since alone there is no one for a skipped turn to help.</p>
 
-    <h3>Combos & Sans-Culottes</h3>
+    <h3>Combos & Les Renforts</h3>
     <div class="help-example-row">
       <div class="help-example-cards" aria-hidden="true">
         ${helpCard({ r: 3, s: 'H' }, '3♥')}${helpCard({ r: 3, s: 'D' }, '3♦')}${helpCard({ r: 3, s: 'C' }, '3♣')}
@@ -298,9 +305,9 @@ ${constitutionSection(view)}
     </div>
     <div class="help-example-row">
       <div class="help-example-cards help-pair" aria-hidden="true">
-        ${helpCard({ r: 'A', s: 'S' }, 'Sans-Culotte')}${helpCard({ r: 8, s: 'H' }, '8♥')}
+        ${helpCard({ r: 'A', s: 'S' }, 'Les Renforts')}${helpCard({ r: 8, s: 'H' }, '8♥')}
       </div>
-      <p><b>Sans-Culotte:</b> may fight alone or pair with one non-Pamphleteer card (including another Sans-Culotte), but cannot join a combo. Add 1 to the pair's value and fire every represented suit power.</p>
+      <p><b>Les Renforts:</b> may fight alone or pair with one non-Pamphleteer card (including another Renfort), but cannot join a combo. Add 1 to the pair's value and fire every represented suit power.</p>
     </div>
 
     <h3 class="${here('jester')}">The Pamphleteer</h3>
@@ -318,7 +325,7 @@ ${constitutionSection(view)}
         <span class="help-arrow">→</span>
         <span class="help-deck">${cardBackSVG()}<small>your hand</small></span>
       </div>
-      <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand, ready to fight at full value. <b>Overkill:</b> the royal goes to ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
+      <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand as their spoil—no extra spoil card is drawn. <b>Overkill:</b> the royal goes to ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
     </div>
 
     <h3>The Three Decks</h3>
@@ -415,11 +422,11 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 1 of 4 · Attack',
       title: 'Phase 1: Choose one legal attack',
       body: `<p>Play any single card. Or combine <b>2–4 numbered cards of the same rank</b> if their total is at most 20. Every suit in a combo fires at the full total.</p>
-        <p>A <b>Sans-Culotte</b> is worth 1 and may pair with exactly one non-Pamphleteer card—even another Sans-Culotte—but never joins a numbered combo. Stage your choice and press <b>Attaquez!</b> <b>Next: Phase 2 — Resolve Powers.</b></p>`,
+        <p><b>Les Renforts</b> is worth 1 and may pair with exactly one non-Pamphleteer card—even another Renfort—but never joins a numbered combo. Stage your choice and press <b>Attaquez!</b> <b>Next: Phase 2 — Resolve Powers.</b></p>`,
       stage: `<div class="walk-play-examples">
         <div><span>single</span><div>${walkCard({ r: 8, s: 'S' }, 'value 8')}</div></div>
         <div><span>same-rank combo</span><div>${walkCard({ r: 3, s: 'H' }, '')}${walkCard({ r: 3, s: 'D' }, '')}${walkCard({ r: 3, s: 'C' }, 'total 9')}</div></div>
-        <div><span>Sans-Culotte pair</span><div>${walkCard({ r: 'A', s: 'S' }, '1')}${walkCard({ r: 8, s: 'H' }, '8 · total 9')}</div></div>
+        <div><span>Les Renforts pair</span><div>${walkCard({ r: 'A', s: 'S' }, '1')}${walkCard({ r: 8, s: 'H' }, '8 · total 9')}</div></div>
       </div>`,
     },
     {
@@ -458,7 +465,7 @@ export function walkthroughSteps(view) {
     {
       eyebrow: 'Phase 4 of 4 · Respond',
       title: 'Phase 4: Survive the counterattack',
-      body: `<p>Subtract all active Spade barricades from the royal's attack. Sacrifice cards from your hand totaling <b>at least</b> the damage left: Sans-Culottes are 1, Pamphleteers 0, and recruited royals 10 / 15 / 20.</p>
+      body: `<p>Subtract all active Spade barricades from the royal's attack. Sacrifice cards from your hand totaling <b>at least</b> the damage left: Les Renforts are 1, Pamphleteers 0, and recruited royals 10 / 15 / 20.</p>
         <p>You may <b>Lay Low</b> instead: no attack, and no counterattack either — but only <b>once against each royal</b>, and never in solo, where there is no one else for a skipped turn to help. It is the way out for a citoyen handed a fresh royal on an empty hand. Once you survive, the next turn begins again at <b>Phase 1 — Attack.</b></p>`,
       stage: `<div class="walk-damage-math"><span class="hit">10 attack</span><i>−</i><span class="shield">4 barricade</span><i>=</i><span class="damage">6 damage</span></div>
         <div class="walk-sacrifice">${walkCard({ r: 2, s: 'H' }, '')}${walkCard({ r: 4, s: 'D' }, '')}<span>6 sacrificed ✓</span></div>

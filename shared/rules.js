@@ -15,12 +15,12 @@
 
 export const HAND_SIZE = { 1: 8, 2: 6, 3: 5, 4: 5 };
 
-// La Constitution offers one difficulty. It moves both the number of Regroups
-// and the size of a shared refill, while preserving the table-size ladder.
+// La Constitution offers one difficulty. It changes how hard every royal
+// strikes while leaving the rest of the rules stable and teachable.
 export const DIFFICULTY = {
-  hard: { regroups: { 1: 1, 2: 0, 3: 1, 4: 1 }, regroupDraw: { 1: 2, 2: 1, 3: 2, 4: 2 } },
-  medium: { regroups: { 1: 2, 2: 1, 3: 2, 4: 2 }, regroupDraw: { 1: 3, 2: 2, 3: 3, 4: 3 } },
-  easy: { regroups: { 1: 3, 2: 2, 3: 3, 4: 3 }, regroupDraw: { 1: 4, 2: 3, 3: 4, 4: 4 } },
+  hard: { royalStrikeBonus: { 1: 2, 2: 2, 3: 2, 4: 2 } },
+  medium: { royalStrikeBonus: { 1: 0, 2: 0, 3: 0, 4: 0 } },
+  easy: { royalStrikeBonus: { 1: -2, 2: -2, 3: -2, 4: -2 } },
 };
 
 export const RULE_SPEC = {
@@ -29,9 +29,7 @@ export const RULE_SPEC = {
     label: 'Difficulté',
     values: ['hard', 'medium', 'easy'],
     default: 'medium',
-    // Kept in the register for future tuning, but intentionally not offered in
-    // La Constitution until the table-size effects are better matched.
-    exposed: false,
+    exposed: true,
   },
   // Les Dépouilles — cards every citoyen draws when a royal falls, never past
   // their hand limit. Worth more than the whole difficulty slider at a small
@@ -49,7 +47,7 @@ export const RULE_SPEC = {
   regroups: {
     label: 'Regroups',
     values: [0, 1, 2, 3],
-    fromDifficulty: true,
+    bySize: { 1: 2, 2: 1, 3: 2, 4: 2 },
     exposed: false,
   },
   // How many cards each citoyen takes when a Regroup is a shared draw rather
@@ -59,6 +57,14 @@ export const RULE_SPEC = {
   regroupDraw: {
     label: 'Cards a Regroup draws',
     values: [1, 2, 3, 4],
+    bySize: { 1: 3, 2: 2, 3: 3, 4: 3 },
+    exposed: false,
+  },
+  // Added to the base strike of every royal. Kept as an engine rule so the
+  // simulator can tune the three difficulty stops against the real game.
+  royalStrikeBonus: {
+    label: 'Royal power',
+    values: [-6, -4, -2, 0, 2, 4, 6],
     fromDifficulty: true,
     exposed: false,
   },

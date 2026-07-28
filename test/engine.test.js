@@ -4,7 +4,7 @@ import {
   newGame, playCards, yieldTurn, discardForDamage, chooseNext, regroup,
   surrenderGame, callAssembly, castVote, syncAssembly,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
-  currentShield, effectiveEnemyAttack, cardValue, resolveRules,
+  currentShield, enemyAttack, effectiveEnemyAttack, cardValue, resolveRules,
 } from '../shared/engine.js';
 
 const names2 = ['Danton', 'Robespierre'];
@@ -587,10 +587,10 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
 
 // ---- La Constitution (house rules) -----------------------------------------
 
-test('rules resolve from partial and hostile input; the difficulty sets what it governs', () => {
+test('rules resolve from partial and hostile input; difficulty sets royal power', () => {
   const medium = {
     difficulty: 'medium', drawOnVictory: 1, regroups: 2, regroupDraw: 3,
-    regroupScope: 'draw', handSizeDelta: 0, pamphleteers: 2,
+    royalStrikeBonus: 0, regroupScope: 'draw', handSizeDelta: 0, pamphleteers: 2,
     exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: false,
   };
   assert.deepEqual(resolveRules(null, 3), medium);
@@ -606,17 +606,21 @@ test('rules resolve from partial and hostile input; the difficulty sets what it 
     'four citoyens gain the third Pamphleteer',
   );
 
-  // The difficulty is the only thing that sets Regroups and their draw.
+  // Difficulty changes royal power without moving the Regroup rules.
   assert.deepEqual(
     resolveRules({ difficulty: 'hard' }, 3),
-    { ...medium, difficulty: 'hard', regroups: 1, regroupDraw: 2 },
+    { ...medium, difficulty: 'hard', royalStrikeBonus: 2 },
   );
   assert.deepEqual(
     resolveRules({ difficulty: 'easy' }, 3),
-    { ...medium, difficulty: 'easy', regroups: 3, regroupDraw: 4 },
+    { ...medium, difficulty: 'easy', royalStrikeBonus: -2 },
   );
-  // ...unless something names them outright, which is how the study sweeps them.
-  assert.equal(resolveRules({ difficulty: 'easy', regroups: 0 }, 3).regroups, 0);
+  // The study may still name the underlying value directly.
+  assert.equal(resolveRules({ difficulty: 'easy', royalStrikeBonus: 4 }, 3).royalStrikeBonus, 4);
+  const hardGame = newGame(names2, { seed: 501, rules: { difficulty: 'hard' } });
+  const easyGame = newGame(names2, { seed: 501, rules: { difficulty: 'easy' } });
+  assert.equal(enemyAttack(hardGame), 12, 'Hard adds two to an Officer’s strike');
+  assert.equal(enemyAttack(easyGame), 8, 'Easy removes two from an Officer’s strike');
 
   const wild = resolveRules({ regroups: 99, pamphleteers: -5, handSizeDelta: 7 }, 2);
   assert.equal(wild.regroups, 3);
@@ -709,6 +713,28 @@ test('the Spoils of Victory deal every citoyen a share, never past the hand limi
   playCards(full, 0, [{ r: 10, s: 'S' }, { r: 10, s: 'C' }]);
   assert.equal(full.players[1].hand.length, full.handSize, 'a full hand draws nothing');
   assert.equal(full.tavern.length, before - 2, 'only the emptied slayer draws');
+});
+
+test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
+  const s = newGame(names3, { seed: 164, rules: { drawOnVictory: 1 } });
+  rig(s, {
+    hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'D' }], [], []],
+    enemy: { r: 'J', s: 'D' },
+  });
+  const before = s.tavern.length;
+  playCards(s, 0, [{ r: 10, s: 'S' }, { r: 10, s: 'D' }]);
+  assert.ok(s.players[0].hand.some(c => c.r === 'J' && c.s === 'D'), 'the royal pays the slayer’s share');
+  assert.equal(s.players[0].hand.length, 1, 'the slayer draws no extra spoil');
+  assert.equal(s.players[1].hand.length, 1, 'the next citoyen still receives a spoil');
+  assert.equal(s.players[2].hand.length, 1, 'the last citoyen still receives a spoil');
+  assert.equal(s.tavern.length, before - 2, 'only the other two shares come from Le Peuple');
+
+  const solo = newGame(['Citoyen'], { seed: 165, rules: { drawOnVictory: 1 } });
+  rig(solo, { hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'D' }]], enemy: { r: 'J', s: 'D' } });
+  const soloBefore = solo.tavern.length;
+  playCards(solo, 0, [{ r: 10, s: 'S' }, { r: 10, s: 'D' }]);
+  assert.equal(solo.players[0].hand.length, 1, 'solo receives the royal and nothing else');
+  assert.equal(solo.tavern.length, soloBefore, 'solo takes no extra card from Le Peuple');
 });
 
 test('an unprotected Pamphleteer suffers the blow, then still names who takes the floor', () => {

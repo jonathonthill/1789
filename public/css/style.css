@@ -122,15 +122,6 @@ input { user-select: text; -webkit-user-select: text; }
   border-color: var(--gold-hi);
 }
 
-.game-rules-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--parchment-deep); }
-.game-rules-list li {
-  display: grid; grid-template-columns: minmax(92px, .8fr) minmax(0, 1.5fr); gap: 10px;
-  padding: 9px 2px; border-bottom: 1px solid var(--parchment-deep); align-items: baseline;
-  font-family: var(--serif-fell); font-size: .92rem; line-height: 1.25;
-}
-.game-rules-list b { color: var(--royal); font-family: var(--serif-display); font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
-.game-rules-list span { color: var(--ink-soft); }
-
 .constitution-rules {
   display: flex; flex-direction: column; gap: 14px;
   overflow-y: auto; min-height: 0; padding: 2px;
@@ -226,10 +217,84 @@ input { user-select: text; -webkit-user-select: text; }
 /* Flush with the row's text column, so no label hangs past the card's edge. */
 .rule-tick.at-start { left: 0; transform: none; padding-left: 0; }
 .rule-tick.at-end { right: 0; transform: none; padding-right: 0; }
+
+/* Difficulté gets a French tricolour cockade instead of the generic dot. The
+   real range input remains on top, transparent, so mouse, touch and keyboard
+   behavior stay native and accessible. */
+.difficulty-slider { --thumb: 42px; }
+.difficulty-slider .rule-track { height: 72px; }
+.difficulty-slider .rule-range { z-index: 3; }
+.difficulty-slider .rule-range::-webkit-slider-thumb {
+  width: var(--thumb); height: var(--thumb);
+  background: transparent; box-shadow: none;
+}
+.difficulty-slider .rule-range::-moz-range-thumb {
+  width: var(--thumb); height: var(--thumb);
+  background: transparent; box-shadow: none;
+}
+.difficulty-cockade {
+  position: absolute; z-index: 2; top: 15px;
+  width: 42px; height: 56px; transform: translateX(-50%);
+  transition: left .18s ease;
+}
+.difficulty-cockade i {
+  position: absolute; z-index: 2; inset: 0 auto auto 0;
+  display: block; width: 42px; height: 42px;
+  border-radius: 48% 52% 46% 54% / 51% 47% 53% 49%;
+  background:
+    repeating-conic-gradient(from 2deg, rgba(255,255,255,.14) 0 7deg, rgba(8,10,25,.12) 7deg 14deg),
+    radial-gradient(circle, #182766 0 27%, #fffdf5 28% 52%, #d11f35 53% 79%, #a91529 80% 100%);
+  box-shadow: 0 2px 5px rgba(20,12,8,.38), inset 0 0 0 1px rgba(40,25,15,.12);
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.25));
+}
+.difficulty-cockade::before,
+.difficulty-cockade::after {
+  content: ''; position: absolute; z-index: 1; top: 31px;
+  width: 11px; height: 23px;
+  background: linear-gradient(90deg, #182766 0 33%, #fffdf5 34% 66%, #d11f35 67%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+  box-shadow: 0 2px 2px rgba(20,12,8,.2);
+}
+.difficulty-cockade::before { left: 8px; transform: rotate(11deg); transform-origin: top center; }
+.difficulty-cockade::after { right: 8px; transform: rotate(-11deg); transform-origin: top center; }
+.difficulty-slider .rule-tick.on { color: var(--royal); }
+.difficulty-slider:has(.rule-range:focus-visible) .difficulty-cockade {
+  filter: drop-shadow(0 0 2px var(--gold));
+}
+
 .rule-hint {
   font-family: var(--serif-fell); font-style: italic; color: var(--ink-soft);
   font-size: .82rem; line-height: 1.35; margin: 7px 0 2px;
 }
+.power-hint { margin: 10px 0 7px; text-align: center; }
+.royal-power-table {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  color: var(--ink-soft); font-variant-numeric: tabular-nums;
+  font-family: var(--serif-fell); font-size: .78rem;
+  background: rgba(255,255,255,.26);
+  border: 1px solid var(--parchment-deep); border-radius: 7px;
+  overflow: hidden;
+}
+.royal-power-table th,
+.royal-power-table td {
+  padding: 5px 7px; text-align: center;
+  border-right: 1px solid var(--parchment-deep);
+  border-bottom: 1px solid var(--parchment-deep);
+}
+.royal-power-table tr > :last-child { border-right: 0; }
+.royal-power-table tbody tr:last-child > * { border-bottom: 0; }
+.royal-power-table thead th {
+  color: var(--royal); background: rgba(27,42,94,.07);
+  font: 700 .62rem/1.15 var(--serif-display);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.royal-power-table thead th:first-child,
+.royal-power-table tbody th { text-align: left; }
+.royal-power-table tbody th {
+  color: var(--ink); font-family: var(--serif-display);
+  font-size: .68rem; letter-spacing: .03em;
+}
+.royal-power-table td { font-weight: 700; }
 /* Label on its own line, the runs it explains on the line beneath it. */
 .rule-book { margin: 8px 0 0; }
 .rule-book-label {
@@ -995,6 +1060,7 @@ input {
 .help-deck svg { width: 100%; filter: drop-shadow(0 3px 4px rgba(24,18,8,.22)); }
 .help-decks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
 .help-decks.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.help-decks.help-rules-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .help-decks > div { padding: 10px; border-top: 3px solid var(--gold); background: rgba(255,255,255,.23); }
 .help-decks dt { color: var(--crimson-deep); font-family: var(--serif-display); font-weight: 700; }
 .help-decks dd { margin: 4px 0 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.35; }
@@ -1276,6 +1342,7 @@ body.walkthrough-open { overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   .walkthrough *, .walkthrough *::before, .walkthrough *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+  .difficulty-cockade { transition: none; }
 }
 
 /* ═══ wide screens: the framed salon table ═══ */

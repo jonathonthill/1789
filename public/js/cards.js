@@ -125,7 +125,7 @@ const POWER_ACTION = { H: 'RECRUIT CARDS', D: 'FREE PRISONERS', C: 'DOUBLE DAMAG
 const POWER_WORD_SIZE = 18;
 const POWER_ACTION_SIZE = 15;
 
-// The two-line title/effect box shared by number cards and the Sans-Culotte Ace.
+// The two-line title/effect box shared by number cards and the Les Renforts Ace.
 // The Ace overrides the colours (a red box) to flag its special nature.
 function powerBox(title, action, o) {
   return `
@@ -195,12 +195,13 @@ function pamphleteerCorners() {
 }
 
 // ── the specials ────────────────────────────────────────────────────────────
-// The Sans-Culotte carries the lifted figure over a red title box.
+// Les Renforts carries the lifted figure over a red title box.
 function companionArt() {
   return `
     <image href="/img/specials/sans-culotte.png" x="55" y="28" width="130" height="200"/>
-    ${powerBox('CALL LES RENFORTS!', 'ADD 1 ATTACK', {
-      fill: RED, stroke: GOLD, titleFill: '#fbf3dc', actionFill: '#fbf3dc', actionOpacity: '.85', titleSize: 16 })}`;
+    <rect x="17" y="253" width="206" height="66" rx="9" fill="${RED}" stroke="${GOLD}" stroke-width="1.5"/>
+    <text class="pb-title" x="120" y="292" font-size="${POWER_WORD_SIZE}" text-anchor="middle" fill="#fbf3dc"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">LES RENFORTS</text>`;
 }
 // The card promises only what the rules in force actually deliver: alone there
 // is nobody to hand the floor to, and whether the royal answers depends on

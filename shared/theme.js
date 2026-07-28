@@ -8,7 +8,7 @@ export const TERMS = {
   tavern: 'Le Peuple',
   discard: 'La Prison',
   jester: 'The Pamphleteer',
-  companion: 'Sans-Culotte',
+  companion: 'Les Renforts',
   yield: 'Lay Low',
 };
 

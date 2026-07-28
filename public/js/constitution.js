@@ -17,12 +17,12 @@ const ALL_SETTINGS = [
   {
     key: 'difficulty',
     label: 'Difficulté',
-    hint: 'How often the table may Regroup, and how much a Regroup gives. Alone, a Regroup throws your hand away and deals you a fresh one; at a table it deals every citoyen a few cards instead, so nobody loses a hand they were holding for a reason.',
+    hint: 'Each step changes every royal counterattack by 2.',
     slider: true,
     options: [
-      { value: 'hard', label: 'Hard' },
-      { value: 'medium', label: 'Medium' },
       { value: 'easy', label: 'Easy' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'hard', label: 'Hard' },
     ],
   },
   {
@@ -83,6 +83,20 @@ const ALL_SETTINGS = [
 ];
 
 export const SETTINGS = ALL_SETTINGS.filter(s => RULE_SPEC[s.key]?.exposed);
+
+export function settingHelp(setting) {
+  if (setting.key !== 'difficulty') return `<p class="rule-hint">${setting.hint}</p>`;
+  return `
+    <p class="rule-hint power-hint">${setting.hint}</p>
+    <table class="royal-power-table">
+      <thead><tr><th scope="col">Royal</th><th scope="col">Easy</th><th scope="col">Medium</th><th scope="col">Hard</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Officer</th><td>8</td><td>10</td><td>12</td></tr>
+        <tr><th scope="row">Queen</th><td>13</td><td>15</td><td>17</td></tr>
+        <tr><th scope="row">King</th><td>18</td><td>20</td><td>22</td></tr>
+      </tbody>
+    </table>`;
+}
 
 // Which engine table each "Défaut" option actually reads from. Only rules whose
 // default follows the size of the table belong here; the rest say what they mean
@@ -163,11 +177,19 @@ export function gameRulesSummary(rules, playerCount) {
   const regroup = n === 1
     ? `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — discard and refill to ${rulebookFor(n).handSize + resolved.handSizeDelta}`
     : `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — each citoyen draws ${resolved.regroupDraw}`;
+  const royalPower = {
+    easy: 'Easy — Officers / Queens / Kings strike 8 / 13 / 18',
+    medium: 'Medium — Officers / Queens / Kings strike 10 / 15 / 20',
+    hard: 'Hard — Officers / Queens / Kings strike 12 / 17 / 22',
+  }[resolved.difficulty];
   return [
+    ['Royal power', royalPower],
     ['Hand limit', `${rulebookFor(n).handSize + resolved.handSizeDelta} cards`],
     ['Pamphleteers', `${resolved.pamphleteers}, exposed, and alone`],
     ['Regroup', regroup],
-    ['Spoils', resolved.drawOnVictory ? 'Each citoyen draws 1 after a royal falls' : 'None'],
+    ['Spoils', resolved.drawOnVictory
+      ? 'One each; an exact-kill royal is the slayer’s share'
+      : 'None'],
     ['Exact kill', resolved.exactKillTo === 'hand' ? 'The royal joins the slayer’s hand' : 'The royal returns to Le Peuple'],
     ['Lay Low', n === 1 ? 'Unavailable alone' : 'Each citoyen may use it once per royal'],
   ];
