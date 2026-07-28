@@ -142,24 +142,6 @@ input { user-select: text; -webkit-user-select: text; }
   border-radius: 9px;
 }
 
-/* The one-time notice of what has changed since a citoyen last played. */
-.news-body {
-  display: flex; flex-direction: column; gap: 12px;
-  overflow-y: auto; min-height: 0; padding: 2px 2px 4px;
-}
-.news-item {
-  background: var(--paper); border: 1px solid var(--parchment-deep);
-  border-radius: 8px; padding: 10px 12px;
-}
-.news-item h3 {
-  margin: 0 0 3px; font-family: var(--serif-display);
-  font-size: 15px; letter-spacing: .02em; color: var(--crimson);
-}
-.news-item p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-soft); }
-.news-foot {
-  margin: 0; font-size: 12.5px; line-height: 1.45;
-  color: var(--ink-soft); font-style: italic; text-align: center;
-}
 .rule-row {
   background: var(--paper); border: 1px solid var(--parchment-deep);
   border-radius: 10px; padding: 10px 12px 8px;

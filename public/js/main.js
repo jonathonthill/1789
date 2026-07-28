@@ -7,7 +7,6 @@ import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, an
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
 import { SETTINGS, gameRulesSummary, loadRules, saveRules, summarize, rulebookRuns } from '/js/constitution.js';
-import * as news from '/js/news.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -188,18 +187,6 @@ function sendAction(action, cb) {
 }
 
 // ── home ────────────────────────────────────────────────────────────────────
-// What changed since this citoyen last played — shown once, on the home screen,
-// before they pick a game. Cleared by reading it.
-function showRulesNews() {
-  if (!news.shouldShow()) return;
-  $('#rules-news-body').innerHTML = news.render();
-  $('#rules-news').hidden = false;
-}
-$('#rules-news-go').onclick = () => {
-  news.markSeen();
-  $('#rules-news').hidden = true;
-};
-
 function homeError(msg) { const el = $('#home-error'); el.textContent = msg; el.hidden = !msg; }
 function myName() {
   const n = $('#name-input').value.trim() || 'Citoyen';
@@ -1631,7 +1618,6 @@ if (debugParams.has('win')) {
     tryRejoin(false);
   } else {
     show('home');
-    showRulesNews();
     if (session?.code) {
       const btn = $('#btn-resume');
       btn.innerHTML = `Rejoin salon ${esc(session.code)} <small>as ${esc(session.name ?? 'Citoyen')}</small>`;
