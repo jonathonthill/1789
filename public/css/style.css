@@ -222,7 +222,7 @@ input { user-select: text; -webkit-user-select: text; }
    real range input remains on top, transparent, so mouse, touch and keyboard
    behavior stay native and accessible. */
 .difficulty-slider { --thumb: 25.5px; }
-.difficulty-slider .rule-track { height: 66px; }
+.difficulty-slider .rule-track { height: 42px; }
 .difficulty-slider .rule-range { z-index: 3; }
 .difficulty-slider .rule-range::-webkit-slider-thumb {
   width: var(--thumb); height: var(--thumb);
@@ -233,12 +233,12 @@ input { user-select: text; -webkit-user-select: text; }
   background: transparent; box-shadow: none;
 }
 .difficulty-cockade {
-  position: absolute; z-index: 2; top: 20px;
-  width: 36px; height: 50px; transform: translateX(-50%);
+  position: absolute; z-index: 2; top: 8.25px;
+  width: 25.5px; height: 25.5px; transform: translateX(-50%);
   transition: left .18s ease;
 }
 .difficulty-cockade i {
-  position: absolute; z-index: 2; top: 0; left: 5.25px;
+  position: absolute; z-index: 2; inset: 0;
   display: block; width: 25.5px; height: 25.5px;
   border-radius: 48% 52% 46% 54% / 51% 47% 53% 49%;
   background:
@@ -256,7 +256,7 @@ input { user-select: text; -webkit-user-select: text; }
   font-family: var(--serif-fell); font-style: italic; color: var(--ink-soft);
   font-size: .82rem; line-height: 1.35; margin: 7px 0 2px;
 }
-.power-hint { margin: 10px 0 7px; text-align: center; }
+.power-hint { margin: 6px 0 5px; text-align: center; }
 .royal-power-table {
   width: 100%; border-collapse: collapse; table-layout: fixed;
   color: var(--ink-soft); font-variant-numeric: tabular-nums;
