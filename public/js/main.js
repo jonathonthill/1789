@@ -436,12 +436,18 @@ function routeView(v) {
         // victory cutscene plays.
         withAnim(done => animateKillingBlow(v, prevHandCount, () => {
           renderGame(v);
+          const arrivals = defeatArrivals(v, prevHandCount, v.lastEvent);
+          renderSeats(v, defeatSeatHolds(v, v.lastEvent, true));
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(v.lastEvent, () => {
               audio.sfx('guillotine');
-              showGuillotine(v.lastEvent.card, v.lastEvent.exact, wonOverTo(v, v.lastEvent), done);
+              showGuillotine(v.lastEvent.card, v.lastEvent.exact, wonOverTo(v, v.lastEvent), () => {
+                renderHand(v);
+                renderSeats(v);
+                done();
+              });
             });
-          });
+          }, { holdAfter: arrivals.captured });
         }), () => playCutscene('victory', () => renderEnd(v)));
       } else if (v.phase === 'lost' && v.lastSacrifice) {
         // The sacrifice itself succeeded, but it immediately doomed the next
@@ -485,15 +491,23 @@ function routeView(v) {
         // right before the guillotine covers the screen anyway.
         withAnim(done => animateKillingBlow(v, prevHandCount, () => {
           renderGame(v);
+          const arrivals = defeatArrivals(v, prevHandCount, ev);
+          renderSeats(v, defeatSeatHolds(v, ev, true));
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(ev, () => {
               audio.sfx('guillotine');
               showGuillotine(ev.card, ev.exact, wonOverTo(v, ev), () => {
-                audio.sfx('enemy');
-                showEntrance(v.enemy, done);
+                // Exact-kill recruits arrive with the royal's judgment. Spoils
+                // remain held back until their own draw follows the blade.
+                renderHand(v, arrivals.spoils);
+                renderSeats(v, ev.spoilsByPlayer);
+                animateSpoils(v, ev, () => {
+                  audio.sfx('enemy');
+                  showEntrance(v.enemy, done);
+                });
               });
             });
-          });
+          }, { holdAfter: arrivals.captured + arrivals.spoils });
         }));
         return;
       } else {
@@ -568,11 +582,19 @@ function animatePlayedToPrison(event, done) {
   );
 }
 
-function animateEffects(v, prevHandCount, done) {
-  if (v.actionSeq === lastActionSeq) { done?.(); return; }
+function animateEffects(v, prevHandCount, done, { holdAfter = 0 } = {}) {
+  if (v.actionSeq === lastActionSeq) {
+    if (holdAfter > 0) renderHand(v, holdAfter);
+    done?.();
+    return;
+  }
   const first = lastActionSeq === -1 && v.actionSeq > 1;
   lastActionSeq = v.actionSeq;
-  if (first || !v.lastEffects) { done?.(); return; } // don't replay history on rejoin
+  if (first || !v.lastEffects) {
+    if (holdAfter > 0) renderHand(v, holdAfter);
+    done?.();
+    return;
+  } // don't replay history on rejoin
   const { healed = 0, drawn = 0 } = v.lastEffects;
 
   // Hold back whichever of "your" hand cards are new arrivals from this
@@ -585,13 +607,10 @@ function animateEffects(v, prevHandCount, done) {
   const yourDrawCount = v.you ? Math.max(0, v.you.hand.length - (prevHandCount - removedThisAction)) : 0;
   if (yourDrawCount > 0) renderHand(v, yourDrawCount);
 
-  // Every exit releases the held-back cards. Not all arrivals come from a
-  // Rally — an exact kill drops the royal itself into the slayer's hand — so
-  // the release cannot hang off the draw animation alone, or a kill alongside
-  // a Raid (♦, no draw) would leave the captured royal invisible until some
-  // later action happened to re-render the hand.
+  // Every exit releases the Rally arrivals. A defeat sequence may ask us to
+  // keep the captured royal and spoils hidden until their later beats.
   const finish = () => {
-    if (yourDrawCount > 0) renderHand(v);
+    if (yourDrawCount > 0 || holdAfter > 0) renderHand(v, holdAfter);
     done?.();
   };
   const draw = () => {
@@ -611,6 +630,54 @@ function animateEffects(v, prevHandCount, done) {
   } else {
     draw();
   }
+}
+
+// Split the cards added to this viewer's hand by a killing action into the
+// three moments that explain them: suit powers, exact-kill capture, and spoils.
+// The event supplies the spoil allocation; the final hand delta accounts for
+// Rally without exposing anyone else's cards.
+function defeatArrivals(v, prevHandCount, event) {
+  if (!v.you) return { total: 0, captured: 0, spoils: 0 };
+  const slayer = v.lastPlay?.playerIdx;
+  const removed = slayer === v.you.index ? (v.lastPlay?.cards.length ?? 0) : 0;
+  const total = Math.max(0, v.you.hand.length - (prevHandCount - removed));
+  const captured = event?.exact
+    && (v.rules?.exactKillTo ?? 'hand') === 'hand'
+    && slayer === v.you.index ? 1 : 0;
+  const spoils = Math.min(total - captured, event?.spoilsByPlayer?.[v.you.index] ?? 0);
+  return { total, captured, spoils: Math.max(0, spoils) };
+}
+
+function defeatSeatHolds(v, event, includeCapture) {
+  const holds = (event?.spoilsByPlayer ?? []).slice();
+  while (holds.length < v.players.length) holds.push(0);
+  const slayer = v.lastPlay?.playerIdx;
+  if (includeCapture
+    && event?.exact
+    && (v.rules?.exactKillTo ?? 'hand') === 'hand'
+    && slayer != null) {
+    holds[slayer] = (holds[slayer] ?? 0) + 1;
+  }
+  return holds;
+}
+
+// Spoils are a separate reward beat, after the guillotine has cleared. Hold
+// this viewer's actual spoil cards out of their hand until the shared draw
+// finishes; the ghost count still shows the whole table's draw.
+function animateSpoils(v, event, done) {
+  const drawn = event?.spoilsDrawn ?? 0;
+  if (drawn <= 0) {
+    renderHand(v);
+    renderSeats(v);
+    done?.();
+    return;
+  }
+  audio.sfx('draw');
+  flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), () => {
+    renderHand(v);
+    renderSeats(v);
+    done?.();
+  });
 }
 
 // A just-played combo: the cards rise from the hand (acting player) or fade
@@ -862,7 +929,7 @@ function renderDeck(stackEl, count, topFaceCard) {
 }
 
 // Fellow citoyens' facedown hands sit in the blue rail beneath the table.
-function renderSeats(v) {
+function renderSeats(v, holdBackByPlayer = []) {
   const seats = $('#seats');
   const rail = $('#opponent-rail');
   const you = v.you?.index ?? -1;
@@ -880,7 +947,7 @@ function renderSeats(v) {
       o.i === v.current ? 'current' : '',
       (v.connections && v.connections[o.i] === false) ? 'disconnected' : '',
       choosing ? 'choosable' : ''].join(' ');
-    const n = o.p.handCount;
+    const n = Math.max(0, o.p.handCount - (holdBackByPlayer[o.i] ?? 0));
     let fan = '';
     if (n > 0) {
       const step = n === 1 ? 0 : Math.min(cw * .72, (fanW - cw) / (n - 1));

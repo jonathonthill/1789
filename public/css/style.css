@@ -1233,7 +1233,8 @@ body.walkthrough-open { overflow: hidden; }
 .walk-outcomes .walk-card { width: 62px; }.walk-outcomes i { color: var(--gold-hi); font-style: normal; }
 .walk-outcomes > div > small { font-size: .66rem; }
 .walk-mini-deck { display: grid; place-items: center; width: 62px; height: 82px; border-radius: 6px; font: 700 .56rem var(--serif-display); transform: translateX(40px); opacity: 0; animation: walk-destination .65s ease forwards .7s; }
-.walk-mini-deck.people { background: var(--good); }.walk-mini-deck.prison { background: #4b3d32; }
+.walk-mini-deck.people { background: var(--good); }
+.walk-mini-deck.removed { border: 1px dashed rgba(217,188,99,.65); background: rgba(158,34,53,.2); color: var(--gold-hi); text-decoration: line-through; }
 
 /* Scene 9: what may and may not be said. */
 .walk-talk { width: min(100%, 480px); display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

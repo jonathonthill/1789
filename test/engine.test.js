@@ -293,7 +293,7 @@ test('an attack does not restore a spent Lay Low; the next royal does', () => {
   assert.equal(canYield(s, 0), true);
 });
 
-test('exact kill claims the royal for the slayer’s hand; overkill goes to discard; the turn passes on', () => {
+test('exact kill claims the royal for the slayer’s hand; overkill removes it; the turn passes on', () => {
   const s = newGame(names2, { seed: 11, rules: { drawOnVictory: 0 } });
   rig(s, {
     hands: [[{ r: 10, s: 'C' }, { r: 2, s: 'H' }], [{ r: 3, s: 'H' }]],
@@ -693,7 +693,7 @@ test('Rally holds a slot for the claimed royal only when the hand is where it go
 
 test('the Spoils of Victory deal every citoyen a share, never past the hand limit', () => {
   const s = newGame(names3, { seed: 62, rules: { drawOnVictory: 2 } });
-  // The mob doubles two 10s into 40 — an overkill, so the royal goes to La Prison
+  // The mob doubles two 10s into 40 — an overkill, so the royal leaves play
   // and nothing but the spoils moves through Le Peuple.
   rig(s, {
     hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'C' }], [{ r: 4, s: 'S' }], []],
@@ -705,6 +705,9 @@ test('the Spoils of Victory deal every citoyen a share, never past the hand limi
   assert.equal(s.players[1].hand.length, 3);
   assert.equal(s.players[2].hand.length, 2);
   assert.equal(s.tavern.length, peuple - 6);
+  assert.equal(s.lastEvent.spoilsDrawn, 6);
+  assert.deepEqual(s.lastEvent.spoilsByPlayer, [2, 2, 2]);
+  assert.ok(!s.discard.some(c => c.r === 'J'), 'the overkilled royal is removed, not imprisoned');
 
   const full = newGame(names2, { seed: 63, rules: { drawOnVictory: 2 } });
   rig(full, { hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'C' }], []], enemy: { r: 'J', s: 'D' } });
@@ -728,6 +731,8 @@ test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
   assert.equal(s.players[1].hand.length, 1, 'the next citoyen still receives a spoil');
   assert.equal(s.players[2].hand.length, 1, 'the last citoyen still receives a spoil');
   assert.equal(s.tavern.length, before - 2, 'only the other two shares come from Le Peuple');
+  assert.equal(s.lastEvent.spoilsDrawn, 2);
+  assert.deepEqual(s.lastEvent.spoilsByPlayer, [0, 1, 1], 'the client can animate each real spoil after the guillotine');
 
   const solo = newGame(['Citoyen'], { seed: 165, rules: { drawOnVictory: 1 } });
   rig(solo, { hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'D' }]], enemy: { r: 'J', s: 'D' } });
@@ -735,6 +740,8 @@ test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
   playCards(solo, 0, [{ r: 10, s: 'S' }, { r: 10, s: 'D' }]);
   assert.equal(solo.players[0].hand.length, 1, 'solo receives the royal and nothing else');
   assert.equal(solo.tavern.length, soloBefore, 'solo takes no extra card from Le Peuple');
+  assert.equal(solo.lastEvent.spoilsDrawn, 0);
+  assert.deepEqual(solo.lastEvent.spoilsByPlayer, [0]);
 });
 
 test('an unprotected Pamphleteer suffers the blow, then still names who takes the floor', () => {
@@ -987,7 +994,7 @@ test('an exact kill always claims the royal for the slayer’s hand, and Rally d
   playCards(over, 0, [{ r: 10, s: 'H' }]);
   assert.equal(over.players[0].hand.length, 6, 'a full hand from Rally');
   assert.deepEqual(over.discard.at(-1), { r: 10, s: 'H' });
-  assert.ok(over.discard.some(c => c.r === 'J'), 'the royal is guillotined');
+  assert.ok(!over.discard.some(c => c.r === 'J'), 'the guillotined royal is removed from circulation');
 });
 
 test('solo never stops to ask who acts next — there is nobody to choose between', () => {

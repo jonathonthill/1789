@@ -389,7 +389,8 @@ function defeatEnemy(state, playerIdx) {
   // Won over, the royal takes up arms at once — before the spoils are shared, so
   // the slot Rally held open is filled by them and not by a spoil.
   if (toHand) state.players[playerIdx].hand.push(enemyCard);
-  else if (!exact) state.discard.push(enemyCard);
+  // An overkilled royal is removed from the game. They never enter La Prison,
+  // so Raid and Regroup cannot bring them back into circulation.
   for (const combo of state.playedCombos) state.discard.push(...combo.cards);
   log(state, exact
     ? (toHand
@@ -409,13 +410,21 @@ function defeatEnemy(state, playerIdx) {
   // A royal won over by exact damage is the slayer's spoil, not a bonus on
   // top of it. Other citoyens still receive their normal share. With the
   // standard one-spoil rule this means solo receives only the captured royal.
-  claimSpoils(state, playerIdx, toHand ? 1 : 0);
+  const spoils = claimSpoils(state, playerIdx, toHand ? 1 : 0);
   // A royal felled to the last point is laid on Le Peuple only once the spoils
   // have been gathered from it — otherwise the table would simply draw them
   // straight back, and the rule would mean nothing.
   if (exact && !toHand) state.tavern.push(enemyCard);
   revealEnemy(state);
-  state.lastEvent = { type: 'defeatAndReveal', exact, seq: state.revealSeq, card: enemyCard, playedCards };
+  state.lastEvent = {
+    type: 'defeatAndReveal',
+    exact,
+    seq: state.revealSeq,
+    card: enemyCard,
+    playedCards,
+    spoilsDrawn: spoils.total,
+    spoilsByPlayer: spoils.byPlayer,
+  };
   // The slayer skips the counterattack and hands on: the newcomer is faced by
   // the next citoyen round the table (alone, that is the slayer again).
   state.current = (playerIdx + 1) % state.players.length;
@@ -426,7 +435,7 @@ function defeatEnemy(state, playerIdx) {
 // Deal a share of Le Peuple round the table, never past anyone's hand limit,
 // starting from one citoyen so a Peuple too thin to pay everyone still spreads
 // what is left rather than emptying by seat.
-function shareDraw(state, fromIdx, share, credits = 0) {
+function shareDraw(state, fromIdx, share, credits = 0, byPlayer = null) {
   let drawn = 0;
   for (let round = 0; round < share; round++) {
     for (let k = 0; k < state.players.length && state.tavern.length > 0; k++) {
@@ -436,7 +445,11 @@ function shareDraw(state, fromIdx, share, credits = 0) {
       // else's draw.
       if (idx === fromIdx && round < credits) continue;
       const q = state.players[idx];
-      if (q.hand.length < state.handSize) { q.hand.push(state.tavern.pop()); drawn++; }
+      if (q.hand.length < state.handSize) {
+        q.hand.push(state.tavern.pop());
+        drawn++;
+        if (byPlayer) byPlayer[idx]++;
+      }
     }
   }
   return drawn;
@@ -444,8 +457,10 @@ function shareDraw(state, fromIdx, share, credits = 0) {
 
 // Les Dépouilles: a fallen royal leaves the streets richer.
 function claimSpoils(state, playerIdx, slayerCredits = 0) {
-  const drawn = shareDraw(state, playerIdx, state.rules.drawOnVictory, slayerCredits);
+  const byPlayer = state.players.map(() => 0);
+  const drawn = shareDraw(state, playerIdx, state.rules.drawOnVictory, slayerCredits, byPlayer);
   if (drawn) log(state, `The spoils are shared — the citoyens take up ${drawn} card${drawn === 1 ? '' : 's'}.`);
+  return { total: drawn, byPlayer };
 }
 
 function beginSuffering(state, playerIdx) {

@@ -118,7 +118,7 @@ export function pileInfo(kind, view) {
       return `<span class="mini-card ${red ? 'red' : ''}">${miniLabel(c)}</span>`;
     }).join('') || '<i>none yet</i>';
     return `<h3>🕯 ${TERMS.discard}</h3>
-      <p><b>${view.discardCount}</b> prisoners — spent attacks, sacrifices, and guillotined royals. ♦ Raid La Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}.</p>
+      <p><b>${view.discardCount}</b> prisoners — spent attacks and sacrifices. ♦ Raid La Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}. Overkilled royals are removed from the game, not imprisoned.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
   if (kind === 'played') {
@@ -283,7 +283,7 @@ ${constitutionSection(view)}
     <div class="help-turn-flow">
       <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Les Renforts pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
       <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
-      <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine.</span></div>
+      <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine and removes them from the game.</span></div>
       <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back, and the next citoyen faces their successor. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
     </div>
     <p class="help-rule-note"><b>Rearranging your hand:</b> drag a card sideways to reorder it. This is just your own view — it changes nothing for the other citoyens.</p>
@@ -325,7 +325,7 @@ ${constitutionSection(view)}
         <span class="help-arrow">→</span>
         <span class="help-deck">${cardBackSVG()}<small>your hand</small></span>
       </div>
-      <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand as their spoil—no extra spoil card is drawn. <b>Overkill:</b> the royal goes to ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
+      <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand as their spoil—no extra spoil card is drawn. <b>Overkill:</b> the royal is guillotined and removed from the game; they do not enter ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
     </div>
 
     <h3>The Three Decks</h3>
@@ -379,7 +379,7 @@ export function walkthroughSteps(view) {
     {
       eyebrow: 'Know the table',
       title: 'Three decks, one royal, your hand',
-      body: `<p><b>Le Régime</b> holds the royals still to come. <b>Le Peuple</b> is the face-down recruit deck. Played, sacrificed, and overkilled cards collect in <b>La Prison</b>.</p>
+      body: `<p><b>Le Régime</b> holds the royals still to come. <b>Le Peuple</b> is the face-down recruit deck. Played and sacrificed cards collect in <b>La Prison</b>; overkilled royals are removed from the game.</p>
         <p>Beneath the royal, the heart bar shows remaining health and the swords bar shows current strike versus full strike. Barricades reduce the first number. Your hand and actions sit below the status strip.</p>`,
       stage: `<div class="walk-board-viewport">
         <div class="walk-board-demo">
@@ -456,10 +456,10 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 3 of 4 · Judge the royal',
       title: 'Phase 3: Compare damage to endurance',
       body: `<p>Deal <b>exactly</b> the remaining endurance and the royal joins the Revolution in the slayer's own hand, ready to be used at full value with its suit power.</p>
-        <p>Deal too much and the royal goes to La Prison. Either way the slayer escapes the counterattack, and the <b>next citoyen</b> faces the royal who steps up. If the royal survives, continue to <b>Phase 4 — Respond.</b></p>`,
+        <p>Deal too much and the royal is guillotined and removed from the game—not sent to La Prison. Either way the slayer escapes the counterattack, and the <b>next citoyen</b> faces the royal who steps up. If the royal survives, continue to <b>Phase 4 — Respond.</b></p>`,
       stage: `<div class="walk-outcomes">
         <div><strong>Exact</strong><div>${walkCard({ r: 10, s: 'C' }, '')}<i>×2</i>${walkCard({ r: 'J', s: 'H' }, '')}<i>→</i><span class="walk-mini-deck people">your hand</span></div><small>20 damage for 20</small></div>
-        <div><strong>Overkill</strong><div>${walkCard({ r: 10, s: 'C' }, '')}<i>+</i>${walkCard({ r: 2, s: 'S' }, '')}<i>→</i><span class="walk-mini-deck prison">La Prison</span></div><small>22 damage for 20</small></div>
+        <div><strong>Overkill</strong><div>${walkCard({ r: 10, s: 'C' }, '')}<i>+</i>${walkCard({ r: 2, s: 'S' }, '')}<i>→</i><span class="walk-mini-deck removed">removed</span></div><small>22 damage for 20</small></div>
       </div>`,
     },
     {
