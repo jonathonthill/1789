@@ -187,10 +187,5 @@ export function gameRulesSummary(rules, playerCount) {
     ['Hand limit', `${rulebookFor(n).handSize + resolved.handSizeDelta} cards`],
     ['Pamphleteers', `${resolved.pamphleteers}, exposed, and alone`],
     ['Regroup', regroup],
-    ['Spoils', resolved.drawOnVictory
-      ? 'One each; an exact-kill royal is the slayer’s share'
-      : 'None'],
-    ['Exact kill', resolved.exactKillTo === 'hand' ? 'The royal joins the slayer’s hand' : 'The royal returns to Le Peuple'],
-    ['Lay Low', n === 1 ? 'Unavailable alone' : 'Each citoyen may use it once per royal'],
   ];
 }
