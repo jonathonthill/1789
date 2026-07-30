@@ -73,7 +73,7 @@ const ALL_SETTINGS = [
   {
     key: 'pamphleteerImmune',
     label: 'The Pamphleteer’s protection',
-    hint: 'Whether the citoyen who unleashes the Pamphleteer escapes the reprisal, or takes the blow and still names who acts next.',
+    hint: 'Whether the citoyen who unleashes the Pamphleteer escapes the reprisal or takes the blow before play passes clockwise.',
     slider: true,
     options: [
       { value: true, label: 'Shielded' },
@@ -185,7 +185,7 @@ export function gameRulesSummary(rules, playerCount) {
   return [
     ['Royal power', royalPower],
     ['Hand limit', `${rulebookFor(n).handSize + resolved.handSizeDelta} cards`],
-    ['Pamphleteers', `${resolved.pamphleteers}, exposed, and alone`],
+    ['Pamphleteers', `${resolved.pamphleteers}, exposed, alone or with one partner`],
     ['Regroup', regroup],
   ];
 }

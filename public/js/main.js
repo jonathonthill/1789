@@ -3,7 +3,7 @@
 import * as engine from '/shared/engine.js';
 import { enemyMeta, SUIT_META, EXCLAIM } from '/shared/theme.js';
 import { cardSVG, cardBackSVG } from '/js/cards.js';
-import { showEntrance, dismissEntrance, showGuillotine, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
+import { showEntrance, dismissEntrance, showRoyalDefeat, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
 import { SETTINGS, loadRules, saveRules, settingHelp, summarize, rulebookRuns } from '/js/constitution.js';
@@ -175,7 +175,6 @@ function sendAction(action, cb) {
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
       else if (action.type === 'regroup') engine.regroup(s, 0);
       else if (action.type === 'assembly') throw new Error('There is no Assemblée to convene alone.');
-      else if (action.type === 'chooseNext') engine.chooseNext(s, 0, action.target);
       else if (action.type === 'surrender') engine.surrenderGame(s, 0);
       onView(engine.viewFor(s, 0));
       cb?.({ ok: true });
@@ -440,8 +439,8 @@ function routeView(v) {
           renderSeats(v, defeatSeatHolds(v, v.lastEvent, true));
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(v.lastEvent, () => {
-              audio.sfx('guillotine');
-              showGuillotine(v.lastEvent.card, v.lastEvent.exact, wonOverTo(v, v.lastEvent), () => {
+              audio.sfx(v.lastEvent.exact ? 'draw' : 'guillotine');
+              showRoyalDefeat(v.lastEvent.card, v.lastEvent.exact, captureRecipient(v, v.lastEvent), () => {
                 renderHand(v);
                 renderSeats(v);
                 done();
@@ -488,15 +487,15 @@ function routeView(v) {
       if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
         // Board stays on the about-to-fall royal until the killing combo has
         // made its trip; only then does the new enemy actually swap in,
-        // right before the guillotine covers the screen anyway.
+        // right before the royal's judgment covers the screen anyway.
         withAnim(done => animateKillingBlow(v, prevHandCount, () => {
           renderGame(v);
           const arrivals = defeatArrivals(v, prevHandCount, ev);
           renderSeats(v, defeatSeatHolds(v, ev, true));
           animateEffects(v, prevHandCount, () => {
             animatePlayedToPrison(ev, () => {
-              audio.sfx('guillotine');
-              showGuillotine(ev.card, ev.exact, wonOverTo(v, ev), () => {
+              audio.sfx(ev.exact ? 'draw' : 'guillotine');
+              showRoyalDefeat(ev.card, ev.exact, captureRecipient(v, ev), () => {
                 // Exact-kill recruits arrive with the royal's judgment. Spoils
                 // remain held back until their own draw follows the blade.
                 renderHand(v, arrivals.spoils);
@@ -661,7 +660,7 @@ function defeatSeatHolds(v, event, includeCapture) {
   return holds;
 }
 
-// Spoils are a separate reward beat, after the guillotine has cleared. Hold
+// Spoils are a separate reward beat, after the royal's judgment has cleared. Hold
 // this viewer's actual spoil cards out of their hand until the shared draw
 // finishes; the ghost count still shows the whole table's draw.
 function animateSpoils(v, event, done) {
@@ -732,13 +731,18 @@ function animatePlay(v, done) {
 // the fallen royal's own card (from the event) for the bars. The caller
 // renders the real new state once this settles, right before the guillotine
 // takes over the screen anyway.
-// Whose hand an exact-kill royal joined, phrased as a possessive for the
-// guillotine caption — null when the royal was overkilled and won over to nobody.
-function wonOverTo(v, ev) {
+// The capture judgment uses the real multiplayer seat label and the final
+// server-authoritative count. It renders count - 1 first, then adds the royal.
+function captureRecipient(v, ev) {
   if (!ev?.exact) return null;
   const slayer = v.lastPlay?.playerIdx;
-  if (slayer == null || v.solo || slayer === v.you?.index) return 'your';
-  return `${v.players[slayer]?.name ?? 'the slayer'}'s`;
+  if (slayer == null) return null;
+  const player = v.players[slayer];
+  return {
+    name: player?.name ?? 'The slayer',
+    handCount: player?.handCount ?? (slayer === v.you?.index ? v.you?.hand.length : 1),
+    isYou: v.solo || slayer === v.you?.index,
+  };
 }
 
 function setEnemyBarsForCard(card, hp, atk) {
@@ -934,7 +938,6 @@ function renderSeats(v, holdBackByPlayer = []) {
   const rail = $('#opponent-rail');
   const you = v.you?.index ?? -1;
   const others = v.players.map((p, i) => ({ p, i })).filter(o => o.i !== you);
-  const choosing = v.phase === 'jesterChoose' && v.you && v.current === v.you.index;
   const narrow = window.innerWidth <= 480;
   const fanW = narrow ? 82 : 128, cw = narrow ? 22 : 30;
 
@@ -946,7 +949,7 @@ function renderSeats(v, holdBackByPlayer = []) {
     el.className = ['seat',
       o.i === v.current ? 'current' : '',
       (v.connections && v.connections[o.i] === false) ? 'disconnected' : '',
-      choosing ? 'choosable' : ''].join(' ');
+      ''].join(' ');
     const n = Math.max(0, o.p.handCount - (holdBackByPlayer[o.i] ?? 0));
     let fan = '';
     if (n > 0) {
@@ -960,7 +963,6 @@ function renderSeats(v, holdBackByPlayer = []) {
     el.innerHTML = `<span class="seat-fan">${fan}</span>
       <span class="seat-name">${esc(o.p.name)} · ${n}${o.p.laidLow ? ' 🕊' : ''}${(v.connections && v.connections[o.i] === false) ? ' ⏸' : ''}</span>`;
     if (o.p.laidLow) el.title = `${o.p.name} has lain low against this royal.`;
-    if (choosing) el.onclick = () => sendAction({ type: 'chooseNext', target: o.i }, flashError);
     seats.appendChild(el);
   });
 }
@@ -1099,10 +1101,6 @@ function renderActions(v) {
     const total = staged.reduce((s, c) => s + engine.cardValue(c), 0);
     confirm.disabled = total < v.pendingDamage || engine.validateDiscard(ps, you.index, staged) !== null;
     yield_.hidden = true;
-  } else if (v.phase === 'jesterChoose' && myTurn) {
-    confirm.textContent = 'Take the floor yourself';
-    confirm.disabled = false;
-    yield_.hidden = true;
   } else {
     confirm.textContent = '…';
     confirm.disabled = true;
@@ -1163,11 +1161,6 @@ function flashError(res) {
 
 $('#btn-confirm').onclick = () => {
   if (!view?.you) return;
-  if (view.phase === 'jesterChoose') {
-    audio.sfx('pamphleteer');
-    sendAction({ type: 'chooseNext', target: view.you.index }, flashError);
-    return;
-  }
   const type = view.phase === 'discard' ? 'discard' : 'play';
   const cards = staged;
   audio.sfx(type === 'discard' ? 'sacrifice' : (cards.some(c => c.r === 'X') ? 'pamphleteer' : 'attack'));

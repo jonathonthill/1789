@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newGame, playCards, yieldTurn, discardForDamage, chooseNext, regroup,
+  newGame, playCards, yieldTurn, discardForDamage, regroup,
   surrenderGame, callAssembly, castVote, syncAssembly,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
   currentShield, enemyAttack, effectiveEnemyAttack, cardValue, resolveRules,
@@ -227,22 +227,21 @@ test('a sacrifice that immediately dooms the next citoyen still leaves lastSacri
     'the snapshot survives the loss so the client can still animate the sacrifice before the loss screen');
 });
 
-test('Pamphleteer cancels immunity and lets the player choose who goes next (even self)', () => {
+test('Pamphleteer cancels immunity and passes play clockwise', () => {
   const s = newGame(names3, { seed: 9, rules: ALONE });
   rig(s, {
     hands: [
       [{ r: 'X', s: null }, { r: 6, s: 'S' }, { r: 5, s: 'H' }],
-      [{ r: 2, s: 'C' }],
+      [{ r: 6, s: 'S' }, { r: 5, s: 'H' }],
       [{ r: 3, s: 'C' }],
     ],
     enemy: { r: 'J', s: 'S' },
   });
   playCards(s, 0, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'jesterChoose');
+  assert.equal(s.phase, 'play');
   assert.equal(s.enemy.immunityCancelled, true);
-  chooseNext(s, 0, 0); // chooses self
-  assert.equal(s.current, 0);
-  playCards(s, 0, [{ r: 6, s: 'S' }]);
+  assert.equal(s.current, 1);
+  playCards(s, 1, [{ r: 6, s: 'S' }]);
   assert.equal(currentShield(s), 6, 'immunity cancelled — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
 });
@@ -576,8 +575,6 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
       const chosen = []; let tot = 0;
       for (const c of sorted) { if (tot >= s.pendingDamage) break; chosen.push(c); tot += cardValue(c); }
       discardForDamage(s, s.current, chosen);
-    } else if (s.phase === 'jesterChoose') {
-      chooseNext(s, s.current, (s.current + 1) % s.playerCount);
     }
   }
   assert.ok(['won', 'lost'].includes(s.phase), 'game terminates');
@@ -591,7 +588,7 @@ test('rules resolve from partial and hostile input; difficulty sets royal power'
   const medium = {
     difficulty: 'medium', drawOnVictory: 1, regroups: 2, regroupDraw: 3,
     royalStrikeBonus: 0, regroupScope: 'draw', handSizeDelta: 0, pamphleteers: 2,
-    exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: false,
+    exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: true,
   };
   assert.deepEqual(resolveRules(null, 3), medium);
   assert.deepEqual(resolveRules(null, 1), { ...medium, regroupScope: 'caller' }, 'alone, a Regroup refills the hand');
@@ -744,7 +741,7 @@ test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
   assert.deepEqual(solo.lastEvent.spoilsByPlayer, [0]);
 });
 
-test('an unprotected Pamphleteer suffers the blow, then still names who takes the floor', () => {
+test('an unprotected Pamphleteer suffers the blow, then play passes clockwise', () => {
   const s = newGame(names3, { seed: 64, rules: { pamphleteers: 2, pamphleteerImmune: false } });
   rig(s, { hands: [[{ r: 'X', s: null }, { r: 9, s: 'D' }, { r: 8, s: 'C' }], [], []], enemy: { r: 'J', s: 'S' } });
   playCards(s, 0, [{ r: 'X', s: null }]);
@@ -752,10 +749,7 @@ test('an unprotected Pamphleteer suffers the blow, then still names who takes th
   assert.equal(s.pendingDamage, 10);
   assert.ok(s.enemy.immunityCancelled, 'immunity is shattered all the same');
   discardForDamage(s, 0, [{ r: 9, s: 'D' }, { r: 8, s: 'C' }]);
-  assert.equal(s.phase, 'jesterChoose', 'the floor is still his to give');
-  assert.equal(s.current, 0);
-  chooseNext(s, 0, 2);
-  assert.equal(s.current, 2);
+  assert.equal(s.current, 1);
   assert.equal(s.phase, 'play');
 });
 
@@ -763,7 +757,8 @@ test('a protected Pamphleteer skips the reprisal, as the rulebook has it', () =>
   const s = newGame(names3, { seed: 64, rules: { pamphleteers: 2, pamphleteerImmune: true } });
   rig(s, { hands: [[{ r: 'X', s: null }, { r: 9, s: 'D' }], [], []], enemy: { r: 'J', s: 'S' } });
   playCards(s, 0, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'jesterChoose');
+  assert.equal(s.phase, 'play');
+  assert.equal(s.current, 1, 'protection skips the blow, not the clockwise handoff');
   assert.equal(s.players[0].hand.length, 1, 'nothing was paid');
 });
 
@@ -773,8 +768,8 @@ test('barricades can absorb an unprotected Pamphleteer’s reprisal entirely', (
   playCards(s, 0, [{ r: 10, s: 'S' }]);   // 10 damage, 10 of shield — the Jack strikes for nothing
   assert.equal(s.current, 1, 'nothing to pay, so the turn simply passes');
   playCards(s, 1, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'jesterChoose', 'no blow to pay, so the choice comes at once');
-  assert.equal(s.current, 1);
+  assert.equal(s.phase, 'play');
+  assert.equal(s.current, 2, 'no blow to pay, so play passes immediately');
 });
 
 test('the Pamphleteer may bring one companion, whose power lands through immunity', () => {
@@ -786,7 +781,7 @@ test('the Pamphleteer may bring one companion, whose power lands through immunit
     'barred unless the rule allows it',
   );
 
-  const paired = newGame(names3, { seed: 66, rules: { pamphleteers: 2, pamphleteerCompanion: true } });
+  const paired = newGame(names3, { seed: 66, rules: { pamphleteers: 2 } });
   rig(paired, { hands: [[{ r: 'X', s: null }, { r: 8, s: 'C' }, { r: 8, s: 'H' }], [], []], enemy: { r: 'J', s: 'C' } });
   assert.equal(validatePlay(paired, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }]), null);
   assert.match(
@@ -802,11 +797,12 @@ test('the Pamphleteer may bring one companion, whose power lands through immunit
   assert.ok(paired.enemy.immunityCancelled);
 });
 
-test('a companion does not cost the Pamphleteer his protection, nor his choice of floor', () => {
+test('a companion does not cost the Pamphleteer his protection or clockwise handoff', () => {
   const shielded = newGame(names3, { seed: 67, rules: { pamphleteers: 2, pamphleteerCompanion: true, pamphleteerImmune: true } });
   rig(shielded, { hands: [[{ r: 'X', s: null }, { r: 4, s: 'D' }], [], []], enemy: { r: 'J', s: 'S' } });
   playCards(shielded, 0, [{ r: 'X', s: null }, { r: 4, s: 'D' }]);
-  assert.equal(shielded.phase, 'jesterChoose', 'shielded, so no blow to pay');
+  assert.equal(shielded.phase, 'play', 'shielded, so no blow to pay');
+  assert.equal(shielded.current, 1);
   assert.equal(shielded.enemy.damage, 4);
 
   const exposed = newGame(names3, {
@@ -818,8 +814,7 @@ test('a companion does not cost the Pamphleteer his protection, nor his choice o
   assert.equal(exposed.phase, 'discard', 'exposed, so the reprisal lands');
   assert.equal(exposed.pendingDamage, 10);
   discardForDamage(exposed, 0, [{ r: 9, s: 'H' }, { r: 3, s: 'S' }]);
-  assert.equal(exposed.phase, 'jesterChoose', 'and the floor is still his to give');
-  chooseNext(exposed, 0, 1);
+  assert.equal(exposed.phase, 'play');
   assert.equal(exposed.current, 1);
 });
 
@@ -997,7 +992,7 @@ test('an exact kill always claims the royal for the slayer’s hand, and Rally d
   assert.ok(!over.discard.some(c => c.r === 'J'), 'the guillotined royal is removed from circulation');
 });
 
-test('solo never stops to ask who acts next — there is nobody to choose between', () => {
+test('Pamphleteer play always passes clockwise, returning to the solo player', () => {
   const solo = newGame(['Citoyen'], { seed: 58, rules: ALONE });
   rig(solo, { hands: [[{ r: 'X', s: null }, { r: 5, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
   solo.tavern = Array.from({ length: 12 }, () => ({ r: 4, s: 'D' }));
@@ -1006,14 +1001,15 @@ test('solo never stops to ask who acts next — there is nobody to choose betwee
   assert.equal(solo.current, 0);
   assert.equal(solo.enemy.immunityCancelled, true, 'immunity still falls');
 
-  // And a table of two still gets the choice.
+  // At a table, clockwise means the next citoyen.
   const table = newGame(names2, { seed: 58, rules: ALONE });
   rig(table, { hands: [[{ r: 'X', s: null }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
   playCards(table, 0, [{ r: 'X', s: null }]);
-  assert.equal(table.phase, 'jesterChoose');
+  assert.equal(table.phase, 'play');
+  assert.equal(table.current, 1);
 });
 
-test('the Pamphleteer always works alone — no partner, and never two at once', () => {
+test('the Pamphleteer may work alone or with one partner, but never another Pamphleteer', () => {
   const s = newGame(names2, { seed: 57, rules: ALONE });
   rig(s, {
     hands: [[{ r: 'X', s: null }, { r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }]],
@@ -1024,8 +1020,9 @@ test('the Pamphleteer always works alone — no partner, and never two at once',
   assert.match(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 'X', s: null }]), /Only one Pamphleteer/);
   // Two Pamphleteers stay barred even where a companion is allowed: the second
   // is not a companion, it is a second Pamphleteer.
-  const open = newGame(names2, { seed: 57, rules: { pamphleteerCompanion: true } });
+  const open = newGame(names2, { seed: 57 });
   rig(open, { hands: [[{ r: 'X', s: null }, { r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
+  assert.equal(validatePlay(open, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]), null, 'one partner is legal by default');
   assert.match(validatePlay(open, 0, [{ r: 'X', s: null }, { r: 'X', s: null }]), /Only one Pamphleteer/);
 });
 

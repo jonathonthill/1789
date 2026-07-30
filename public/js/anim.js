@@ -1,8 +1,9 @@
-// Entrance theatrics and the guillotine.
-import { cardSVG, victimSVG } from '/js/cards.js';
+// Entrance theatrics and the two royal-defeat judgments.
+import { cardSVG, cardBackSVG, victimSVG } from '/js/cards.js';
 import { enemyMeta, enemyThreat, SUIT_META, EXCLAIM } from '/shared/theme.js';
 
 const $ = sel => document.querySelector(sel);
+const ROYAL_DEFEAT_MS = 3500; // 3.1 s of motion, then a shared .4 s hold.
 
 // Same icons as the enemy stat bars, reused here for the entrance popup.
 const HEART_ICON = `<span class="heart-icon"><svg viewBox="0 0 24 24" focusable="false">` +
@@ -236,9 +237,7 @@ export function severFall(container, { speed = 1, done } = {}) {
   severRaf = requestAnimationFrame(step);
 }
 
-// handOwner: whose hand the won-over royal joined ("your", "Danton's"); only
-// read on an exact kill, which is the only way a royal is won over at all.
-export function showGuillotine(enemyCard, exact, handOwner, done) {
+function showGuillotine(enemyCard, done) {
   const meta = enemyMeta(enemyCard);
   $('#g-victim').innerHTML = victimSVG(enemyCard);
   const victim = $('#g-victim');
@@ -249,10 +248,7 @@ export function showGuillotine(enemyCard, exact, handOwner, done) {
   blade.classList.remove('drop');
   caption.classList.remove('show');
   for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
-  const converted = `${meta.name} joins the cause — into ${handOwner ?? 'the slayer’s'} hand`;
-  caption.innerHTML = exact
-    ? `${EXCLAIM.converted}<span class="sub">${converted}</span>`
-    : `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;
+  caption.innerHTML = `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;
   $('#guillotine-overlay').hidden = false;
   // force reflow so the animation classes retrigger
   void blade.offsetWidth;
@@ -263,5 +259,102 @@ export function showGuillotine(enemyCard, exact, handOwner, done) {
   setTimeout(() => {
     $('#guillotine-overlay').hidden = true;
     done?.();
-  }, 3100);
+  }, ROYAL_DEFEAT_MS);
+}
+
+// Build the same compact facedown fan used by multiplayer seats, widened for
+// the full-screen judgment. Recomputing the spacing for count + 1 lets all
+// existing cards settle naturally when the captured royal joins them.
+function captureFan(count) {
+  const n = Math.max(0, count);
+  if (n === 0) return '';
+  const fanW = 190, cardW = 46;
+  const step = n === 1 ? 0 : Math.min(cardW * .65, (fanW - cardW) / (n - 1));
+  const x0 = (fanW - (cardW + step * (n - 1))) / 2;
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    const rot = n === 1 ? 0 : -9 + 18 * i / (n - 1);
+    html += `<span class="capture-fan-card" style="left:${(x0 + i * step).toFixed(1)}px;`
+      + `transform:rotate(${rot.toFixed(1)}deg)">${cardBackSVG()}</span>`;
+  }
+  return html;
+}
+
+let captureCountTimer = null;
+let captureDoneTimer = null;
+
+// The server stamps index.html at boot, while JavaScript and CSS revalidate on
+// every request. During local development that can briefly pair a new client
+// with an older entry document. Materialize the overlay here as a compatibility
+// guard so a captured royal never silently loses its judgment animation.
+function ensureCaptureOverlay() {
+  if ($('#capture-overlay')) return;
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="capture-overlay" class="overlay" hidden>
+      <div id="capture-stage" class="capture-stage">
+        <div class="capture-burst" aria-hidden="true"></div>
+        <div id="capture-royal" class="capture-royal" aria-hidden="true">
+          <div id="capture-card" class="capture-card"></div>
+          <svg class="capture-cockade" viewBox="0 0 82 104">
+            <path d="M19 57L13 100L34 84L42 103L48 57Z" fill="#1b2a5e" stroke="#b08d2c" stroke-width="2"/>
+            <path d="M39 58L48 101L60 83L73 96L62 51Z" fill="#9e2235" stroke="#b08d2c" stroke-width="2"/>
+            <circle cx="41" cy="38" r="32" fill="#1b2a5e" stroke="#b08d2c" stroke-width="3"/>
+            <circle cx="41" cy="38" r="21" fill="#f8f1df" stroke="#b08d2c" stroke-width="2"/>
+            <circle cx="41" cy="38" r="10" fill="#9e2235" stroke="#b08d2c" stroke-width="2"/>
+            <circle cx="41" cy="38" r="3" fill="#d9bc63"/>
+          </svg>
+          <span class="capture-pin-glint"></span>
+        </div>
+        <div class="capture-caption">
+          <strong>Won over to the Revolution!</strong>
+          <span id="capture-sub"></span>
+        </div>
+        <div class="capture-hand" aria-hidden="true">
+          <div id="capture-fan-before" class="capture-fan capture-fan-before"></div>
+          <div id="capture-fan-after" class="capture-fan capture-fan-after"></div>
+          <span class="capture-seat-name"><span id="capture-player-name"></span> · <b id="capture-hand-count"></b></span>
+        </div>
+      </div>
+    </div>`);
+}
+
+function showCapture(enemyCard, recipient, done) {
+  ensureCaptureOverlay();
+  const meta = enemyMeta(enemyCard);
+  const afterCount = Math.max(1, recipient?.handCount ?? 1);
+  const beforeCount = Math.max(0, afterCount - 1);
+  const playerName = recipient?.name ?? 'The slayer';
+  const ownHand = recipient?.isYou !== false;
+  const stage = $('#capture-stage');
+
+  clearTimeout(captureCountTimer);
+  clearTimeout(captureDoneTimer);
+  stage.classList.remove('playing');
+  $('#capture-card').innerHTML = cardSVG(enemyCard);
+  $('#capture-sub').textContent = `${meta.name} joins ${ownHand ? 'your' : `${playerName}'s`} hand`;
+  $('#capture-player-name').textContent = playerName;
+  $('#capture-hand-count').textContent = beforeCount;
+  $('#capture-fan-before').innerHTML = captureFan(beforeCount);
+  $('#capture-fan-after').innerHTML = captureFan(afterCount);
+  $('#capture-overlay').hidden = false;
+
+  // Retrigger every CSS timeline even when two exact kills happen in a row.
+  void stage.offsetWidth;
+  stage.classList.add('playing');
+  captureCountTimer = setTimeout(() => {
+    $('#capture-hand-count').textContent = afterCount;
+  }, 2660);
+  captureDoneTimer = setTimeout(() => {
+    stage.classList.remove('playing');
+    $('#capture-overlay').hidden = true;
+    done?.();
+  }, ROYAL_DEFEAT_MS);
+}
+
+// Exact damage recruits an intact royal; excess damage destroys it. Keeping
+// the branch here makes it impossible for a captured card to enter the blade
+// animation again.
+export function showRoyalDefeat(enemyCard, exact, recipient, done) {
+  if (exact) showCapture(enemyCard, recipient, done);
+  else showGuillotine(enemyCard, done);
 }

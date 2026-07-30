@@ -274,10 +274,6 @@ export function decide(view, hand, talk, opts = {}) {
   // A motion that has just fallen is not put again on the same turn.
   const mayRegroup = view.canRegroup && opts.allowRegroup !== false;
 
-  if (view.phase === 'jesterChoose') {
-    return { type: 'chooseNext', target: chooseFloor(view, talk, seat, tier) };
-  }
-
   if (view.phase === 'discard') {
     const pay = errs(opts)
       ? carelessPayment(hand, view.pendingDamage, opts.rng)
@@ -362,23 +358,4 @@ function scoreRegroup(ctx) {
   const inTrouble = (talk ?? []).filter(t => t && (t.cannotDefend || t.handCount === 0)).length;
   const share = inTrouble / view.players.length;
   return w.regroupBase + w.regroupNeed * share;
-}
-
-// The Pamphleteer names who takes the floor: the citoyen who says they can end
-// it, else the fullest hand that is not already in trouble.
-function chooseFloor(view, talk, seat, tier) {
-  let best = seat;
-  let bestScore = -Infinity;
-  for (let i = 0; i < view.players.length; i++) {
-    const t = talk?.[i];
-    let score = view.players[i].handCount;
-    if (tier !== 'decent' && t) {
-      if (t.canFinish) score += 40;
-      if (t.strong) score += 20;
-      if (t.cannotDefend) score -= 25;
-    }
-    if (i === seat) score -= 1; // all else equal, share the floor around
-    if (score > bestScore) { bestScore = score; best = i; }
-  }
-  return best;
 }

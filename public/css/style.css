@@ -924,8 +924,155 @@ input {
   100% { opacity: 0; transform: rotate(-9.5deg) scaleX(1.04); }
 }
 .g-caption { color: var(--paper); font-family: var(--serif-display); font-size: 1.6rem; margin-top: 16px; opacity: 0; }
-.g-caption.show { animation: fadein .4s ease forwards 1.15s; }
+.g-caption.show { animation: fadein .4s ease forwards; }
 .g-caption .sub { display: block; font-family: var(--serif-fell); font-size: .95rem; font-style: italic; color: var(--gold-hi); }
+
+/* exact kill: the royal stays whole, takes the cockade, and joins the
+   slayer's hand. This is deliberately a separate visual language from the
+   guillotine, which is reserved for royals removed from the game. */
+.capture-stage {
+  position: relative; width: min(100vw, 720px); height: min(500px, calc(100dvh - 16px));
+  overflow: hidden; isolation: isolate;
+}
+.capture-stage::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(217,188,99,.13), transparent 38%),
+    radial-gradient(ellipse at 50% 100%, rgba(27,42,94,.42), transparent 55%);
+}
+.capture-burst {
+  position: absolute; z-index: 1; left: 50%; top: 39%;
+  width: 290px; height: 290px; border: 2px solid var(--gold-hi); border-radius: 50%;
+  opacity: 0; transform: translate(-50%, -50%) scale(.38);
+  box-shadow: 0 0 0 8px rgba(217,188,99,.08), 0 0 34px rgba(217,188,99,.3);
+}
+.capture-royal {
+  position: absolute; z-index: 4; left: 50%; top: 39%;
+  width: 148px; height: 207px; transform: translate(-50%, -50%);
+  transform-origin: 50% 50%; filter: drop-shadow(0 6px 14px rgba(20,12,6,.45));
+}
+.capture-card, .capture-card svg { display: block; width: 100%; height: auto; }
+.capture-cockade {
+  position: absolute; z-index: 7; top: 48px; right: -27px;
+  width: 60px; height: auto; opacity: 0;
+  filter: drop-shadow(0 3px 3px rgba(12,10,22,.52));
+  transform: translate(92px,-54px) rotate(58deg) scale(1.5);
+  transform-origin: 50% 37%;
+}
+.capture-pin-glint {
+  position: absolute; z-index: 8; top: 67px; right: -9px;
+  width: 24px; height: 24px; opacity: 0;
+}
+.capture-pin-glint::before, .capture-pin-glint::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 24px; height: 2px;
+  border-radius: 2px; background: var(--paper); box-shadow: 0 0 7px var(--gold-hi);
+  transform: translate(-50%,-50%);
+}
+.capture-pin-glint::after { transform: translate(-50%,-50%) rotate(90deg); }
+.capture-caption {
+  position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 134px;
+  text-align: center; opacity: 0; color: var(--paper); transform: translateY(8px);
+}
+.capture-caption strong {
+  display: block; font-family: var(--serif-display); font-size: 1.6rem; font-weight: 500;
+}
+.capture-caption span {
+  display: block; color: var(--gold-hi); font-family: var(--serif-fell); font-style: italic;
+}
+.capture-hand {
+  position: absolute; z-index: 2; left: 50%; bottom: 17px;
+  width: 190px; height: 78px; transform: translateX(-50%); opacity: .74;
+}
+.capture-fan {
+  position: absolute; left: 0; right: 0; bottom: 42px; height: 65px;
+}
+.capture-fan-after { opacity: 0; }
+.capture-fan-card {
+  position: absolute; bottom: 0; width: 46px; aspect-ratio: 240/336;
+  transform-origin: 50% 90%; filter: drop-shadow(0 3px 5px rgba(12,10,22,.35));
+}
+.capture-fan-card svg { width: 100%; height: 100%; display: block; }
+.capture-seat-name {
+  position: absolute; left: 0; right: 0; bottom: 0; width: max-content; margin: 0 auto;
+  font-size: .82rem; padding: 3px 12px; border-radius: 999px;
+  background: var(--paper); border: 1.5px solid var(--parchment-deep);
+  color: var(--ink-soft); white-space: nowrap; box-shadow: 0 1px 3px rgba(60,40,10,.2);
+}
+.capture-seat-name b { font-weight: 400; }
+
+.capture-stage.playing .capture-royal {
+  animation: capture-card-trip 3.1s cubic-bezier(.25,.8,.25,1) both;
+}
+.capture-stage.playing .capture-cockade {
+  animation: capture-pin-cockade .62s cubic-bezier(.18,1.42,.4,1) .61s both;
+}
+.capture-stage.playing .capture-pin-glint { animation: capture-glint .34s ease-out 1.11s both; }
+.capture-stage.playing .capture-burst { animation: capture-burst .7s ease-out 1.09s both; }
+.capture-stage.playing .capture-caption {
+  animation: capture-caption-in .3s ease-out both, capture-caption-out .26s ease-in 2.46s forwards;
+}
+.capture-stage.playing .capture-hand { animation: capture-hand-receive .42s ease-out 2.68s both; }
+.capture-stage.playing .capture-fan-before { animation: capture-fan-out .18s ease-in 2.46s forwards; }
+.capture-stage.playing .capture-fan-after {
+  animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 2.46s both;
+}
+@keyframes capture-pin-cockade {
+  0% { opacity: 0; transform: translate(92px,-54px) rotate(58deg) scale(1.5); }
+  70% { opacity: 1; transform: translate(-3px,2px) rotate(-5deg) scale(.92); }
+  100% { opacity: 1; transform: translate(0,0) rotate(0) scale(1); }
+}
+@keyframes capture-card-trip {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(.92); }
+  10.5% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  20% { transform: translate(-50%,-50%) scale(1); }
+  35% { transform: translate(-50%,-50%) scale(.96) rotate(-1.4deg); }
+  43% { transform: translate(-50%,-50%) scale(1.03) rotate(.8deg); }
+  75.5% { opacity: 1; transform: translate(-50%,-50%) scale(1.03) rotate(0); }
+  88.5% { opacity: .58; }
+  100% { opacity: 0; transform: translate(-50%,106px) scale(.31) rotate(7deg); }
+}
+@keyframes capture-glint {
+  0% { opacity: 0; transform: scale(.25) rotate(0); }
+  42% { opacity: 1; transform: scale(1) rotate(20deg); }
+  100% { opacity: 0; transform: scale(1.4) rotate(35deg); }
+}
+@keyframes capture-burst {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(.38); }
+  30% { opacity: .75; }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.12); }
+}
+@keyframes capture-caption-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes capture-caption-out { to { opacity: 0; transform: translateY(7px); } }
+@keyframes capture-hand-receive {
+  0% { opacity: .74; transform: translateX(-50%) scale(1); filter: none; }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.08); filter: drop-shadow(0 0 12px rgba(217,188,99,.52)); }
+  100% { opacity: .84; transform: translateX(-50%) scale(1); filter: none; }
+}
+@keyframes capture-fan-out { to { opacity: 0; } }
+@keyframes capture-fan-in {
+  from { opacity: 0; transform: translateY(-18px) scale(.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 420px) {
+  .capture-royal, .capture-burst { top: 36%; }
+  .capture-caption { bottom: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .capture-stage.playing .capture-royal,
+  .capture-stage.playing .capture-cockade,
+  .capture-stage.playing .capture-pin-glint,
+  .capture-stage.playing .capture-burst,
+  .capture-stage.playing .capture-caption,
+  .capture-stage.playing .capture-hand,
+  .capture-stage.playing .capture-fan-before,
+  .capture-stage.playing .capture-fan-after {
+    animation-duration: .01ms;
+    animation-delay: 0ms;
+  }
+}
 
 /* bottom sheet */
 .sheet {

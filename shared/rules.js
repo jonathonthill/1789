@@ -104,7 +104,7 @@ export const RULE_SPEC = {
     exposed: false,
   },
   // Whether the Pamphleteer's player dodges the counterattack. Exposed, he
-  // takes the blow and still names who acts next.
+  // takes the blow before play passes clockwise.
   pamphleteerImmune: {
     label: 'The Pamphleteer’s protection',
     values: [true, false],
@@ -117,7 +117,7 @@ export const RULE_SPEC = {
   pamphleteerCompanion: {
     label: 'The Pamphleteer’s companion',
     values: [false, true],
-    default: false,
+    default: true,
     exposed: false,
   },
 };

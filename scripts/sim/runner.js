@@ -5,7 +5,7 @@
 // said out loud. Nothing here hands a bot the state.
 
 import {
-  newGame, viewFor, playCards, discardForDamage, yieldTurn, chooseNext,
+  newGame, viewFor, playCards, discardForDamage, yieldTurn,
   regroup, callAssembly, castVote, surrenderGame,
 } from '../../shared/engine.js';
 import { decide, motionCarries, inLastResort, BASE_WEIGHTS } from './bot.js';
@@ -122,8 +122,6 @@ export function playGame({
       } else if (action.type === 'yield') {
         layLows++;
         yieldTurn(state, seat);
-      } else if (action.type === 'chooseNext') {
-        chooseNext(state, seat, action.target);
       } else if (action.type === 'regroup') {
         // Was this the last thing standing between the table and defeat?
         const forced = inLastResort(view, hand);

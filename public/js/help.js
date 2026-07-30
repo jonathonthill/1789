@@ -41,11 +41,6 @@ export function statusText(view, stagedCount) {
   if (view.phase === 'won') return `<span class="em">Vive la République!</span> The last King is dead.`;
   if (view.phase === 'lost') return `<span class="em">The Revolution is crushed.</span>`;
 
-  if (view.phase === 'jesterChoose') {
-    return yourTurn
-      ? `Your Pamphleteer struck! <span class="em">Choose who acts next</span> — tap a citoyen's seat, or take the floor yourself below.`
-      : `${cur.name}'s Pamphleteer shattered ${enemyName(view)}'s immunity. ${cur.name} chooses who goes next — you may hint whether you want the floor.`;
-  }
 
   if (view.phase === 'discard') {
     if (!yourTurn) return `${enemyName(view)} strikes ${cur.name} for <span class="em">${view.pendingDamage}</span>. They must sacrifice enough cards to survive.`;
@@ -74,8 +69,8 @@ export function cardInfo(card, view) {
   let html = '';
   if (card.r === 'X') {
     html = `<h3>0✒ The Pamphleteer</h3>
-      <p>Attack 0, played <b>alone</b>. His exposé <b>shatters the enemy's immunity</b> — suit powers matching the enemy's suit work from then on (even barricades already built).</p>
-      <p>You then face the enemy's counterattack. If you survive, <b>choose any citoyen</b> (or yourself) to act next. Until they act, everyone may hint whether they want the floor — but never what they hold.</p>
+      <p>Worth <b>0</b>. May fight alone or pair with exactly one non-Pamphleteer card. His exposé <b>shatters the enemy's immunity before the partner resolves</b>, so the partner's suit power works even when it matches the royal.</p>
+      <p>You then face the enemy's counterattack. If you survive, play passes clockwise to the <b>next citoyen</b>.</p>
       <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;
   } else if (card.r === 'A') {
     html = `<h3>${miniLabel(card)} Les Renforts</h3>
@@ -162,10 +157,9 @@ export function contextHelp(view) {
   const hasCapturedRoyal = hand.some(c => c.r === 'J' || c.r === 'Q' || c.r === 'K');
 
   const phaseCopy = {
-    play: `<p>Play one card, a legal same-number combo, or a Les Renforts pair, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value.</p>
+    play: `<p>Play one card, a legal same-number combo, or a helper paired with one other card, then press <b>Attaquez!</b> Every represented suit power fires at the play's total value.</p>
       <p>Or <b>Lay Low</b>: skip the turn outright, taking no strike — once against each royal.${view.solo ? ' (Not offered alone.)' : ''} Fell a royal and you take no strike either; the <b>next citoyen</b> faces whoever steps up.</p>`,
     discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Les Renforts count 1, the Pamphleteer 0, captured royals 10 / 15 / 20.</p>`,
-    jesterChoose: `<p>A Pamphleteer shattered the royal's immunity and its player survived the counterattack. Choose any citoyen — even yourself — to act next.</p>`,
     won: `<p><b>Vive la République!</b> Every royal has fallen.</p>`,
     lost: `<p><b>The Revolution has been crushed.</b></p>`,
   }[view.phase] ?? '';
@@ -178,7 +172,7 @@ export function contextHelp(view) {
       `Worth 1. Fights alone or pairs with exactly one other non-Pamphleteer card — even another Renfort. The pair's full value fires every represented suit power; never joins a same-number combo.`,
       hasRenforts)}
     ${specialGuide({ r: 'X', s: null }, 'The Pamphleteer',
-      `Worth 0. Fights alone, shatters the royal's immunity, takes the counterattack, and then lets you choose who acts next — even yourself.`,
+      `Worth 0. Fights alone or pairs with one non-Pamphleteer card. He shatters immunity before the partner resolves, takes the counterattack, then play passes clockwise.`,
       hasPamphleteer)}
     ${specialGuide({ r: 'J', s: 'H' }, 'Captured Royals',
       `A defeated Officer, Queen, or King you've recruited attacks at a fixed value — 10 / 15 / 20 — with its full suit power, and is worth the same if sacrificed.`,
@@ -225,7 +219,7 @@ export function projectionText(view, staged, pseudoState) {
   }
   if (view.phase !== 'play' || view.current !== view.you.index || staged.length === 0) return '';
   const p = previewPlay(pseudoState, staged);
-  if (p.isJester && staged.length === 1) return `The Pamphleteer strikes — immunity shattered, you choose who goes next.`;
+  if (p.isJester && staged.length === 1) return `The Pamphleteer strikes — immunity shattered, then play passes clockwise.`;
   const bits = [];
   if (p.isJester) bits.push('📜 immunity shattered');
   bits.push(`⚔️ <b>${p.damage}</b> damage${p.doubled ? ' (mob ×2!)' : ''}`);
@@ -238,7 +232,7 @@ export function projectionText(view, staged, pseudoState) {
   if (remaining === 0) {
     bits.push(`<b>exact — the royal joins your hand!</b>`);
   } else if (remaining < 0) bits.push(`<b>the guillotine awaits</b>`);
-  else if (p.isJester) bits.push('immunity shattered — you choose who goes next');
+  else if (p.isJester) bits.push('immunity shattered — play passes clockwise');
   return bits.join(' · ');
 }
 
@@ -281,7 +275,7 @@ ${constitutionSection(view)}
 
     <h3 class="${here('turn')}">Your Turn</h3>
     <div class="help-turn-flow">
-      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a Les Renforts pair—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
+      <div><b>1</b><span><strong>Attack</strong>Play one card, a legal combo, or a helper paired with one other card—then press <em>Attaquez!</em> Rise en Masse doubles the blow. You may instead <em>Lay Low</em> once against each royal.</span></div>
       <div><b>2</b><span><strong>Resolve suit powers</strong>Powers are mandatory and use the total value played. If both occur, Raid La Prison resolves before Rally Le Peuple.</span></div>
       <div><b>3</b><span><strong>Judge the royal</strong>After every power resolves, compare the total damage with the royal's endurance. Exact damage wins the royal over; overkill sends them to the guillotine and removes them from the game.</span></div>
       <div><b>4</b><span><strong>Resolve the outcome</strong>A defeated royal falls without striking back, and the next citoyen faces their successor. If the royal remains, use the post-power hand to resist their counterattack after barricades.</span></div>
@@ -296,7 +290,7 @@ ${constitutionSection(view)}
     <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Les Renforts are worth 1, Pamphleteers 0, and captured royals 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
     <p><b>Lay Low:</b> skip your turn outright — you make no attack, and the royal finds nobody to strike. Each citoyen may lie low <b>once against each royal</b>; the right returns when the next royal steps up. It is a multiplayer option only, since alone there is no one for a skipped turn to help.</p>
 
-    <h3>Combos & Les Renforts</h3>
+    <h3>Combos & Helper Cards</h3>
     <div class="help-example-row">
       <div class="help-example-cards" aria-hidden="true">
         ${helpCard({ r: 3, s: 'H' }, '3♥')}${helpCard({ r: 3, s: 'D' }, '3♦')}${helpCard({ r: 3, s: 'C' }, '3♣')}
@@ -313,7 +307,7 @@ ${constitutionSection(view)}
     <h3 class="${here('jester')}">The Pamphleteer</h3>
     <div class="help-example-row">
       <div class="help-example-cards help-single" aria-hidden="true">${helpCard({ r: 'X', s: null }, 'Pamphleteer')}</div>
-      <p>The Pamphleteer is worth 0 and fights <b>alone</b>. He shatters the royal's immunity but does not escape the reprisal: the royal strikes, and only then does he name who follows. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table.</p>
+      <p><b>The Pamphleteer:</b> worth 0; may fight alone or pair with one non-Pamphleteer card. He shatters the royal's immunity <b>before his partner resolves</b>, so that partner's matching suit power fires immediately. He does not escape the reprisal; after it resolves, play passes clockwise. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table.</p>
     </div>
 
     <h3>Defeating a Royal</h3>
@@ -349,7 +343,7 @@ ${constitutionSection(view)}
   `;
 }
 function phaseSection(phase) {
-  return { play: 'turn', discard: 'discard', jesterChoose: 'jester' }[phase] ?? 'turn';
+  return { play: 'turn', discard: 'discard' }[phase] ?? 'turn';
 }
 
 // ── animated walkthrough ───────────────────────────────────────────────────
@@ -445,11 +439,11 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 2 continued · Immunity',
       title: 'Phase 2: Check the royal’s immunity',
       body: `<p>A royal is immune to the <b>power</b> of cards matching their suit, but those cards still deal their normal damage.</p>
-        <p>The <b>Pamphleteer</b> is worth 0, fights alone, and permanently shatters that royal's immunity. The royal still strikes back; if the player survives, they choose who acts next. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
+        <p>The <b>Pamphleteer</b> is worth 0 and may fight alone or with one non-Pamphleteer partner. He permanently shatters immunity <b>before the partner resolves</b>, so their matching suit power fires immediately. The royal still strikes back; after the reprisal, play passes clockwise. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
       stage: `<div class="walk-immunity">
         <div class="walk-immune-royal">${walkCard({ r: 'Q', s: 'H' }, 'immune to ♥')}</div>
         <div class="walk-immune-card">${walkCard({ r: 6, s: 'H' }, '6 damage · no draw')}<span class="walk-block">×</span></div>
-        <div class="walk-pamphlet">${walkCard({ r: 'X', s: null }, 'played alone')}<span class="walk-rip">immunity shattered</span></div>
+        <div class="walk-pamphlet">${walkCard({ r: 'X', s: null }, 'helper')}${walkCard({ r: 6, s: 'H' }, 'partner power fires')}<span class="walk-rip">immunity shattered first</span></div>
       </div>`,
     },
     {
@@ -475,9 +469,9 @@ export function walkthroughSteps(view) {
       eyebrow: 'Fight together',
       title: 'Share plans, never share cards',
       body: `<p>You may discuss public information—whose turn it is, hand sizes, damage, deck counts, or whether Le Peuple is running low.</p>
-        <p>Never reveal or hint at what you hold. After a Pamphleteer, each citoyen may only say whether they would like the next turn; the Pamphleteer's player chooses.</p>`,
+        <p>Never reveal or hint at what you hold. Public facts such as hand counts and the state of Le Peuple remain fair game.</p>`,
       stage: `<div class="walk-talk">
-        <div class="allowed"><b>Public facts</b><span>“I have two cards.”</span><span>“Le Peuple runs low.”</span><span>“I would like the floor.”</span></div>
+        <div class="allowed"><b>Public facts</b><span>“I have two cards.”</span><span>“Le Peuple runs low.”</span></div>
         <div class="forbidden"><b>Keep hands secret</b><span class="secret-hand">${walkCard({ r: 7, s: 'H' }, '')}${walkCard({ r: 7, s: 'C' }, '')}</span><span>Never name or hint at these.</span></div>
       </div>`,
     },

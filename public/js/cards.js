@@ -204,7 +204,7 @@ function companionArt() {
       font-family="${SERIF}" font-weight="700" letter-spacing="0.4">LES RENFORTS</text>`;
 }
 // The card promises only what the rules in force actually deliver: alone there
-// is nobody to hand the floor to, and whether the royal answers depends on
+// is nobody else at the table, and whether the royal answers depends on
 // whether the Pamphleteer is shielded.
 function pamphleteerArt({ solo = false, shielded = true } = {}) {
   const second = solo

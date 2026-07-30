@@ -246,7 +246,6 @@ io.on('connection', socket => {
         case 'discard': engine.discardForDamage(s, idx, msg.cards ?? []); break;
         case 'assembly': engine.callAssembly(s, idx, connectedSeats(room)); break;
         case 'vote': engine.castVote(s, idx, !!msg.aye); break;
-        case 'chooseNext': engine.chooseNext(s, idx, msg.target); break;
         case 'surrender': engine.surrenderGame(s, idx); break;
         default: return cb?.({ ok: false, error: 'Unknown action.' });
       }

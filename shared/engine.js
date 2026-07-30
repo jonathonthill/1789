@@ -6,9 +6,8 @@
 export const SUITS = ['S', 'H', 'D', 'C'];
 
 // La Constitution's rules live in one register, shared/rules.js — see there for
-// what each one means and which ones the menu currently offers. Two decisions
-// remain locked in at every table and are not rules: the Pamphleteer always
-// works alone, and the turn always passes to the next citoyen once a royal falls.
+// what each one means and which ones the menu currently offers. The turn always
+// passes to the next citoyen once a royal falls.
 import { HAND_SIZE, DEFAULT_RULES, resolveRules, rulebookFor } from './rules.js';
 export { DEFAULT_RULES, resolveRules, rulebookFor };
 export { RULE_SPEC, RULE_KEYS, EXPOSED_RULE_KEYS } from './rules.js';
@@ -87,11 +86,9 @@ export function newGame(playerNames, opts = {}) {
     enemy: null,          // { card, damage, revealSeq, threatVariant, immunityCancelled }
     playedCombos: [],     // [{ cards, value, suits }] against current enemy
     current: 0,
-    phase: 'play',        // 'play' | 'discard' | 'jesterChoose' | 'won' | 'lost'
+    phase: 'play',        // 'play' | 'discard' | 'won' | 'lost'
     pendingDamage: 0,
     // Set when a blow interrupts something that must still happen once it is
-    // paid — an unprotected Pamphleteer still names who takes the floor.
-    pendingAfterDamage: null,
     revealSeq: 0,
     actionSeq: 0,
     lastEffects: null,    // { healed, drawn } from the most recent play, for client animation
@@ -253,7 +250,6 @@ export function playCards(state, playerIdx, cards) {
   state.lastEffects = null;
   state.lastPlay = { playerIdx, cards, healthBefore, attackBefore, healthAfter: healthBefore, attackAfter: attackBefore };
   state.lastSacrifice = null;
-  state.pendingAfterDamage = null;
 
   // The Pamphleteer shatters immunity the moment he takes the floor — before a
   // partner resolves, so the partner's suit power lands even on a matching enemy.
@@ -264,14 +260,12 @@ export function playCards(state, playerIdx, cards) {
   if (jester && attackCards.length === 0) {
     state.playedCombos.push({ cards, value: 0, suits: [] });
     log(state, `${player.name} unleashes the Pamphleteer — the enemy's immunity is shattered!`);
-    // Unprotected, the Pamphleteer's player still takes the blow — and still
-    // names who takes the floor once it is paid.
+    // Unprotected, the Pamphleteer's player still takes the blow.
     if (!state.rules.pamphleteerImmune) {
-      state.pendingAfterDamage = 'chooseNext';
       beginSuffering(state, playerIdx);
       return state;
     }
-    giveFloorToChooser(state, playerIdx);
+    advanceTurn(state);
     return state;
   }
 
@@ -340,41 +334,25 @@ export function playCards(state, playerIdx, cards) {
   state.lastPlay.healthAfter = Math.max(0, enemyHealth(state) - state.enemy.damage);
   state.lastPlay.attackAfter = effectiveEnemyAttack(state);
 
-  // Step 3: only now decide whether the attack defeated the enemy. A Pamphleteer
-  // can never reach here — he is played alone, for nothing, and returns above.
+  // Step 3: only now decide whether the attack defeated the enemy. A lone
+  // Pamphleteer returned above; one with a companion can reach this judgment.
   if (state.enemy.damage >= enemyHealth(state)) {
     defeatEnemy(state, playerIdx);
     return state;
   }
 
   // Step 4: a survivor counterattacks. A protected Pamphleteer's shield covers
-  // the whole play, companion and all; unprotected, the blow lands and only then
-  // does he name who takes the floor. beginSuffering reads the attacker's
+  // the whole play, companion and all. beginSuffering reads the attacker's
   // post-Rally hand, so a heart draw can prevent a premature loss.
   if (jester) {
     if (state.rules.pamphleteerImmune) {
       log(state, `The Pamphleteer shields ${player.name} from reprisal.`);
-      giveFloorToChooser(state, playerIdx);
+      advanceTurn(state);
       return state;
     }
-    state.pendingAfterDamage = 'chooseNext';
   }
   beginSuffering(state, playerIdx);
   return state;
-}
-
-// The Pamphleteer hands the floor to a citoyen of the player's choosing — but
-// alone there is nobody to choose between, so the turn simply carries on
-// rather than stopping to ask.
-function giveFloorToChooser(state, playerIdx) {
-  state.current = playerIdx;
-  if (state.solo) {
-    state.phase = 'play';
-    checkTurnStart(state);
-    return;
-  }
-  state.phase = 'jesterChoose';
-  log(state, `${state.players[playerIdx].name} chooses who acts next.`);
 }
 
 function defeatEnemy(state, playerIdx) {
@@ -546,14 +524,9 @@ export function discardForDamage(state, playerIdx, cards) {
   return state;
 }
 
-// A blow paid, the turn carries on — unless it interrupted something. An
-// unprotected Pamphleteer's player survives the reprisal and only then names
-// the citoyen who takes the floor.
-function resumeAfterDamage(state, playerIdx) {
-  const pending = state.pendingAfterDamage;
-  state.pendingAfterDamage = null;
-  if (pending === 'chooseNext') giveFloorToChooser(state, playerIdx);
-  else advanceTurn(state);
+// A blow paid, the turn carries clockwise to the next citoyen.
+function resumeAfterDamage(state) {
+  advanceTurn(state);
 }
 
 export function surrenderGame(state, playerIdx) {
@@ -569,23 +542,6 @@ export function surrenderGame(state, playerIdx) {
   state.result = { reason: `${player.name} surrendered. The Revolution is over.` };
   state.lastEvent = { type: 'loss' };
   log(state, state.result.reason);
-  return state;
-}
-
-export function chooseNext(state, playerIdx, targetIdx) {
-  if (state.assembly) throw new Error('l’Assemblée is in session.');
-  if (state.phase !== 'jesterChoose') throw new Error('No choice to make.');
-  if (playerIdx !== state.current) throw new Error('Only the Pamphleteer’s player chooses.');
-  if (targetIdx < 0 || targetIdx >= state.players.length) throw new Error('No such citoyen.');
-  state.current = targetIdx;
-  state.phase = 'play';
-  state.lastEvent = null;
-  state.actionSeq++;
-  state.lastEffects = null;
-  state.lastPlay = null;
-  state.lastSacrifice = null;
-  log(state, `${state.players[targetIdx].name} takes the floor.`);
-  checkTurnStart(state);
   return state;
 }
 
