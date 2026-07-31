@@ -54,7 +54,7 @@ fly deploy
 | Path | What it is |
 |---|---|
 | `shared/rules.js` | The rule register — every house rule the engine can obey, its legal values, its default per table size, and whether La Constitution currently offers it. A rule is carried here permanently and exposed with a single `exposed: true`. |
-| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, enemy immunity + Pamphleteer cancellation, 2–4 card same-number combos capped at 20, Les Renforts pairing, dynamic spade barricades, Lay Low as a free duck rationed to once per citoyen per royal, exact kills won over into the slayer's hand, captured royals at 10/15/20, a shared Regroup pool, and the house rules of La Constitution. |
+| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, the Pamphleteer breaking enemy immunity, Les Renforts combining powers, 2–4 card same-number combos capped at 20, dynamic spade barricades, Lay Low as a free duck rationed to once per citoyen per royal, exact kills won over into the slayer's hand, captured royals at 10/15/20, a shared Regroup pool, and the house rules of La Constitution. |
 | `shared/theme.js` | The French Revolution naming: 12 historical enemies with 3 threat lines each, suit power names, terminology. |
 | `server/index.js` | Express + Socket.IO. Salon codes, host-led lobby with 30s disconnect grace, per-player secret views, token-based seamless rejoin, rematch, 2h idle room expiry. |
 | `public/` | Vanilla JS frontend. SVG-drawn cards, entrance animations with typewriter threats, guillotine defeats, stage-then-confirm play, contextual help (status strip, long-press explainers, phase-aware rules panel, first-game coach marks). |
@@ -113,6 +113,10 @@ the production Docker image.
 
 Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **The Ancien Régime**
 · Jester → **The Pamphleteer** · Animal Companion → **Les Renforts** · Yield → **Lay Low**
+
+**Helper Cards** are marked by letters in their corners: **A** for Les Renforts
+and **P** for the Pamphleteer. Both are worth 0; A combines powers and P breaks
+royal immunity.
 · ♥ Rally Le Peuple · ♦ Raid La Prison · ♣ Rise en Masse · ♠ A La Barricade
 
 Rules reference: `RegicideRulesA4.pdf` (original game by Paul Abrahams, Luke Badger,

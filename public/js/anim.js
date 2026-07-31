@@ -282,6 +282,22 @@ function captureFan(count) {
 
 let captureCountTimer = null;
 let captureDoneTimer = null;
+let onCaptureDone = null;
+
+// Timeout and tap/click share one exit so the animation continuation can never
+// fire twice, and no skip handler survives into the next exact kill.
+function finishCapture() {
+  const overlay = $('#capture-overlay');
+  if (!overlay || overlay.hidden) return;
+  clearTimeout(captureCountTimer);
+  clearTimeout(captureDoneTimer);
+  overlay.removeEventListener('click', finishCapture);
+  $('#capture-stage').classList.remove('playing');
+  overlay.hidden = true;
+  const cb = onCaptureDone;
+  onCaptureDone = null;
+  cb?.();
+}
 
 // The server stamps index.html at boot, while JavaScript and CSS revalidate on
 // every request. During local development that can briefly pair a new client
@@ -314,6 +330,7 @@ function ensureCaptureOverlay() {
           <div id="capture-fan-after" class="capture-fan capture-fan-after"></div>
           <span class="capture-seat-name"><span id="capture-player-name"></span> · <b id="capture-hand-count"></b></span>
         </div>
+        <div class="capture-dismiss">tap to continue</div>
       </div>
     </div>`);
 }
@@ -329,6 +346,9 @@ function showCapture(enemyCard, recipient, done) {
 
   clearTimeout(captureCountTimer);
   clearTimeout(captureDoneTimer);
+  const overlay = $('#capture-overlay');
+  overlay.removeEventListener('click', finishCapture);
+  onCaptureDone = done;
   stage.classList.remove('playing');
   $('#capture-card').innerHTML = cardSVG(enemyCard);
   $('#capture-sub').textContent = `${meta.name} joins ${ownHand ? 'your' : `${playerName}'s`} hand`;
@@ -336,7 +356,8 @@ function showCapture(enemyCard, recipient, done) {
   $('#capture-hand-count').textContent = beforeCount;
   $('#capture-fan-before').innerHTML = captureFan(beforeCount);
   $('#capture-fan-after').innerHTML = captureFan(afterCount);
-  $('#capture-overlay').hidden = false;
+  overlay.hidden = false;
+  overlay.addEventListener('click', finishCapture);
 
   // Retrigger every CSS timeline even when two exact kills happen in a row.
   void stage.offsetWidth;
@@ -344,11 +365,7 @@ function showCapture(enemyCard, recipient, done) {
   captureCountTimer = setTimeout(() => {
     $('#capture-hand-count').textContent = afterCount;
   }, 2660);
-  captureDoneTimer = setTimeout(() => {
-    stage.classList.remove('playing');
-    $('#capture-overlay').hidden = true;
-    done?.();
-  }, ROYAL_DEFEAT_MS);
+  captureDoneTimer = setTimeout(finishCapture, ROYAL_DEFEAT_MS);
 }
 
 // Exact damage recruits an intact royal; excess damage destroys it. Keeping

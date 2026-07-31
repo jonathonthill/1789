@@ -180,11 +180,12 @@ function royalCorners(card) {
     </g>`;
 }
 
-// The Pamphleteer has no suit: value 0 over an upright pen nib (the "suit").
+// The Pamphleteer has no suit: P over an upright pen nib identifies the card.
+// Its rules value remains zero.
 function pamphleteerCorners() {
   return `
     <g fill="${INK}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
-      <text x="34" y="52" font-size="46">0</text>
+      <text x="34" y="52" font-size="46">P</text>
     </g>
     <g transform="translate(34,80)">
       <path d="M0 -14 C3 -6 5.5 -2 5.5 3 L-5.5 3 C-5.5 -2 -3 -6 0 -14 Z" fill="${INK}"/>
@@ -195,30 +196,38 @@ function pamphleteerCorners() {
 }
 
 // ── the specials ────────────────────────────────────────────────────────────
-// Les Renforts carries the lifted figure over a red title box.
+// Les Renforts carries the lifted figure over a red title/effect box.
 function companionArt() {
   return `
     <image href="/img/specials/sans-culotte.png" x="55" y="28" width="130" height="200"/>
     <rect x="17" y="253" width="206" height="66" rx="9" fill="${RED}" stroke="${GOLD}" stroke-width="1.5"/>
-    <text class="pb-title" x="120" y="292" font-size="${POWER_WORD_SIZE}" text-anchor="middle" fill="#fbf3dc"
-      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">LES RENFORTS</text>`;
+    <text class="pb-title" x="120" y="281" font-size="${POWER_WORD_SIZE}" text-anchor="middle" fill="#fbf3dc"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">LES RENFORTS</text>
+    <text class="pb-effect" x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${GOLD_HI}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".25">COMBINE POWERS</text>`;
 }
-// The card promises only what the rules in force actually deliver: alone there
-// is nobody else at the table, and whether the royal answers depends on
-// whether the Pamphleteer is shielded.
-function pamphleteerArt({ solo = false, shielded = true } = {}) {
-  const second = solo
-    ? (shielded ? 'NO REPRISAL' : 'THEN THEY STRIKE')
-    : "CHOOSE WHO'S NEXT";
+
+// A identifies Les Renforts as the Ace; it contributes a suit power, not value.
+function companionCorners(card) {
+  const col = suitColor(card.s);
+  const slash = (card.s === 'H' || card.s === 'D') ? INK : RED;
+  return `
+    <g fill="${col}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
+      <text x="34" y="52" font-size="46">A</text>
+      ${suitPip(card.s, 34, 80, 28)}
+    </g>
+    <line class="corner-suit-slash" x1="18" y1="91" x2="50" y2="61" stroke="${slash}" stroke-width="5.5" stroke-linecap="round"/>`;
+}
+// The conditional reprisal and turn-order details live in the rulebook; the
+// physical card carries only its stable identity and power.
+function pamphleteerArt() {
   return `
     <image href="/img/specials/pamphleteer.png" x="60" y="58" width="120" height="149"/>
-    <rect x="17" y="239" width="206" height="80" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
-    <text x="120" y="263" font-size="16" text-anchor="middle" fill="#fbf3dc"
-      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">THE PAMPHLETEER</text>
-    <text x="120" y="287" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".3">SHATTERS IMMUNITY</text>
-    <text x="120" y="306" font-size="13" text-anchor="middle" fill="${GOLD_HI}"
-      font-family="${SERIF}" font-weight="700" letter-spacing=".3">${second}</text>`;
+    <rect x="17" y="253" width="206" height="66" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
+    <text class="pb-title" x="120" y="281" font-size="${POWER_WORD_SIZE}" text-anchor="middle" fill="#fbf3dc"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">PAMPHLETEER</text>
+    <text class="pb-effect" x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${GOLD_HI}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".25">BREAKS IMMUNITY</text>`;
 }
 
 export function cardSVG(card, opts = {}) {
@@ -228,9 +237,9 @@ export function cardSVG(card, opts = {}) {
     center = royalArt(card, opts);
     cornerLayer = royalCorners(card);
   } else if (card.r === 'A') {
-    center = companionArt(); cornerLayer = corners(card);
+    center = companionArt(); cornerLayer = companionCorners(card);
   } else if (card.r === 'X') {
-    center = pamphleteerArt(opts); cornerLayer = pamphleteerCorners();
+    center = pamphleteerArt(); cornerLayer = pamphleteerCorners();
   } else {
     center = numberArt(card); cornerLayer = corners(card);
   }

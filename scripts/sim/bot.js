@@ -14,7 +14,8 @@ import { cardValue } from '../../shared/engine.js';
 import { enumeratePlays, outcomeOf } from './moves.js';
 import { cheapestPayment, handValue } from './signals.js';
 
-// Starting weights for the 'good' tier. tune.js searches from here.
+// Starting weights for the weighted tiers. tune.js optimizes the strong tier
+// from here against the rules currently shipped.
 export const BASE_WEIGHTS = {
   kill: 30,          // felling the royal
   exactHand: 12,     // ...to the last point, claimed into the hand
@@ -29,7 +30,7 @@ export const BASE_WEIGHTS = {
   shield: 6,         // barricades still standing when the blow comes
   payCost: 10,       // what surviving the counterattack costs
   death: 500,        // a move that cannot be survived
-  jesterBreak: 10,   // shattering an immunity that is actually in the way
+  jesterBreak: 10,   // breaking an immunity that is actually in the way
   rescue: 15,        // killing for a citoyen who says they cannot defend
   strand: 20,        // leaving a royal alive in front of one who cannot defend
   suits: 1.0,        // keeping a spread of powers available
@@ -60,7 +61,7 @@ function without(hand, cards) {
 // ---- paying a blow ---------------------------------------------------------
 
 // How much a card is worth keeping, beyond its face value: the Pamphleteer is
-// precious, a Sans-Culotte pairs with anything, and a lone suit is a power the
+// precious, Les Renforts pairs with anything, and a lone suit is a power the
 // table may need.
 function keepScore(card, hand) {
   if (card.r === 'X') return 100;

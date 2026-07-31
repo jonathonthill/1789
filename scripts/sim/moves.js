@@ -83,7 +83,7 @@ export function damageProfile(view, hand) {
   const aces = hand.filter(c => c.r === 'A');
   const rankCount = new Map();
   const rankHasClub = new Set();
-  // A companion arrives after the Pamphleteer has shattered immunity, so its
+  // A companion arrives after the Pamphleteer has broken immunity, so its
   // suit power lands even on a royal of its own suit — a clubs companion always
   // doubles.
   const withJester = view.rules.pamphleteerCompanion && hand.some(c => c.r === 'X');
@@ -109,7 +109,7 @@ export function damageProfile(view, hand) {
     for (const partner of hand) {
       if (partner.r === 'X' || (partner.r === 'A' && aces.length < 2)) continue;
       if (partner === aces[0] && aces.length < 2) continue;
-      note(1 + cardValue(partner), aceClub || partner.s === 'C');
+      note(cardValue(partner), aceClub || partner.s === 'C');
     }
   }
 
@@ -127,7 +127,7 @@ export function damageProfile(view, hand) {
 }
 
 // Spade value already committed against this royal — what starts counting the
-// moment a Pamphleteer shatters a spade royal's immunity.
+// moment a Pamphleteer breaks a spade royal's immunity.
 function committedSpades(view) {
   let total = 0;
   for (const combo of view.playedCombos) {

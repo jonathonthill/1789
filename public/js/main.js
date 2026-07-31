@@ -11,6 +11,18 @@ import { SETTINGS, loadRules, saveRules, settingHelp, summarize, rulebookRuns } 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
 
+const buildUpdatedAt = $('#build-updated-at');
+if (buildUpdatedAt) {
+  const updated = new Date(buildUpdatedAt.dateTime);
+  if (!Number.isNaN(updated.getTime())) {
+    buildUpdatedAt.textContent = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(updated);
+    buildUpdatedAt.title = updated.toString();
+  }
+}
+
 // ── app state ───────────────────────────────────────────────────────────────
 let mode = null;            // 'mp' | 'solo'
 let socket = null;
@@ -861,7 +873,7 @@ function renderEnemyStats(e, hpOverride, atkOverride) {
   strikeWrap.setAttribute('aria-valuenow', String(effectiveAttack));
   $('#enemy-zone').setAttribute(
     'aria-label',
-    `${meta.name}. ${hp} of ${e.health} health. ${effectiveAttack} of ${e.attack} strike.${e.immunityCancelled ? ' Immunity shattered.' : ` Immune to ${sm.power}.`}`
+    `${meta.name}. ${hp} of ${e.health} health. ${effectiveAttack} of ${e.attack} strike.${e.immunityCancelled ? ' Immunity broken.' : ` Immune to ${sm.power}.`}`
   );
 }
 

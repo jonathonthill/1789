@@ -1,14 +1,14 @@
-// Tuning the 'good' citoyen.
+// Tuning the 'strong' citoyen.
 //
-// The whole study rests on what "a good player" means, so the reference bot's
+// The whole study rests on what "a strong player" means, so the reference bot's
 // judgement is not left hand-guessed: coordinate descent walks each weight up
 // and down and keeps whatever wins more Revolutions.
 //
 //   node scripts/sim/tune.js --games 2000 --passes 4
 //
-// The basket deliberately spans table sizes and sits at middling difficulty,
-// where play actually decides the outcome. Tuning against a ruleset the bots
-// already win 90% of the time would teach them nothing.
+// Optimize against the rules people actually play. Each table size resolves
+// the current defaults independently, so La Constitution remains the source of
+// truth for the tuning target.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -20,9 +20,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const BASKET = [
   { players: 1, rules: {} },
-  { players: 2, rules: { handSizeDelta: -1 } },
-  { players: 3, rules: { handSizeDelta: -1 } },
-  { players: 4, rules: { regroups: 0, handSizeDelta: -1 } },
+  { players: 2, rules: {} },
+  { players: 3, rules: {} },
+  { players: 4, rules: {} },
 ];
 
 const MULTIPLIERS = [0.4, 0.7, 1.4, 2.2];
@@ -30,9 +30,9 @@ const MULTIPLIERS = [0.4, 0.7, 1.4, 2.2];
 async function scoreAll(candidates, games) {
   const cells = [];
   candidates.forEach((weights, ci) => {
-    BASKET.forEach((b, bi) => cells.push({ ...b, weights, tier: 'good', ci, bi }));
+    BASKET.forEach((b, bi) => cells.push({ ...b, weights, tier: 'strong', ci, bi }));
   });
-  const results = await sweep({ cells, games, tier: 'good' });
+  const results = await sweep({ cells, games, tier: 'strong' });
   const totals = candidates.map(() => 0);
   for (const r of results) totals[r.ci] += r.winRate;
   return totals.map(t => t / BASKET.length);
@@ -75,7 +75,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { weights, score } = await tune(args);
   const out = resolve(HERE, 'results/weights.json');
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify(weights, null, 1));
+  writeFileSync(out, `${JSON.stringify(weights, null, 1)}\n`);
   console.error(`\nTuned in ${((Date.now() - started) / 1000).toFixed(0)}s — mean win rate ${(100 * score).toFixed(2)}%`);
   console.error(`Weights written to ${out}`);
 }

@@ -425,6 +425,12 @@ input {
 }
 .tagline { font-family: var(--serif-fell); font-style: italic; color: var(--ink-soft); margin: 4px 0 12px; font-size: 1.05rem; }
 .home-buttons { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.build-updated {
+  display: inline-block; margin: 16px 0 0; padding: 3px 9px;
+  border: 1px solid var(--parchment-deep); border-radius: 999px;
+  background: rgba(248,241,223,.68); color: var(--ink-soft);
+  font: 500 .66rem/1.25 var(--serif-display); letter-spacing: .035em;
+}
 .join-row { display: flex; gap: 10px; }
 .join-row input { width: 112px; text-transform: uppercase; text-align: center; letter-spacing: .3em; font-size: 1.3rem; }
 .join-row .btn { flex: 1; width: auto; }
@@ -999,6 +1005,11 @@ input {
   color: var(--ink-soft); white-space: nowrap; box-shadow: 0 1px 3px rgba(60,40,10,.2);
 }
 .capture-seat-name b { font-weight: 400; }
+.capture-dismiss {
+  position: absolute; z-index: 9; left: 0; right: 0; top: 5px;
+  color: rgba(248,241,223,.55); font-size: .78rem; font-style: italic;
+  text-align: center; animation: blink 2s steps(1) infinite;
+}
 
 .capture-stage.playing .capture-royal {
   animation: capture-card-trip 3.1s cubic-bezier(.25,.8,.25,1) both;

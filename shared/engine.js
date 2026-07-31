@@ -16,7 +16,7 @@ export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, hea
 
 export function cardValue(c) {
   if (c.r === 'X') return 0;
-  if (c.r === 'A') return 1;
+  if (c.r === 'A') return 0;
   if (c.r === 'J') return 10;
   if (c.r === 'Q') return 15;
   if (c.r === 'K') return 20;
@@ -135,7 +135,7 @@ export function enemyAttack(state) {
 export function enemyHealth(state) { return ENEMY_STATS[state.enemy.card.r].health; }
 
 // Spades shield is dynamic: vs a Spades enemy, spade plays only count once the
-// Pamphleteer has cancelled immunity — including spades played BEFORE him.
+// Pamphleteer has broken immunity — including spades played BEFORE him.
 export function currentShield(state) {
   if (!state.enemy) return 0;
   if (state.enemy.card.s === 'S' && !state.enemy.immunityCancelled) return 0;
@@ -213,7 +213,7 @@ export function previewPlay(state, cards) {
   const value = attackCards.reduce((s, c) => s + cardValue(c), 0);
   const suits = [...new Set(attackCards.map(c => c.s).filter(Boolean))];
   const enemySuit = state.enemy.card.s;
-  // A Pamphleteer in the play shatters immunity before its partner resolves,
+  // A Pamphleteer in the play breaks immunity before its partner resolves,
   // so the partner's power counts even against the enemy's own suit.
   const cancelled = state.enemy.immunityCancelled || isJester;
   const active = s => s !== enemySuit || cancelled;
@@ -251,7 +251,7 @@ export function playCards(state, playerIdx, cards) {
   state.lastPlay = { playerIdx, cards, healthBefore, attackBefore, healthAfter: healthBefore, attackAfter: attackBefore };
   state.lastSacrifice = null;
 
-  // The Pamphleteer shatters immunity the moment he takes the floor — before a
+  // The Pamphleteer breaks immunity the moment he takes the floor — before a
   // partner resolves, so the partner's suit power lands even on a matching enemy.
   const jester = cards.some(c => c.r === 'X');
   const attackCards = cards.filter(c => c.r !== 'X');
@@ -259,7 +259,7 @@ export function playCards(state, playerIdx, cards) {
 
   if (jester && attackCards.length === 0) {
     state.playedCombos.push({ cards, value: 0, suits: [] });
-    log(state, `${player.name} unleashes the Pamphleteer — the enemy's immunity is shattered!`);
+    log(state, `${player.name} unleashes the Pamphleteer — the enemy's immunity is broken!`);
     // Unprotected, the Pamphleteer's player still takes the blow.
     if (!state.rules.pamphleteerImmune) {
       beginSuffering(state, playerIdx);

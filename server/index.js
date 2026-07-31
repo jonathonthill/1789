@@ -21,8 +21,9 @@ const SHARED_DIR = path.join(__dirname, '..', 'shared');
 // Everything the browser downloads, fingerprinted by size and mtime at boot.
 // The page is stamped with it and asks /version whether it has fallen behind —
 // mobile Safari is otherwise happy to sit on a cached build indefinitely.
-function buildStamp() {
+function buildInfo() {
   const h = crypto.createHash('sha1');
+  let updatedAt = 0;
   const walk = dir => {
     const entries = fs.readdirSync(dir, { withFileTypes: true })
       .sort((a, b) => (a.name < b.name ? -1 : 1));
@@ -30,25 +31,30 @@ function buildStamp() {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
       const st = fs.statSync(p);
+      updatedAt = Math.max(updatedAt, st.mtimeMs);
       h.update(`${path.relative(__dirname, p)}:${st.size}:${st.mtimeMs}\n`);
     }
   };
   try { walk(PUBLIC_DIR); walk(SHARED_DIR); } catch { /* stamp what we can read */ }
-  return h.digest('hex').slice(0, 12);
+  return {
+    build: h.digest('hex').slice(0, 12),
+    updatedAt: new Date(updatedAt || Date.now()).toISOString(),
+  };
 }
-const BUILD = buildStamp();
+const { build: BUILD, updatedAt: UPDATED_AT } = buildInfo();
 
 // The entry document is never cached: it carries the stamp every other
 // freshness check is measured against, so a stale copy would defeat the lot.
 const INDEX_HTML = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
-  .replaceAll('__BUILD__', BUILD);
+  .replaceAll('__BUILD__', BUILD)
+  .replaceAll('__UPDATED_AT__', UPDATED_AT);
 app.get(['/', '/index.html'], (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.type('html').send(INDEX_HTML);
 });
 app.get('/version', (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ build: BUILD });
+  res.json({ build: BUILD, updatedAt: UPDATED_AT });
 });
 
 // Code revalidates on every request (cheap — an unchanged file answers 304);

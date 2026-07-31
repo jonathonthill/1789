@@ -47,7 +47,7 @@ export const RULE_SPEC = {
   regroups: {
     label: 'Regroups',
     values: [0, 1, 2, 3],
-    bySize: { 1: 2, 2: 1, 3: 2, 4: 2 },
+    bySize: { 1: 2, 2: 1, 3: 1, 4: 1 },
     exposed: false,
   },
   // How many cards each citoyen takes when a Regroup is a shared draw rather
@@ -112,7 +112,7 @@ export const RULE_SPEC = {
     exposed: false,
   },
   // Whether the Pamphleteer may take the floor alongside one other card. He
-  // shatters immunity before his partner resolves either way, so a companion
+  // breaks immunity before his partner resolves either way, so a companion
   // lands its suit power even on a royal of its own suit.
   pamphleteerCompanion: {
     label: 'The Pamphleteer’s companion',

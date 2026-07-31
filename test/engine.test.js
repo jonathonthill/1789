@@ -82,7 +82,8 @@ test('companion pairing rules', () => {
   assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 5, s: 'S' }, { r: 6, s: 'S' }]), /only one other card/, 'A cannot make mixed ranks legal');
 });
 
-test('Rally recruits cards; companion adds value and both suit powers apply (8H + A-of-clubs = 18 dmg, 9 draws)', () => {
+test('Les Renforts is worth zero and combines its suit power with its partner', () => {
+  assert.equal(cardValue({ r: 'A', s: 'H' }), 0);
   const s = newGame(names2, { seed: 4 });
   rig(s, {
     hands: [[{ r: 8, s: 'H' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }]],
@@ -90,9 +91,9 @@ test('Rally recruits cards; companion adds value and both suit powers apply (8H 
   });
   const before = s.players[0].hand.length + s.players[1].hand.length - 2; // minus played
   playCards(s, 0, [{ r: 8, s: 'H' }, { r: 'A', s: 'C' }]);
-  assert.equal(s.enemy.damage, 18, 'clubs doubles the combined value 9');
+  assert.equal(s.enemy.damage, 16, 'the Ace adds clubs power but no value');
   const after = s.players[0].hand.length + s.players[1].hand.length;
-  assert.equal(after - before, Math.min(9, 9), 'drew up to 9 (capped by hand size/tavern)');
+  assert.equal(after - before, Math.min(8, 9), 'both powers use only the partner value');
 });
 
 test('Rally resolves before counterattack survivability is checked', () => {
@@ -227,7 +228,7 @@ test('a sacrifice that immediately dooms the next citoyen still leaves lastSacri
     'the snapshot survives the loss so the client can still animate the sacrifice before the loss screen');
 });
 
-test('Pamphleteer cancels immunity and passes play clockwise', () => {
+test('Pamphleteer breaks immunity and passes play clockwise', () => {
   const s = newGame(names3, { seed: 9, rules: ALONE });
   rig(s, {
     hands: [
@@ -242,7 +243,7 @@ test('Pamphleteer cancels immunity and passes play clockwise', () => {
   assert.equal(s.enemy.immunityCancelled, true);
   assert.equal(s.current, 1);
   playCards(s, 1, [{ r: 6, s: 'S' }]);
-  assert.equal(currentShield(s), 6, 'immunity cancelled — shield works vs Spades Jack');
+  assert.equal(currentShield(s), 6, 'immunity broken — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
 });
 
@@ -545,7 +546,7 @@ test('preview matches immunity context', () => {
   assert.deepEqual(p.immuneSuits, ['C']);
   s.enemy.immunityCancelled = true;
   p = previewPlay(s, [{ r: 7, s: 'C' }]);
-  assert.equal(p.damage, 14, 'doubling once immunity cancelled');
+  assert.equal(p.damage, 14, 'doubling once immunity is broken');
 });
 
 test('full game is winnable end-to-end (scripted exact plays)', () => {
@@ -586,15 +587,19 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
 
 test('rules resolve from partial and hostile input; difficulty sets royal power', () => {
   const medium = {
-    difficulty: 'medium', drawOnVictory: 1, regroups: 2, regroupDraw: 3,
+    difficulty: 'medium', drawOnVictory: 1, regroups: 1, regroupDraw: 3,
     royalStrikeBonus: 0, regroupScope: 'draw', handSizeDelta: 0, pamphleteers: 2,
     exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: true,
   };
   assert.deepEqual(resolveRules(null, 3), medium);
-  assert.deepEqual(resolveRules(null, 1), { ...medium, regroupScope: 'caller' }, 'alone, a Regroup refills the hand');
+  assert.deepEqual(
+    resolveRules(null, 1),
+    { ...medium, regroups: 2, regroupScope: 'caller' },
+    'alone, two Regroups refill the hand',
+  );
   assert.deepEqual(
     resolveRules(null, 2),
-    { ...medium, regroups: 1, regroupDraw: 2 },
+    { ...medium, regroupDraw: 2 },
     'two citoyens use the smaller shared Regroup',
   );
   assert.deepEqual(
@@ -747,7 +752,7 @@ test('an unprotected Pamphleteer suffers the blow, then play passes clockwise', 
   playCards(s, 0, [{ r: 'X', s: null }]);
   assert.equal(s.phase, 'discard', 'the reprisal lands');
   assert.equal(s.pendingDamage, 10);
-  assert.ok(s.enemy.immunityCancelled, 'immunity is shattered all the same');
+  assert.ok(s.enemy.immunityCancelled, 'immunity is broken all the same');
   discardForDamage(s, 0, [{ r: 9, s: 'D' }, { r: 8, s: 'C' }]);
   assert.equal(s.current, 1);
   assert.equal(s.phase, 'play');
@@ -934,7 +939,7 @@ test('the Pamphleteer count sets what is shuffled into Le Peuple; at zero immuni
   const none = newGame(names2, { seed: 52, rules: { pamphleteers: 0 } });
   rig(none, { hands: [[{ r: 6, s: 'S' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'S' } });
   playCards(none, 0, [{ r: 6, s: 'S' }]);
-  assert.equal(currentShield(none), 0, 'no Pamphleteer can ever shatter a Spade royal’s immunity');
+  assert.equal(currentShield(none), 0, 'no Pamphleteer can ever break a Spade royal’s immunity');
 });
 
 test('after a kill the next citoyen always faces the newcomer', () => {
