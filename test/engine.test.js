@@ -47,6 +47,16 @@ test('deck composition per player count', () => {
   }
 });
 
+test('a requested starting player leads the first turn', () => {
+  const s = newGame(names3, { seed: 1, startingPlayer: 2 });
+  assert.equal(s.current, 2);
+  assert.match(s.log.at(-1), /Marat leads the first attack/);
+  assert.throws(
+    () => newGame(names2, { seed: 1, startingPlayer: 2 }),
+    /starting player out of range/,
+  );
+});
+
 test('combo legality', () => {
   const s = newGame(names2, { seed: 2 });
   rig(s, { hands: [[

@@ -1125,7 +1125,15 @@ function layoutDecks(deckWidth) {
   const royal = $('#enemy-zone');
   const pairs = $$('.deck-col');
   if (!center || !royal || !pairs.length) return;
-  const railWidth = Math.max(0, (center.clientWidth - royal.getBoundingClientRect().width) / 2);
+  // Short-phone multiplayer compacts the royal to 106px to recover vertical
+  // room for the opponent rail. Do not let that cosmetic shrink change the
+  // deck breakpoint: it made borderline phone widths keep two piles abreast
+  // in multiplayer even though the same phone stacked them cleanly in solo.
+  const royalWidth = Math.max(
+    royal.getBoundingClientRect().width,
+    window.innerWidth <= 480 ? 124 : 0,
+  );
+  const railWidth = Math.max(0, (center.clientWidth - royalWidth) / 2);
   pairs.forEach(pair => {
     const gap = parseFloat(getComputedStyle(pair).columnGap) || 0;
     pair.classList.toggle('stacked', deckWidth * 2 + gap > railWidth);

@@ -161,6 +161,15 @@ function syncAndBroadcast(room) {
   broadcastState(room);
 }
 
+// Hosting is an administrative role, not a permanent first-player advantage.
+// Draw a fresh starter for the opening game and every rematch.
+function newRoomGame(room) {
+  return engine.newGame(room.players.map(p => p.name), {
+    rules: room.rules,
+    startingPlayer: crypto.randomInt(room.players.length),
+  });
+}
+
 io.on('connection', socket => {
   let myRoom = null;
   let myToken = null;
@@ -232,7 +241,7 @@ io.on('connection', socket => {
     if (room.status !== 'lobby') return cb?.({ ok: false, error: 'Already begun.' });
     if (room.players.length < 2) return cb?.({ ok: false, error: 'At least 2 citoyens needed. For solo, use Solo mode.' });
     touch(room);
-    room.state = engine.newGame(room.players.map(p => p.name), { rules: room.rules });
+    room.state = newRoomGame(room);
     room.status = 'playing';
     cb?.({ ok: true });
     broadcastState(room);
@@ -270,7 +279,7 @@ io.on('connection', socket => {
     if (playerIndex(room, myToken) !== 0) return cb?.({ ok: false, error: 'Only the host may call the next game.' });
     touch(room);
     if (rules) room.rules = { ...engine.DEFAULT_RULES, ...rules };
-    room.state = engine.newGame(room.players.map(p => p.name), { rules: room.rules });
+    room.state = newRoomGame(room);
     room.status = 'playing';
     cb?.({ ok: true });
     broadcastState(room);

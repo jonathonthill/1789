@@ -48,6 +48,10 @@ function shuffle(arr, rng) {
 export function newGame(playerNames, opts = {}) {
   const n = playerNames.length;
   if (n < 1 || n > 4) throw new Error('1-4 players');
+  const startingPlayer = opts.startingPlayer ?? 0;
+  if (!Number.isInteger(startingPlayer) || startingPlayer < 0 || startingPlayer >= n) {
+    throw new Error('starting player out of range');
+  }
   const rng = makeRng(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
   const rules = resolveRules(opts.rules, n);
 
@@ -85,7 +89,7 @@ export function newGame(playerNames, opts = {}) {
     discard: [],
     enemy: null,          // { card, damage, revealSeq, threatVariant, immunityCancelled }
     playedCombos: [],     // [{ cards, value, suits }] against current enemy
-    current: 0,
+    current: startingPlayer,
     phase: 'play',        // 'play' | 'discard' | 'won' | 'lost'
     pendingDamage: 0,
     // Set when a blow interrupts something that must still happen once it is
@@ -104,7 +108,7 @@ export function newGame(playerNames, opts = {}) {
   for (const p of state.players) drawTo(state, p);
   revealEnemy(state);
   state.lastEvent = { type: 'reveal', seq: state.revealSeq };
-  log(state, `The Revolution begins. ${n === 1 ? 'You stand alone, citoyen.' : `${n} citoyens take to the streets.`}`);
+  log(state, `The Revolution begins. ${n === 1 ? 'You stand alone, citoyen.' : `${n} citoyens take to the streets. ${state.players[startingPlayer].name} leads the first attack.`}`);
   return state;
 }
 
