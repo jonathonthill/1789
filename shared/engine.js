@@ -15,8 +15,8 @@ export { RULE_SPEC, RULE_KEYS, EXPOSED_RULE_KEYS } from './rules.js';
 export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, health: 30 }, K: { attack: 20, health: 40 } };
 
 export function cardValue(c) {
-  if (c.r === 'X') return 0;
-  if (c.r === 'A') return 0;
+  if (c.r === 'X') return 1;
+  if (c.r === 'A') return 1;
   if (c.r === 'J') return 10;
   if (c.r === 'Q') return 15;
   if (c.r === 'K') return 20;
@@ -209,9 +209,8 @@ export function validatePlay(state, playerIdx, cards) {
 // Preview what a staged play will do (used by the client for live projections).
 export function previewPlay(state, cards) {
   const isJester = cards.some(c => c.r === 'X');
-  const attackCards = cards.filter(c => c.r !== 'X');
-  const value = attackCards.reduce((s, c) => s + cardValue(c), 0);
-  const suits = [...new Set(attackCards.map(c => c.s).filter(Boolean))];
+  const value = cards.reduce((s, c) => s + cardValue(c), 0);
+  const suits = [...new Set(cards.map(c => c.s).filter(Boolean))];
   const enemySuit = state.enemy.card.s;
   // A Pamphleteer in the play breaks immunity before its partner resolves,
   // so the partner's power counts even against the enemy's own suit.
@@ -254,23 +253,13 @@ export function playCards(state, playerIdx, cards) {
   // The Pamphleteer breaks immunity the moment he takes the floor — before a
   // partner resolves, so the partner's suit power lands even on a matching enemy.
   const jester = cards.some(c => c.r === 'X');
-  const attackCards = cards.filter(c => c.r !== 'X');
-  if (jester) state.enemy.immunityCancelled = true;
-
-  if (jester && attackCards.length === 0) {
-    state.playedCombos.push({ cards, value: 0, suits: [] });
+  if (jester) {
+    state.enemy.immunityCancelled = true;
     log(state, `${player.name} unleashes the Pamphleteer — the enemy's immunity is broken!`);
-    // Unprotected, the Pamphleteer's player still takes the blow.
-    if (!state.rules.pamphleteerImmune) {
-      beginSuffering(state, playerIdx);
-      return state;
-    }
-    advanceTurn(state);
-    return state;
   }
 
-  const value = attackCards.reduce((s, c) => s + cardValue(c), 0);
-  const suits = [...new Set(attackCards.map(c => c.s))];
+  const value = cards.reduce((s, c) => s + cardValue(c), 0);
+  const suits = [...new Set(cards.map(c => c.s).filter(Boolean))];
   state.playedCombos.push({ cards, value, suits });
 
   const enemySuit = state.enemy.card.s;

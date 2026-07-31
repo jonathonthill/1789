@@ -82,8 +82,8 @@ test('companion pairing rules', () => {
   assert.match(validatePlay(s, 0, [{ r: 'A', s: 'C' }, { r: 5, s: 'S' }, { r: 6, s: 'S' }]), /only one other card/, 'A cannot make mixed ranks legal');
 });
 
-test('Les Renforts is worth zero and combines its suit power with its partner', () => {
-  assert.equal(cardValue({ r: 'A', s: 'H' }), 0);
+test('Les Renforts is worth one and combines its suit power with its partner', () => {
+  assert.equal(cardValue({ r: 'A', s: 'H' }), 1);
   const s = newGame(names2, { seed: 4 });
   rig(s, {
     hands: [[{ r: 8, s: 'H' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }]],
@@ -91,9 +91,9 @@ test('Les Renforts is worth zero and combines its suit power with its partner', 
   });
   const before = s.players[0].hand.length + s.players[1].hand.length - 2; // minus played
   playCards(s, 0, [{ r: 8, s: 'H' }, { r: 'A', s: 'C' }]);
-  assert.equal(s.enemy.damage, 16, 'the Ace adds clubs power but no value');
+  assert.equal(s.enemy.damage, 18, 'the Ace adds its value and clubs power');
   const after = s.players[0].hand.length + s.players[1].hand.length;
-  assert.equal(after - before, Math.min(8, 9), 'both powers use only the partner value');
+  assert.equal(after - before, 9, 'both powers use the full value of the play');
 });
 
 test('Rally resolves before counterattack survivability is checked', () => {
@@ -411,7 +411,7 @@ test('solo: regroup resets the deck, refills to 8, spends the pool; Lay Low is n
 });
 
 test('two-player: l’Assemblée carries a Regroup, which resets the deck for the whole table', () => {
-  const s = newGame(names2, { seed: 42, rules: TABLE_REGROUP });
+  const s = newGame(names2, { seed: 42, rules: { regroups: 2 } });
   const partnerHand = [{ r: 9, s: 'H' }, { r: 8, s: 'D' }];
   rig(s, {
     hands: [[{ r: 2, s: 'C' }], partnerHand],
@@ -525,14 +525,14 @@ test('a citoyen who drops mid-vote leaves the floor entirely, and a lost mover d
   assert.equal(s.regroupsUsed, 1, 'and spends nothing');
 });
 
-test('jester rejected in combos; jester value 0 as discard', () => {
+test('jester rejected in combos; jester value 1 as discard', () => {
   const s = newGame(names3, { seed: 17, rules: ALONE });
   rig(s, {
     hands: [[{ r: 'X', s: null }, { r: 5, s: 'H' }], [{ r: 2, s: 'C' }], [{ r: 2, s: 'D' }]],
     enemy: { r: 'J', s: 'H' },
   });
   assert.ok(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'H' }]), 'jester must be alone');
-  assert.equal(cardValue({ r: 'X', s: null }), 0);
+  assert.equal(cardValue({ r: 'X', s: null }), 1);
 });
 
 test('preview matches immunity context', () => {
@@ -588,19 +588,19 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
 test('rules resolve from partial and hostile input; difficulty sets royal power', () => {
   const medium = {
     difficulty: 'medium', drawOnVictory: 1, regroups: 1, regroupDraw: 3,
-    royalStrikeBonus: 0, regroupScope: 'draw', handSizeDelta: 0, pamphleteers: 2,
+    royalStrikeBonus: 0, regroupScope: 'table', handSizeDelta: 0, pamphleteers: 2,
     exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: true,
   };
   assert.deepEqual(resolveRules(null, 3), medium);
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, regroups: 2, regroupScope: 'caller' },
+    { ...medium, regroups: 2 },
     'alone, two Regroups refill the hand',
   );
   assert.deepEqual(
     resolveRules(null, 2),
     { ...medium, regroupDraw: 2 },
-    'two citoyens use the smaller shared Regroup',
+    'two citoyens retain the table-wide Regroup with its legacy draw setting',
   );
   assert.deepEqual(
     resolveRules(null, 4),
@@ -763,6 +763,7 @@ test('a protected Pamphleteer skips the reprisal, as the rulebook has it', () =>
   rig(s, { hands: [[{ r: 'X', s: null }, { r: 9, s: 'D' }], [], []], enemy: { r: 'J', s: 'S' } });
   playCards(s, 0, [{ r: 'X', s: null }]);
   assert.equal(s.phase, 'play');
+  assert.equal(s.enemy.damage, 1, 'the Pamphleteer contributes his own point of damage');
   assert.equal(s.current, 1, 'protection skips the blow, not the clockwise handoff');
   assert.equal(s.players[0].hand.length, 1, 'nothing was paid');
 });
@@ -796,9 +797,9 @@ test('the Pamphleteer may bring one companion, whose power lands through immunit
   // A club companion against a club royal: immunity falls first, so the mob doubles.
   const preview = previewPlay(paired, [{ r: 'X', s: null }, { r: 8, s: 'C' }]);
   assert.ok(preview.doubled, 'the companion’s suit power survives the royal’s immunity');
-  assert.equal(preview.damage, 16);
+  assert.equal(preview.damage, 18);
   playCards(paired, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }]);
-  assert.equal(paired.enemy.damage, 16);
+  assert.equal(paired.enemy.damage, 18);
   assert.ok(paired.enemy.immunityCancelled);
 });
 
@@ -808,7 +809,7 @@ test('a companion does not cost the Pamphleteer his protection or clockwise hand
   playCards(shielded, 0, [{ r: 'X', s: null }, { r: 4, s: 'D' }]);
   assert.equal(shielded.phase, 'play', 'shielded, so no blow to pay');
   assert.equal(shielded.current, 1);
-  assert.equal(shielded.enemy.damage, 4);
+  assert.equal(shielded.enemy.damage, 5);
 
   const exposed = newGame(names3, {
     seed: 67,

@@ -69,14 +69,14 @@ export function cardInfo(card, view) {
   let html = '';
   if (card.r === 'X') {
     html = `<h3>P✒ The Pamphleteer</h3>
-      <p>This is a <b>Helper Card</b>: Helper Cards are marked <b>A</b> or <b>P</b> in their corners and are worth <b>0</b>. The <b>P</b> identifies the Pamphleteer.</p>
+      <p>This is a <b>Helper Card</b>: Helper Cards are marked <b>A</b> or <b>P</b> in their corners and are worth <b>1</b>. The <b>P</b> identifies the Pamphleteer.</p>
       <p>May fight alone or pair with exactly one non-Pamphleteer card. His exposé <b>breaks the enemy's immunity before the partner resolves</b>, so the partner's suit power works even when it matches the royal.</p>
       <p>You then face the enemy's counterattack. If you survive, play passes clockwise to the <b>next citoyen</b>.</p>
-      <p>When sacrificed to damage, he is worth <b>0</b>.</p>`;
+      <p>When sacrificed to damage, he is worth <b>1</b>.</p>`;
   } else if (card.r === 'A') {
     html = `<h3>${miniLabel(card)} Les Renforts</h3>
-      <p>This is a <b>Helper Card</b>: Helper Cards are marked <b>A</b> or <b>P</b> in their corners and are worth <b>0</b>. The <b>A</b> identifies Les Renforts.</p>
-      <p>May fight alone or join exactly one other non-Pamphleteer card (even another Renfort). It combines its suit power with its partner's; the partner's value fuels every represented power.</p>
+      <p>This is a <b>Helper Card</b>: Helper Cards are marked <b>A</b> or <b>P</b> in their corners and are worth <b>1</b>. The <b>A</b> identifies Les Renforts.</p>
+      <p>May fight alone or join exactly one other non-Pamphleteer card (even another Renfort). It combines its suit power with its partner's; the full play value fuels every represented power.</p>
       <p>${suitPowerLine(card.s)}</p>
       <p>Cannot join a same-number combo.</p>`;
   } else if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
@@ -106,7 +106,7 @@ export function pileInfo(kind, view) {
   if (kind === 'tavern') {
     return `<h3>🥖 ${TERMS.tavern}</h3>
       <p>The people's deck — <b>${view.tavernCount}</b> potential recruits. ♥ Rally Le Peuple draws from it; ♦ Raid La Prison slips the freed and shuffled prisoners <i>under</i> it.</p>
-      <p>A <b>Regroup</b> draws from here: alone it takes back your hand, shuffles, and deals you a fresh one; at a table it simply deals every citoyen a few cards.</p>
+      <p>A <b>Regroup</b> returns every hand and La Prison here, shuffles the combined deck, and deals every citoyen a fresh full hand.</p>
       <p>An empty deck is no defeat — you simply draw nothing.</p>`;
   }
   if (kind === 'discard') {
@@ -159,9 +159,9 @@ export function contextHelp(view) {
   const hasCapturedRoyal = hand.some(c => c.r === 'J' || c.r === 'Q' || c.r === 'K');
 
   const phaseCopy = {
-    play: `<p>Play one card, a legal same-number combo, or a <b>Helper Card</b> paired with one other card, then press <b>Attaquez!</b> The letters <b>A</b> and <b>P</b> mark the zero-value Helper Cards. Every represented suit power fires at the play's total value.</p>
+    play: `<p>Play one card, a legal same-number combo, or a <b>Helper Card</b> paired with one other card, then press <b>Attaquez!</b> The letters <b>A</b> and <b>P</b> mark the 1-value Helper Cards. Every represented suit power fires at the play's total value.</p>
       <p>Or <b>Lay Low</b>: skip the turn outright, taking no strike — once against each royal.${view.solo ? ' (Not offered alone.)' : ''} Fell a royal and you take no strike either; the <b>next citoyen</b> faces whoever steps up.</p>`,
-    discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Les Renforts and the Pamphleteer count 0; captured royals count 10 / 15 / 20.</p>`,
+    discard: `<p>Tap cards totaling at least <b>${view.pendingDamage ?? 0}</b>, then confirm to survive. Les Renforts and the Pamphleteer count 1; captured royals count 10 / 15 / 20.</p>`,
     won: `<p><b>Vive la République!</b> Every royal has fallen.</p>`,
     lost: `<p><b>The Revolution has been crushed.</b></p>`,
   }[view.phase] ?? '';
@@ -169,14 +169,14 @@ export function contextHelp(view) {
   // The odd tile out (captured royals) spans the full row instead of
   // leaving a lonely half-empty row — see .help-power-grid.ref-grid.
   const cardsSection = `<h3>Card Reference</h3>
-    <p><b>The letters A and P in the corners mark the Helper Cards:</b> A for Les Renforts and P for the Pamphleteer. Both are worth 0; their special powers help another card. Recruited J/Q/K royals are valuable spoils, not Helper Cards.</p>
+    <p><b>The letters A and P in the corners mark the Helper Cards:</b> A for Les Renforts and P for the Pamphleteer. Both are worth 1; their special powers help another card. Recruited J/Q/K royals are valuable spoils, not Helper Cards.</p>
     <div class="help-power-grid ref-grid">
     ${['H', 'D', 'C', 'S'].map(s => powerGuide(s, heldSuits.has(s))).join('')}
     ${specialGuide({ r: 'A', s: 'S' }, 'Les Renforts',
-      `A marks this zero-value Helper Card. Combine Powers: fights alone or pairs with exactly one other non-Pamphleteer card — even another Renfort. Every represented suit power uses the partner's value; never joins a same-number combo.`,
+      `A marks this 1-value Helper Card. Combine Powers: fights alone or pairs with exactly one other non-Pamphleteer card — even another Renfort. Every represented suit power uses the play's total value; never joins a same-number combo.`,
       hasRenforts)}
     ${specialGuide({ r: 'X', s: null }, 'The Pamphleteer',
-      `P marks this zero-value Helper Card. Breaks Immunity before the partner resolves; fights alone or with one non-Pamphleteer card, takes the counterattack, then play passes clockwise.`,
+      `P marks this 1-value Helper Card. Breaks Immunity before the partner resolves; fights alone or with one non-Pamphleteer card, takes the counterattack, then play passes clockwise.`,
       hasPamphleteer)}
     ${specialGuide({ r: 'J', s: 'H' }, 'Captured Royals',
       `A defeated Officer, Queen, or King you've recruited attacks at a fixed value — 10 / 15 / 20 — with its full suit power, and is worth the same if sacrificed.`,
@@ -274,7 +274,7 @@ export function helpHTML(view) {
         ${helpCard({ r: 'K', s: 'C' }, 'King', { subtitle: true })}
       </div>
       <p><b>One Revolution, twelve royals.</b> Defeat 4 Officers of the Crown, then 4 Queens, then 4 Kings. If one citoyen falls, everyone loses.</p>
-      <p><b>A and P in the corners mark the Helper Cards.</b> A is Les Renforts and P is the Pamphleteer. Both are worth 0: they help by combining powers or breaking immunity. Recruited J/Q/K royals are valuable spoils, not helpers.</p>
+      <p><b>A and P in the corners mark the Helper Cards.</b> A is Les Renforts and P is the Pamphleteer. Both are worth 1: they help by combining powers or breaking immunity. Recruited J/Q/K royals are valuable spoils, not helpers.</p>
     </div>
 ${constitutionSection(view)}
 
@@ -292,11 +292,11 @@ ${constitutionSection(view)}
     <p class="help-rule-note"><b>Immunity:</b> each royal blocks the power of their own suit—the crossed-out suit on affected cards—but their damage still counts. A Pamphleteer breaks that immunity for the rest of the fight.</p>
 
     <h3 class="${here('discard')}">Suffering Damage</h3>
-    <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Les Renforts and Pamphleteers are worth 0; captured royals count 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
+    <p>Tap cards totaling at least the displayed damage, then press <b>Sacrifice</b>. Les Renforts and Pamphleteers are worth 1; captured royals count 10 / 15 / 20. If your hand cannot cover the blow, the Revolution is crushed.</p>
     <p><b>Lay Low:</b> skip your turn outright — you make no attack, and the royal finds nobody to strike. Each citoyen may lie low <b>once against each royal</b>; the right returns when the next royal steps up. It is a multiplayer option only, since alone there is no one for a skipped turn to help.</p>
 
     <h3>Number Combos & Helper Cards (A / P)</h3>
-    <p><b>A and P mark the Helper Cards.</b> Both are worth 0; their job is to add a special effect to a partner. Recruited J/Q/K royals belong to a separate spoil category.</p>
+    <p><b>A and P mark the Helper Cards.</b> Both are worth 1; their job is to add a special effect to a partner. Recruited J/Q/K royals belong to a separate spoil category.</p>
     <div class="help-example-row">
       <div class="help-example-cards" aria-hidden="true">
         ${helpCard({ r: 3, s: 'H' }, '3♥')}${helpCard({ r: 3, s: 'D' }, '3♦')}${helpCard({ r: 3, s: 'C' }, '3♣')}
@@ -307,13 +307,13 @@ ${constitutionSection(view)}
       <div class="help-example-cards help-pair" aria-hidden="true">
         ${helpCard({ r: 'A', s: 'S' }, 'Les Renforts')}${helpCard({ r: 8, s: 'H' }, '8♥')}
       </div>
-      <p><b>A · Les Renforts — Combine Powers:</b> this zero-value Helper Card may fight alone or pair with one non-Pamphleteer card (including another Renfort), but cannot join a combo. Every represented suit power uses the partner's value.</p>
+      <p><b>A · Les Renforts — Combine Powers:</b> this 1-value Helper Card may fight alone or pair with one non-Pamphleteer card (including another Renfort), but cannot join a combo. Every represented suit power uses the play's total value.</p>
     </div>
 
     <h3 class="${here('jester')}">The Pamphleteer</h3>
     <div class="help-example-row">
       <div class="help-example-cards help-single" aria-hidden="true">${helpCard({ r: 'X', s: null }, 'Pamphleteer')}</div>
-      <p><b>P · The Pamphleteer — Breaks Immunity:</b> this zero-value Helper Card may fight alone or pair with one non-Pamphleteer card and breaks the royal's immunity <b>before his partner resolves</b>, so that partner's matching suit power fires immediately. He does not escape the reprisal; after it resolves, play passes clockwise. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table.</p>
+      <p><b>P · The Pamphleteer — Breaks Immunity:</b> this 1-value Helper Card may fight alone or pair with one non-Pamphleteer card and breaks the royal's immunity <b>before his partner resolves</b>, so that partner's matching suit power fires immediately. He does not escape the reprisal; after it resolves, play passes clockwise. Earlier barricades begin working; earlier mob attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table.</p>
     </div>
 
     <h3>Defeating a Royal</h3>
@@ -339,9 +339,7 @@ ${constitutionSection(view)}
     <p>Never reveal or hint at what you hold. Public facts are fair game (“I have two cards,” “Le Peuple runs low”). After a Pamphleteer, you may say whether you would like to act next—nothing more.</p>
 
     <h3>Regroup</h3>
-    <p>A Regroup is the table's way of catching its breath. ${view?.solo
-      ? `Alone it is a fresh start: your hand goes back into ${TERMS.tavern}, which is shuffled, and you draw a full hand again.`
-      : `At a table every citoyen draws ${view?.rules?.regroupDraw ?? 3} card${(view?.rules?.regroupDraw ?? 3) === 1 ? '' : 's'} from ${TERMS.tavern} — nobody has to give up a hand they were keeping for a reason.`} It may be called before attacking or while facing damage, and it does not break royal immunity.</p>
+    <p>A Regroup is the table's way of catching its breath. Every hand and all of ${TERMS.discard} return to ${TERMS.tavern}; the deck is shuffled and every citoyen draws a fresh full hand. It may be called before attacking or while facing damage, and it does not break royal immunity.</p>
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
     <p>You fight alone with ${view.handSize ?? 8} cards and the ${view.rules?.regroups ?? 2} Regroup${(view.rules?.regroups ?? 2) === 1 ? '' : 's'} La Constitution granted you — spent freely, with no Assemblée to convince. Finish having spent none for <b>Gold</b>, one for <b>Silver</b>, two for <b>Bronze</b>. Lay Low is not offered alone: there is no fellow citoyen for a skipped turn to help.</p>` : ''}
     ${view && !view.solo ? `<h3>l'Assemblée</h3>
@@ -359,10 +357,9 @@ function walkCard(card, label, className = '') {
 
 export function walkthroughSteps(view) {
   const left = view?.regroupsRemaining ?? 0;
-  const draw = view?.rules?.regroupDraw ?? 3;
   const regroupCopy = view?.solo
-    ? `A Regroup is a fresh start: your hand goes back into Le Peuple, which is shuffled, and you draw a full hand again. You have ${left} left; La Constitution sets how many the game begins with.`
-    : `The table shares a pool of Regroups — ${left} left. Spending one deals every citoyen ${draw} card${draw === 1 ? '' : 's'}. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
+    ? `A Regroup is a fresh start: your hand and La Prison go back into Le Peuple, which is shuffled, and you draw a full hand again. You have ${left} left; La Constitution sets how many the game begins with.`
+    : `The table shares a pool of Regroups — ${left} left. Spending one returns every hand and La Prison to Le Peuple, shuffles, and deals fresh full hands. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
 
   return [
     {
@@ -409,11 +406,11 @@ export function walkthroughSteps(view) {
     {
       eyebrow: 'Know your cards',
       title: 'A and P mark the Helper Cards',
-      body: `<p><b>Helper Cards are easy to spot: look for A or P in the corners.</b> A marks Les Renforts; P marks the Pamphleteer. Both Helper Cards are worth <b>0</b>. Recruited J/Q/K royals are valuable spoils, not helpers.</p>
-        <p><b>A · Les Renforts — Combine Powers:</b> pair with one card and add the Ace's suit power at the partner's value. <b>P · Pamphleteer — Breaks Immunity:</b> pair with one non-Pamphleteer card so its blocked power can fire. Each may also be played alone. <b>Next: the four phases of a turn.</b></p>`,
+      body: `<p><b>Helper Cards are easy to spot: look for A or P in the corners.</b> A marks Les Renforts; P marks the Pamphleteer. Both Helper Cards are worth <b>1</b>. Recruited J/Q/K royals are valuable spoils, not helpers.</p>
+        <p><b>A · Les Renforts — Combine Powers:</b> pair with one card and add the Ace's suit and value to the play. <b>P · Pamphleteer — Breaks Immunity:</b> pair with one non-Pamphleteer card so its blocked power can fire. Each may also be played alone. <b>Next: the four phases of a turn.</b></p>`,
       stage: `<div class="walk-play-examples">
-        <div><span>Helper Card · A</span><div>${walkCard({ r: 'A', s: 'S' }, 'Les Renforts · value 0')}</div></div>
-        <div><span>Helper Card · P</span><div>${walkCard({ r: 'X', s: null }, 'Pamphleteer · value 0')}</div></div>
+        <div><span>Helper Card · A</span><div>${walkCard({ r: 'A', s: 'S' }, 'Les Renforts · value 1')}</div></div>
+        <div><span>Helper Card · P</span><div>${walkCard({ r: 'X', s: null }, 'Pamphleteer · value 1')}</div></div>
       </div>`,
     },
     {
@@ -432,11 +429,11 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 1 of 4 · Attack',
       title: 'Phase 1: Choose one legal attack',
       body: `<p>Play any single card. Or combine <b>2–4 numbered cards of the same rank</b> if their total is at most 20. Every suit in a combo fires at the full total.</p>
-        <p><b>A and P in the corners mark the zero-value Helper Cards.</b> A · Les Renforts may pair with exactly one non-Pamphleteer card—even another Renfort—but never joins a numbered combo. Every represented suit power uses the partner's value. Stage your choice and press <b>Attaquez!</b> <b>Next: Phase 2 — Resolve Powers.</b></p>`,
+        <p><b>A and P in the corners mark the 1-value Helper Cards.</b> A · Les Renforts may pair with exactly one non-Pamphleteer card—even another Renfort—but never joins a numbered combo. Every represented suit power uses the play's total value. Stage your choice and press <b>Attaquez!</b> <b>Next: Phase 2 — Resolve Powers.</b></p>`,
       stage: `<div class="walk-play-examples">
         <div><span>single</span><div>${walkCard({ r: 8, s: 'S' }, 'value 8')}</div></div>
         <div><span>same-rank combo</span><div>${walkCard({ r: 3, s: 'H' }, '')}${walkCard({ r: 3, s: 'D' }, '')}${walkCard({ r: 3, s: 'C' }, 'total 9')}</div></div>
-        <div><span>Les Renforts pair</span><div>${walkCard({ r: 'A', s: 'S' }, 'A · value 0 · adds ♠')}${walkCard({ r: 8, s: 'H' }, '8 · total 8')}</div></div>
+        <div><span>Les Renforts pair</span><div>${walkCard({ r: 'A', s: 'S' }, 'A · value 1 · adds ♠')}${walkCard({ r: 8, s: 'H' }, '8 · total 9')}</div></div>
       </div>`,
     },
     {
@@ -455,11 +452,11 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 2 continued · Immunity',
       title: 'Phase 2: Check the royal’s immunity',
       body: `<p>A royal is immune to the <b>power</b> of cards matching their suit, but those cards still deal their normal damage.</p>
-        <p><b>P · Pamphleteer — Breaks Immunity:</b> P marks this zero-value Helper Card. He may fight alone or with one non-Pamphleteer partner and permanently breaks immunity <b>before the partner resolves</b>, so their matching suit power fires immediately. The royal still strikes back; after the reprisal, play passes clockwise. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
+        <p><b>P · Pamphleteer — Breaks Immunity:</b> P marks this 1-value Helper Card. He may fight alone or with one non-Pamphleteer partner and permanently breaks immunity <b>before the partner resolves</b>, so their matching suit power fires immediately. The royal still strikes back; after the reprisal, play passes clockwise. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. Two are shuffled into Le Peuple—three at a four-citoyen table. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
       stage: `<div class="walk-immunity">
         <div class="walk-immune-royal">${walkCard({ r: 'Q', s: 'H' }, 'immune to ♥')}</div>
         <div class="walk-immune-card">${walkCard({ r: 6, s: 'H' }, '6 damage · no draw')}<span class="walk-block">×</span></div>
-        <div class="walk-pamphlet">${walkCard({ r: 'X', s: null }, 'P · value 0')}${walkCard({ r: 6, s: 'H' }, 'partner power fires')}<span class="walk-rip">immunity broken first</span></div>
+        <div class="walk-pamphlet">${walkCard({ r: 'X', s: null }, 'P · value 1')}${walkCard({ r: 6, s: 'H' }, 'total 7 · power fires')}<span class="walk-rip">immunity broken first</span></div>
       </div>`,
     },
     {

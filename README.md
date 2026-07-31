@@ -115,7 +115,7 @@ Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **
 · Jester → **The Pamphleteer** · Animal Companion → **Les Renforts** · Yield → **Lay Low**
 
 **Helper Cards** are marked by letters in their corners: **A** for Les Renforts
-and **P** for the Pamphleteer. Both are worth 0; A combines powers and P breaks
+and **P** for the Pamphleteer. Both are worth 1; A combines powers and P breaks
 royal immunity.
 · ♥ Rally Le Peuple · ♦ Raid La Prison · ♣ Rise en Masse · ♠ A La Barricade
 

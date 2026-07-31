@@ -40,10 +40,10 @@ function suitPip(suit, cx, cy, size, { halo = 0, cls = 'corner-suit' } = {}) {
 }
 
 export function suitColor(s) { return (s === 'H' || s === 'D') ? RED : INK; }
-export function rankLabel(r) { return r === 'X' ? '0' : String(r); }
+export function rankLabel(r) { return r === 'X' ? 'P' : String(r); }
 
 export function miniLabel(card) {
-  if (card.r === 'X') return '0✒';
+  if (card.r === 'X') return 'P✒';
   return `${card.r}${SUIT_GLYPH[card.s] ?? ''}`;
 }
 
@@ -181,7 +181,7 @@ function royalCorners(card) {
 }
 
 // The Pamphleteer has no suit: P over an upright pen nib identifies the card.
-// Its rules value remains zero.
+// Its rules value is one.
 function pamphleteerCorners() {
   return `
     <g fill="${INK}" font-family="${SERIF}" font-weight="700" text-anchor="middle">

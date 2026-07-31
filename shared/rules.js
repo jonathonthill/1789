@@ -10,8 +10,8 @@
 // shows those as "Défaut (n)" and stores null until the host overrides them.
 // Everything else has one default for every table.
 //
-// The numbers here come from the balance study in scripts/sim; its findings and
-// the reasoning behind each value are written up in scripts/sim/RECOMMENDATION.md.
+// The starting numbers came from the balance study in scripts/sim; later live
+// rules changes may supersede that historical recommendation.
 
 export const HAND_SIZE = { 1: 8, 2: 6, 3: 5, 4: 5 };
 
@@ -71,16 +71,15 @@ export const RULE_SPEC = {
 
   // ---- the shape of the game, not a difficulty setting ---------------------
 
-  // What a Regroup actually resets. A lone citoyen has no table to keep a hand
-  // for, so alone it is the rulebook's own solo move — throw the hand away and
-  // draw a fresh one. At a table it is a shared draw instead: nobody has to
-  // sacrifice a hand they may have been holding for a reason.
+  // What a Regroup actually resets. Under the rulebook default, every hand and
+  // all of La Prison return to Le Peuple, which is shuffled before fresh hands
+  // are dealt around the table.
   regroupScope: {
     label: 'What a Regroup resets',
     // Weakest first. 'draw' resets nothing at all — the table simply takes a
     // few cards from Le Peuple, a far smaller step than any reshuffle.
     values: ['draw', 'caller', 'callerAndPrison', 'table'],
-    bySize: { 1: 'caller', 2: 'draw', 3: 'draw', 4: 'draw' },
+    bySize: { 1: 'table', 2: 'table', 3: 'table', 4: 'table' },
     exposed: false,
   },
   handSizeDelta: {

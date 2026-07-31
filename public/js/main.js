@@ -46,11 +46,13 @@ function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setI
 // The seat session lives in BOTH storages: sessionStorage wins so each tab keeps
 // its own seat (two tabs in one browser can't hijack each other), while
 // localStorage lets a killed browser rejoin its most recent seat.
+function storedSession(store) {
+  try { return JSON.parse(store.getItem('r1789_session')); } catch { return null; }
+}
 function loadSession() {
-  try {
-    return JSON.parse(sessionStorage.getItem('r1789_session'))
-        ?? JSON.parse(localStorage.getItem('r1789_session'));
-  } catch { return null; }
+  // Parse the two stores independently: one damaged tab value must not hide a
+  // perfectly valid browser-wide fallback.
+  return storedSession(sessionStorage) ?? storedSession(localStorage);
 }
 function saveSession(v) {
   if (v == null) {
@@ -157,21 +159,59 @@ function net() {
   // never the localStorage fallback, or a second tab would hijack the seat.
   socket.on('connect', () => {
     checkForUpdate(); // a reconnect is usually a phone waking up on a stale tab
-    let s = null;
-    try { s = JSON.parse(sessionStorage.getItem('r1789_session')); } catch {}
-    if (s?.code) { session = s; tryRejoin(true); }
+    const s = storedSession(sessionStorage);
+    if (s?.code) {
+      session = s;
+      tryRejoin({ silent: true, preserveFallback: true });
+    }
   });
+  // If the wire drops while a rejoin acknowledgement is outstanding, allow
+  // the next connect event to try again instead of leaving the tab wedged.
+  socket.on('disconnect', () => { rejoinInFlight = false; });
   return socket;
 }
 
-function tryRejoin(silent) {
-  net().emit('rejoin', { code: session.code, token: session.token }, res => {
-    if (!res.ok) {
-      if (!silent) homeError(res.error);
-      saveSession(null); session = null;
+let rejoinInFlight = false;
+
+function showResumeButton() {
+  const btn = $('#btn-resume');
+  const resumable = storedSession(localStorage);
+  if (!resumable?.code) { btn.hidden = true; return; }
+  session = resumable;
+  btn.innerHTML = `Rejoin salon ${esc(resumable.code)} <small>as ${esc(resumable.name ?? 'Citoyen')}</small>`;
+  btn.hidden = false;
+  btn.onclick = () => tryRejoin();
+}
+
+function tryRejoin({ silent = false, preserveFallback = false } = {}) {
+  if (rejoinInFlight || !session?.code || !session?.token) return;
+  rejoinInFlight = true;
+  const attempted = session;
+  net().timeout(8000).emit('rejoin', { code: attempted.code, token: attempted.token }, (err, res) => {
+    rejoinInFlight = false;
+    // A timeout is not evidence that the salon or seat disappeared. Keep the
+    // saved session and expose the manual Rejoin action for another attempt.
+    if (err) {
+      if (!silent) homeError('Could not reach the salon. Try rejoining.');
+      session = attempted;
       show('home');
+      showResumeButton();
       return;
     }
+    if (!res.ok) {
+      if (!silent) homeError(res.error);
+      if (preserveFallback) {
+        sessionStorage.removeItem('r1789_session');
+        session = storedSession(localStorage);
+      } else {
+        saveSession(null);
+        session = null;
+      }
+      show('home');
+      showResumeButton();
+      return;
+    }
+    $('#btn-resume').hidden = true;
     myIndex = res.playerIndex;
     if (res.status === 'lobby') show('lobby');
     // playing/ended: the server pushes a state event which routes the screen
@@ -673,10 +713,10 @@ function defeatSeatHolds(v, event, includeCapture) {
 }
 
 // Spoils are a separate reward beat, after the royal's judgment has cleared. Hold
-// this viewer's actual spoil cards out of their hand until the shared draw
-// finishes; the ghost count still shows the whole table's draw.
+// this viewer's actual spoil cards out of their hand until their own draw
+// finishes; other citoyens' spoils are represented at their seats.
 function animateSpoils(v, event, done) {
-  const drawn = event?.spoilsDrawn ?? 0;
+  const drawn = v.you ? (event?.spoilsByPlayer?.[v.you.index] ?? 0) : 0;
   if (drawn <= 0) {
     renderHand(v);
     renderSeats(v);
@@ -1124,10 +1164,9 @@ function renderActions(v) {
   const left = v.regroupsRemaining ?? 0;
   regroup.hidden = !v.canRegroup || !myTurn;
   regroup.textContent = v.solo ? `Regroup (${left})` : `l'Assemblée (${left})`;
-  const drawn = v.rules?.regroupDraw ?? 3;
   regroup.title = v.solo
     ? 'Put your hand back into Le Peuple, shuffle, and draw a fresh one'
-    : `Move for a Regroup — the table votes, and every citoyen draws ${drawn} card${drawn === 1 ? '' : 's'}`;
+    : 'Move for a Regroup — the table votes, then every hand and La Prison are shuffled into Le Peuple and fresh hands are dealt';
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
   renderAssembly(v);
@@ -1139,10 +1178,9 @@ function renderAssembly(v) {
   $('#assembly').hidden = !a;
   if (!a) return;
   const mover = v.players[a.caller]?.name ?? 'A citoyen';
-  const draw = v.rules?.regroupDraw ?? 3;
   $('#assembly-motion').innerHTML =
-    `<strong>${esc(mover)}</strong> moves to Regroup — ${draw} card${draw === 1 ? '' : 's'} from Le Peuple
-     to every citoyen, up to their limit.
+    `<strong>${esc(mover)}</strong> moves to Regroup — every hand and La Prison return to Le Peuple,
+     which is shuffled before fresh hands are dealt all round.
      ${v.regroupsRemaining} remain${v.regroupsRemaining === 1 ? 's' : ''} in the pool.`;
   $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
     const answered = i === a.caller ? true : a.votes[i] !== undefined;
@@ -1682,14 +1720,10 @@ if (debugParams.has('win')) {
   // second player on the same browser can't accidentally hijack it.
   const tabSession = (() => { try { return JSON.parse(sessionStorage.getItem('r1789_session')); } catch { return null; } })();
   if (tabSession?.code) {
-    tryRejoin(false);
+    session = tabSession;
+    tryRejoin({ preserveFallback: true });
   } else {
     show('home');
-    if (session?.code) {
-      const btn = $('#btn-resume');
-      btn.innerHTML = `Rejoin salon ${esc(session.code)} <small>as ${esc(session.name ?? 'Citoyen')}</small>`;
-      btn.hidden = false;
-      btn.onclick = () => tryRejoin(false);
-    }
+    showResumeButton();
   }
 }

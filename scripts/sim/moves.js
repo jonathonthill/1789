@@ -89,10 +89,9 @@ export function damageProfile(view, hand) {
   const withJester = view.rules.pamphleteerCompanion && hand.some(c => c.r === 'X');
 
   for (const c of hand) {
-    if (c.r === 'X') continue;
     note(cardValue(c), c.s === 'C');
-    if (withJester) {
-      const value = cardValue(c);
+    if (withJester && c.r !== 'X') {
+      const value = cardValue(c) + cardValue({ r: 'X' });
       const d = c.s === 'C' ? value * 2 : value;
       if (d > best) best = d;
       if (d >= remaining) canFinish = true;
@@ -109,7 +108,7 @@ export function damageProfile(view, hand) {
     for (const partner of hand) {
       if (partner.r === 'X' || (partner.r === 'A' && aces.length < 2)) continue;
       if (partner === aces[0] && aces.length < 2) continue;
-      note(cardValue(partner), aceClub || partner.s === 'C');
+      note(cardValue(partner) + cardValue(aces[0]), aceClub || partner.s === 'C');
     }
   }
 
@@ -134,7 +133,6 @@ function committedSpades(view) {
     let value = 0;
     let spade = false;
     for (const c of combo.cards) {
-      if (c.r === 'X') continue;
       value += cardValue(c);
       if (c.s === 'S') spade = true;
     }
@@ -176,9 +174,8 @@ export function outcomeOf(view, cards, seat = view.you?.index ?? view.current) {
   let value = 0;
   const suits = new Set();
   for (const c of cards) {
-    if (c.r === 'X') continue;
     value += cardValue(c);
-    suits.add(c.s);
+    if (c.s) suits.add(c.s);
   }
   const active = s => suits.has(s) && (s !== enemySuit || cancelled);
 

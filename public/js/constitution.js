@@ -174,9 +174,7 @@ export function summarize(rules, playerCount) {
 export function gameRulesSummary(rules, playerCount) {
   const n = Math.min(4, Math.max(1, playerCount || 1));
   const resolved = resolveRules(rules, n);
-  const regroup = n === 1
-    ? `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — discard and refill to ${rulebookFor(n).handSize + resolved.handSizeDelta}`
-    : `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — each citoyen draws ${resolved.regroupDraw}`;
+  const regroup = `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — reshuffle every hand and La Prison, then refill to ${rulebookFor(n).handSize + resolved.handSizeDelta}`;
   const royalPower = {
     easy: 'Easy — Officers / Queens / Kings strike 8 / 13 / 18',
     medium: 'Medium — Officers / Queens / Kings strike 10 / 15 / 20',

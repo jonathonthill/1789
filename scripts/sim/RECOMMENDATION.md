@@ -149,3 +149,8 @@ need reconciling with it.
 - Lay Low remains a free duck once per citoyen per royal rather than the
   rulebook's yield-and-still-suffer. It is worth up to 18 points at four players.
 - Bots never misread a signal and never forget a card they have seen.
+# Historical balance recommendation
+
+> Superseded by the current ruleset: Helper Cards now have value 1, and every
+> Regroup returns all hands and La Prison to Le Peuple before fresh hands are
+> dealt. The figures below describe the earlier rules used for this study.
