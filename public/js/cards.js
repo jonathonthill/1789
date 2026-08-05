@@ -44,6 +44,7 @@ export function rankLabel(r) { return r === 'X' ? 'P' : String(r); }
 
 export function miniLabel(card) {
   if (card.r === 'X') return 'P✒';
+  if (card.r === 'R') return 'R●';
   return `${card.r}${SUIT_GLYPH[card.s] ?? ''}`;
 }
 
@@ -195,6 +196,18 @@ function pamphleteerCorners() {
     </g>`;
 }
 
+// La Retraite is the red counterpart to the Pamphleteer's black special suit.
+// Its cockade is deliberately monochrome: an outer ring and centre dot with
+// the paper face between them, so it reads as cleanly as an ordinary suit pip.
+function retreatCorners() {
+  return `
+    <g fill="${RED}" font-family="${SERIF}" font-weight="700" text-anchor="middle">
+      <text x="34" y="52" font-size="46">R</text>
+      <circle cx="34" cy="79" r="13" fill="none" stroke="${RED}" stroke-width="5"/>
+      <circle cx="34" cy="79" r="4.5"/>
+    </g>`;
+}
+
 // ── the specials ────────────────────────────────────────────────────────────
 // Les Renforts carries the lifted figure over a red title/effect box.
 function companionArt() {
@@ -230,6 +243,17 @@ function pamphleteerArt() {
       font-family="${SERIF}" font-weight="700" letter-spacing=".25">BREAKS IMMUNITY</text>`;
 }
 
+function retreatArt() {
+  return `
+    <image href="/img/specials/la-retraite.png" x="39" y="27" width="172" height="213"
+      preserveAspectRatio="xMidYMid meet"/>
+    <rect x="17" y="253" width="206" height="66" rx="9" fill="${BLUE}" stroke="${GOLD}" stroke-width="1.5"/>
+    <text class="pb-title" x="120" y="281" font-size="${POWER_WORD_SIZE}" text-anchor="middle" fill="#fbf3dc"
+      font-family="${SERIF}" font-weight="700" letter-spacing="0.4">LA RETRAITE</text>
+    <text class="pb-effect" x="120" y="306" font-size="${POWER_ACTION_SIZE}" text-anchor="middle" fill="${GOLD_HI}"
+      font-family="${SERIF}" font-weight="700" letter-spacing=".25">DISCARD &amp; DRAW</text>`;
+}
+
 export function cardSVG(card, opts = {}) {
   const isRoyal = card.r === 'J' || card.r === 'Q' || card.r === 'K';
   let center, extra = '', cornerLayer;
@@ -240,6 +264,8 @@ export function cardSVG(card, opts = {}) {
     center = companionArt(); cornerLayer = companionCorners(card);
   } else if (card.r === 'X') {
     center = pamphleteerArt(); cornerLayer = pamphleteerCorners();
+  } else if (card.r === 'R') {
+    center = retreatArt(); cornerLayer = retreatCorners();
   } else {
     center = numberArt(card); cornerLayer = corners(card);
   }

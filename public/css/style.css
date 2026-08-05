@@ -330,6 +330,34 @@ input { user-select: text; -webkit-user-select: text; }
 .help-rule-badges { margin: 8px 0 4px; }
 
 .assembly-panel { max-width: 420px; }
+.assembly-prompt {
+  margin: 2px 0 14px; text-align: center; color: var(--ink-soft);
+  font-family: var(--serif-fell); font-size: 1.12rem; font-style: italic;
+}
+.assembly-cards { display: flex; justify-content: center; align-items: flex-start; gap: 22px; }
+.assembly-card-choice {
+  position: relative; width: 126px; padding: 0 0 34px; border: 0; background: none;
+  color: var(--ink); cursor: pointer; border-radius: 12px;
+}
+.assembly-card-art {
+  display: block; width: 100%; filter: drop-shadow(0 7px 8px rgba(30,20,8,.25));
+  transition: transform .18s ease, filter .18s ease;
+}
+.assembly-card-art svg { display: block; width: 100%; height: auto; }
+.assembly-card-choice:hover .assembly-card-art,
+.assembly-card-choice:focus-visible .assembly-card-art {
+  transform: translateY(-5px); filter: drop-shadow(0 10px 11px rgba(30,20,8,.34));
+}
+.assembly-card-choice:focus-visible { outline: 2px solid var(--royal); outline-offset: 5px; }
+.assembly-card-choice:disabled { cursor: not-allowed; opacity: .42; }
+.assembly-card-choice:disabled .assembly-card-art { filter: grayscale(.7); transform: none; }
+.assembly-card-count {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+  min-width: 48px; padding: 3px 11px; border: 1.5px solid var(--gold);
+  border-radius: 999px; background: var(--royal); color: var(--paper);
+  font: 700 .9rem var(--serif-display); box-shadow: 0 2px 6px rgba(30,20,8,.22);
+}
+.assembly-cancel { display: block; margin: 18px auto 0; }
 .assembly-tally { list-style: none; padding: 0; margin: 0; }
 .assembly-tally li {
   display: flex; justify-content: space-between; align-items: center;
@@ -759,7 +787,7 @@ input {
 .action-bar { padding: 4px 12px calc(10px + env(safe-area-inset-bottom)); flex-shrink: 0; }
 .projection { font-size: .87rem; font-style: italic; text-align: center; min-height: 20px; color: #e8dfc8; }
 .projection .warn { color: #f0a9b4; font-weight: bold; }
-.action-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+.action-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 4px; }
 
 .pause-banner {
   position: fixed; left: 50%; transform: translateX(-50%);
@@ -825,7 +853,24 @@ input {
   position: fixed; inset: 0; z-index: 60;
   background: rgba(12, 10, 22, .85);
   display: flex; align-items: center; justify-content: center;
-  animation: fadein .25s ease;
+}
+
+/* A carried shared special is laid beneath the royal like any remote play,
+   then removed straight upward because it belongs to no pile. */
+.special-play-card {
+  position: fixed; z-index: 58; width: var(--special-card-w, 92px);
+  pointer-events: none; transform: translate(-50%, 18px) scale(.94);
+  opacity: 0; filter: drop-shadow(0 8px 12px rgba(12,10,22,.48));
+}
+.special-play-card svg { display: block; width: 100%; height: auto; }
+.special-play-card.playing {
+  animation: special-card-consumed 1.75s cubic-bezier(.24,.72,.3,1) both;
+}
+@keyframes special-card-consumed {
+  0% { opacity: 0; transform: translate(-50%, 18px) scale(.94); }
+  18% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  58% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -115vh) scale(.92); }
 }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
@@ -976,7 +1021,7 @@ input {
 }
 .capture-pin-glint::after { transform: translate(-50%,-50%) rotate(90deg); }
 .capture-caption {
-  position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 134px;
+  position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 165px;
   text-align: center; opacity: 0; color: var(--paper); transform: translateY(8px);
 }
 .capture-caption strong {
@@ -986,7 +1031,7 @@ input {
   display: block; color: var(--gold-hi); font-family: var(--serif-fell); font-style: italic;
 }
 .capture-hand {
-  position: absolute; z-index: 2; left: 50%; bottom: 17px;
+  position: absolute; z-index: 2; left: 50%; bottom: 48px;
   width: 190px; height: 78px; transform: translateX(-50%); opacity: .74;
 }
 .capture-fan {
@@ -1069,7 +1114,7 @@ input {
 }
 @media (max-width: 420px) {
   .capture-royal, .capture-burst { top: 36%; }
-  .capture-caption { bottom: 130px; }
+  .capture-caption { bottom: 160px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .capture-stage.playing .capture-royal,
@@ -1083,6 +1128,116 @@ input {
     animation-duration: .01ms;
     animation-delay: 0ms;
   }
+}
+
+/* tier advance and Spoils share the same before/after hand-fan grammar as an
+   exact capture, but remain separate beats so their rules never blur. */
+.reward-stage {
+  position: relative; width: min(100vw, 720px); height: min(520px, calc(100dvh - 12px));
+  overflow: hidden; isolation: isolate; text-align: center;
+}
+.reward-stage::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(217,188,99,.2), transparent 42%),
+    radial-gradient(ellipse at 50% 100%, rgba(27,42,94,.5), transparent 58%);
+}
+.tier-liberty {
+  position: absolute; z-index: 2; left: 50%; top: 2px; width: min(310px, 66vw); height: 335px;
+  object-fit: contain; transform: translate(-50%, 44px) scale(.92); opacity: 0;
+  filter: drop-shadow(0 8px 13px rgba(12,10,22,.55));
+}
+.tier-copy, .spoils-copy {
+  position: absolute; z-index: 4; left: 14px; right: 14px; color: var(--paper);
+}
+.tier-copy { top: 306px; opacity: 0; }
+.tier-copy strong, .spoils-copy strong {
+  display: block; font: 500 1.55rem var(--serif-display); text-transform: uppercase;
+}
+.tier-copy span, .spoils-copy span {
+  color: var(--gold-hi); font: italic 1rem var(--serif-fell);
+}
+.reward-hand {
+  position: absolute; z-index: 3; left: 50%; bottom: 48px; width: 230px; height: 92px;
+  transform: translateX(-50%); opacity: .8;
+}
+.reward-fan { position: absolute; left: 0; right: 0; bottom: 38px; height: 70px; }
+.reward-fan-after { opacity: 0; }
+.reward-fan-card {
+  position: absolute; bottom: 0; width: 46px; aspect-ratio: 240/336;
+  transform-origin: 50% 90%; filter: drop-shadow(0 3px 5px rgba(12,10,22,.35));
+}
+.reward-fan-card svg { display: block; width: 100%; height: 100%; }
+.hand-limit, .reward-hand-label {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: max-content;
+  padding: 3px 13px; border: 1.5px solid var(--gold); border-radius: 999px;
+  background: var(--paper); color: var(--ink-soft); font-size: .82rem;
+}
+.hand-limit b { color: var(--crimson); font: 700 1rem var(--serif-display); }
+.hand-limit i { margin: 0 7px; color: var(--gold); font-style: normal; }
+.reward-dismiss {
+  position: absolute; z-index: 8; left: 0; right: 0; top: 5px; text-align: center;
+  color: rgba(248,241,223,.55); font-size: .78rem; font-style: italic;
+  animation: blink 2s steps(1) infinite;
+}
+.tier-stage.playing .tier-liberty { animation: tier-liberty-rise .72s cubic-bezier(.2,.9,.3,1) both; }
+.tier-stage.playing .tier-copy { animation: capture-caption-in .35s ease-out .35s both; }
+.tier-stage.playing .reward-hand { animation: capture-hand-receive .46s ease-out 1.12s both; }
+.tier-stage.playing .reward-fan-before { animation: capture-fan-out .2s ease-in 1.02s forwards; }
+.tier-stage.playing .reward-fan-after { animation: capture-fan-in .5s cubic-bezier(.22,.78,.32,1) 1.02s both; }
+@keyframes tier-liberty-rise {
+  from { opacity: 0; transform: translate(-50%, 44px) scale(.92); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.spoils-card {
+  position: absolute; z-index: 5; left: 50%; top: 38%; width: 118px; aspect-ratio: 240/336;
+  opacity: 0; transform: translate(-50%,-50%) rotate(-5deg);
+  filter: drop-shadow(0 7px 13px rgba(12,10,22,.55));
+}
+.spoils-card svg { display: block; width: 100%; height: 100%; }
+.spoils-copy { top: 58px; opacity: 0; }
+.spoils-stage.playing .spoils-card { animation: spoil-card-trip 2.5s cubic-bezier(.25,.8,.25,1) both; }
+.spoils-stage.playing .spoils-copy { animation: capture-caption-in .32s ease-out .18s both; }
+.spoils-stage.playing .reward-hand { animation: capture-hand-receive .42s ease-out 2.02s both; }
+.spoils-stage.playing .reward-fan-before { animation: capture-fan-out .18s ease-in 1.84s forwards; }
+.spoils-stage.playing .reward-fan-after { animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 1.84s both; }
+@keyframes spoil-card-trip {
+  0% { opacity: 0; transform: translate(-50%,-85%) rotate(-7deg) scale(.9); }
+  12% { opacity: 1; transform: translate(-50%,-50%) rotate(-3deg) scale(1); }
+  66% { opacity: 1; transform: translate(-50%,-50%) rotate(1deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%,165px) rotate(7deg) scale(.34); }
+}
+@media (max-width: 420px) {
+  .assembly-cards { gap: 13px; }
+  .assembly-card-choice { width: 108px; }
+  .tier-liberty { width: min(285px, 72vw); height: 310px; }
+  .tier-copy { top: 286px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .special-play-card.playing { animation: fadein .01ms both; }
+  .tier-stage.playing .tier-liberty,
+  .tier-stage.playing .tier-copy,
+  .tier-stage.playing .reward-hand,
+  .tier-stage.playing .reward-fan-before,
+  .tier-stage.playing .reward-fan-after,
+  .spoils-stage.playing .spoils-card,
+  .spoils-stage.playing .spoils-copy,
+  .spoils-stage.playing .reward-hand,
+  .spoils-stage.playing .reward-fan-before,
+  .spoils-stage.playing .reward-fan-after {
+    animation-duration: .01ms; animation-delay: 0ms;
+  }
+}
+
+/* Every cinematic uses one stable affordance. Keeping it fixed to the viewport
+   prevents the label jumping between the top, flowing content, and the area
+   below a video as one animation hands off to the next. */
+.entrance-dismiss,
+.capture-dismiss,
+.reward-dismiss,
+.cutscene-skip {
+  position: fixed; z-index: 20; left: 0; right: 0; top: auto;
+  bottom: max(10px, env(safe-area-inset-bottom)); margin: 0;
+  text-align: center;
 }
 
 /* bottom sheet */

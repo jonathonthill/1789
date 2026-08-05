@@ -49,14 +49,43 @@ fly deploy
 
 `PORT` is honored if the host sets it.
 
+Solo games are saved locally after every action. Closing or leaving the game
+adds a **Continue solo revolution** action on the home screen, and refreshing
+the same tab resumes automatically. A finished or surrendered game clears its
+save. The saved random-state cursor keeps future shuffles identical after a
+resume.
+
+## Real-game outcome data
+
+Every completed game is recorded as one anonymous JSON line in
+`data/game-outcomes.jsonl`. Records include the result, table size, duration,
+actions, royals defeated, resources used, remaining card counts, and the exact
+Constitution. They do **not** include player names, room codes, IP addresses,
+hands, or the play-by-play log.
+
+Open `/api/outcomes/summary` on the running server for live totals, win rate,
+average duration and progress, plus breakdowns by solo/multiplayer, player
+count, difficulty, and loss type. Solo outcomes are held in the browser while
+offline and retried later; the server de-duplicates every game id.
+
+Set `OUTCOME_LOG_PATH` to choose another location:
+
+```bash
+OUTCOME_LOG_PATH=/var/lib/1789/game-outcomes.jsonl npm start
+```
+
+On a hosted deployment, point that path at a persistent disk or volume. Without
+one, a redeploy may erase the collected file along with the application image.
+
 ## How it's built
 
 | Path | What it is |
 |---|---|
 | `shared/rules.js` | The rule register — every house rule the engine can obey, its legal values, its default per table size, and whether La Constitution currently offers it. A rule is carried here permanently and exposed with a single `exposed: true`. |
-| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: suit powers with Raid-before-Rally ordering, the Pamphleteer breaking enemy immunity, Les Renforts combining powers, 2–4 card same-number combos capped at 20, dynamic spade barricades, Lay Low as a free duck rationed to once per citoyen per royal, exact kills won over into the slayer's hand, captured royals at 10/15/20, a shared Regroup pool, and the house rules of La Constitution. |
+| `shared/engine.js` | Pure rules engine — runs on the server (multiplayer, authoritative) and in the browser (solo). Every rule enforced: tiered hand limits and rewards, suit powers with Raid-before-Rally ordering, shared zero-damage Pamphleteers breaking immunity by vote, Les Renforts combining powers, 2–4 card same-number combos capped at 20, dynamic spade barricades, Lay Low rationed to once per citoyen per tier, exact kills won over into the slayer's hand, captured royals at 10/15/20, a shared Regroup pool, and the house rules of La Constitution. |
 | `shared/theme.js` | The French Revolution naming: 12 historical enemies with 3 threat lines each, suit power names, terminology. |
 | `server/index.js` | Express + Socket.IO. Salon codes, host-led lobby with 30s disconnect grace, per-player secret views, token-based seamless rejoin, rematch, 2h idle room expiry. |
+| `server/outcomes.js` | Anonymous, append-only outcome logging for completed solo and multiplayer games, with duplicate protection and aggregate reporting. |
 | `public/` | Vanilla JS frontend. SVG-drawn cards, entrance animations with typewriter threats, guillotine defeats, stage-then-confirm play, contextual help (status strip, long-press explainers, phase-aware rules panel, first-game coach marks). |
 | `scripts/sim/` | The balance study: simulated citoyens who play whole games through the real engine, and the sweep that measures a ruleset's win rate. See below. |
 | `test/engine.test.js` | `node:test` suite for the engine. |
@@ -114,9 +143,22 @@ the production Docker image.
 Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **The Ancien Régime**
 · Jester → **The Pamphleteer** · Animal Companion → **Les Renforts** · Yield → **Lay Low**
 
-**Helper Cards** are marked by letters in their corners: **A** for Les Renforts
-and **P** for the Pamphleteer. Both are worth 1; A combines powers and P breaks
-royal immunity.
+**Les Renforts** are the 1-value Helper Cards marked **A**. Solo has one
+Pamphleteer; multiplayer tables have two. They sit beside the table as shared,
+single-use resources: they deal zero damage and
+break immunity without spending the active citoyen's turn; multiplayer use
+requires a majority vote.
+
+Hand limits rise through Officers / Queens / Kings: **5/6/7** with one or two
+citoyens, and **4/5/6** with three or four. At four players, every royal has 5
+additional endurance.
+Solo draws two Spoils per royal. Multiplayer tables draw no per-royal Spoils;
+every citoyen instead draws one tier Spoil upon entering Queens and Kings. Solo
+draws no transition card, having already taken Spoils from the royal who ended
+the tier. Lay Low refreshes
+at Queens and Kings. Solo begins with one Regroup and gains one at each tier
+transition, with unused Regroups carrying forward; every multiplayer table has
+one shared Regroup.
 · ♥ Rally Le Peuple · ♦ Raid La Prison · ♣ Rise en Masse · ♠ A La Barricade
 
 Rules reference: `RegicideRulesA4.pdf` (original game by Paul Abrahams, Luke Badger,

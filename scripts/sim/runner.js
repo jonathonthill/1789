@@ -6,7 +6,7 @@
 
 import {
   newGame, viewFor, playCards, discardForDamage, yieldTurn,
-  regroup, callAssembly, castVote, surrenderGame,
+  regroup, usePamphleteer, callAssembly, callPamphleteerAssembly, castVote, surrenderGame,
 } from '../../shared/engine.js';
 import { decide, motionCarries, inLastResort, BASE_WEIGHTS } from './bot.js';
 import { speak, mute } from './signals.js';
@@ -47,6 +47,30 @@ function holdAssembly(state, caller, talk, weights) {
   return state;
 }
 
+function unleashPamphleteer(state, caller) {
+  if (state.solo) return usePamphleteer(state, caller);
+  callPamphleteerAssembly(state, caller);
+  let spins = 0;
+  while (state.assembly && spins++ < 8) {
+    const pending = state.assembly.voters.find(i => state.assembly.votes[i] === undefined);
+    if (pending === undefined) break;
+    castVote(state, pending, true);
+  }
+  return state;
+}
+
+function wantsPamphleteer(view, hand, tier, rng, humanProfile = {}) {
+  if (!view.canUsePamphleteer || !view.enemy || view.enemy.immunityCancelled) return false;
+  const blocked = hand.filter(card => card.s === view.enemy.card.s);
+  if (!blocked.length) return false;
+  const strongest = Math.max(...blocked.map(card => typeof card.r === 'number' ? card.r : 1));
+  const useful = strongest >= 5 || view.enemy.card.r === 'K';
+  // Practiced humans still overlook or postpone a useful shared resource. The
+  // reference bots retain their deterministic timing for regression studies.
+  if (tier === 'human' && useful && rng && rng() < (humanProfile.pamphleteerMissRate ?? 0.15)) return false;
+  return useful;
+}
+
 // A small deterministic stream for everything that is not the deal: which games
 // seat a weaker citoyen, and which turns they misplay. Kept separate from the
 // engine's own rng so the cards a table is dealt do not change when the study
@@ -64,7 +88,7 @@ function tableRng(seed) {
 export function playGame({
   players, rules, seed, tier = 'good', weights = BASE_WEIGHTS, noTacticalYield = false,
   // What share of games seat one citoyen who misplays, and how often they do.
-  weakFraction = 0, errorRate = 0,
+  weakFraction = 0, errorRate = 0, humanProfile = {},
 } = {}) {
   const seatTiers = seatsOf(tier, players);
   const rng = tableRng(seed);
@@ -77,7 +101,7 @@ export function playGame({
   // An 'average' citoyen plays exactly as a good one does — hears the table,
   // weighs every legal action — but judges by hand-reasoned instinct instead of
   // the fitted weights. Right ideas, imperfect priorities.
-  const weightsFor = t => (t === 'average' ? BASE_WEIGHTS : weights);
+  const weightsFor = t => (t === 'average' || t === 'human' ? BASE_WEIGHTS : weights);
   const policyFor = t => (t === 'average' ? 'good' : t);
   const state = newGame(NAMES.slice(0, players), { seed, rules });
   let actions = 0;
@@ -88,6 +112,7 @@ export function playGame({
   let exactKills = 0;
   let blowsPaid = 0;
   let damagePaid = 0;
+  const plannedCards = Array.from({ length: players }, () => null);
 
   while (state.phase !== 'won' && state.phase !== 'lost') {
     if (++actions > MAX_ACTIONS) { surrenderGame(state, 0); break; }
@@ -96,15 +121,24 @@ export function playGame({
     const talk = listen(state, view, seatTiers);
     const hand = state.players[seat].hand;
 
+    // Pamphleteers are a free shared action, so decide on one before selecting
+    // the attack that still follows on this same turn.
+    if (state.phase === 'play' && wantsPamphleteer(view, hand, seatTiers[seat], rng, humanProfile)) {
+      try { unleashPamphleteer(state, seat); } catch { surrenderGame(state, seat); }
+      continue;
+    }
+
     let action;
     try {
       action = decide(view, hand, talk, {
+        ...humanProfile,
         tier: policyFor(seatTiers[seat]),
         weights: weightsFor(seatTiers[seat]),
         noTacticalYield,
         allowRegroup: blocked !== seat,
         errorRate: errorFor(seat),
         rng,
+        plannedCards: plannedCards[seat],
       });
     } catch {
       surrenderGame(state, seat);
@@ -114,6 +148,7 @@ export function playGame({
     try {
       if (action.type === 'play') {
         playCards(state, seat, action.cards);
+        plannedCards[seat] = action.plannedCards ?? null;
         if (state.lastEvent?.exact) exactKills++;
       } else if (action.type === 'discard') {
         blowsPaid++;
@@ -129,6 +164,7 @@ export function playGame({
         if (state.solo) regroup(state, seat);
         else holdAssembly(state, seat, talk, weightsFor(seatTiers[seat]));
         if (state.regroupsUsed > before) {
+          plannedCards.fill(null);
           if (forced) regroupsForced++; else regroupsChosen++;
           blocked = -1;
         } else if (forced) {
@@ -161,10 +197,10 @@ export function playGame({
 
 // A batch of games on one ruleset, reported as a win rate and the extras the
 // report needs to sanity-check how the bots behaved.
-export function runBatch({ players, rules, seeds, tier = 'good', weights = BASE_WEIGHTS, noTacticalYield = false, weakFraction = 0, errorRate = 0 }) {
+export function runBatch({ players, rules, seeds, tier = 'good', weights = BASE_WEIGHTS, noTacticalYield = false, weakFraction = 0, errorRate = 0, humanProfile = {} }) {
   const total = { wins: 0, royalsFelled: 0, regroupsUsed: 0, regroupsChosen: 0, layLows: 0, exactKills: 0, blowsPaid: 0, damagePaid: 0 };
   for (const seed of seeds) {
-    const r = playGame({ players, rules, seed, tier, weights, noTacticalYield, weakFraction, errorRate });
+    const r = playGame({ players, rules, seed, tier, weights, noTacticalYield, weakFraction, errorRate, humanProfile });
     if (r.won) total.wins++;
     for (const k of ['royalsFelled', 'regroupsUsed', 'regroupsChosen', 'layLows', 'exactKills', 'blowsPaid', 'damagePaid']) {
       total[k] += r[k];

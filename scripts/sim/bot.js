@@ -9,6 +9,7 @@
 //   'decent' — own hand only, deaf to the table, takes the biggest swing going
 //   'good'   — hears the table, weighs every legal action one move deep
 //   'strong' — as good, plus optimal payment and a read on who acts next
+//   'human'  — a bounded, fallible search meant to resemble practiced solo play
 
 import { cardValue } from '../../shared/engine.js';
 import { enumeratePlays, outcomeOf } from './moves.js';
@@ -63,9 +64,10 @@ function without(hand, cards) {
 // How much a card is worth keeping, beyond its face value: the Pamphleteer is
 // precious, Les Renforts pairs with anything, and a lone suit is a power the
 // table may need.
-function keepScore(card, hand) {
+function keepScore(card, hand, preserve = []) {
   if (card.r === 'X') return 100;
   let score = cardValue(card) * 0.5;
+  if (preserve?.includes(card)) score += 30;
   if (card.r === 'A') score += 4;
   const sameSuit = hand.filter(c => c.s === card.s).length;
   if (sameSuit === 1) score += 3;
@@ -76,9 +78,10 @@ function keepScore(card, hand) {
 
 // Give up the least useful cards that still cover the blow, then hand back
 // anything the pile turns out not to need.
-export function choosePayment(hand, damage) {
+export function choosePayment(hand, damage, preserve = []) {
   if (damage <= 0) return [];
-  const order = [...hand].sort((a, b) => keepScore(a, hand) - keepScore(b, hand));
+  preserve ??= [];
+  const order = [...hand].sort((a, b) => keepScore(a, hand, preserve) - keepScore(b, hand, preserve));
   const pile = [];
   let total = 0;
   for (const c of order) {
@@ -93,7 +96,7 @@ export function choosePayment(hand, damage) {
     trimmed = false;
     const spare = pile
       .filter(c => total - cardValue(c) >= damage)
-      .sort((a, b) => keepScore(b, hand) - keepScore(a, hand))[0];
+      .sort((a, b) => keepScore(b, hand, preserve) - keepScore(a, hand, preserve))[0];
     if (spare) {
       pile.splice(pile.indexOf(spare), 1);
       total -= cardValue(spare);
@@ -136,9 +139,15 @@ function scorePlay(ctx, o) {
 
   if (o.kills) {
     score += w.kill;
-    if (o.exact) score += view.rules.exactKillTo === 'hand' ? w.exactHand : w.exactPeuple;
+    if (o.exact && ctx.recognizeExact !== false) {
+      score += view.rules.exactKillTo === 'hand' ? w.exactHand : w.exactPeuple;
+    }
   } else {
     score += w.damage * (o.damage / remaining);
+    // Solo players can deliberately leave a number they already know how to
+    // finish exactly on their following turn. The reward is discounted because
+    // the plan still has to survive a counterattack and an intervening payment.
+    if (o.plannedExact) score += w.exactSetup ?? w.exactHand * 0.65;
   }
   score -= w.overkill * (o.overkill / remaining);
   score -= w.spendCard * o.spent;
@@ -203,11 +212,117 @@ function errs(opts) {
   return opts.errorRate > 0 && opts.rng && opts.rng() < opts.errorRate;
 }
 
+function humanAttackSlip(opts) {
+  return opts.tier === 'human'
+    && opts.rng
+    && opts.rng() < (opts.attackErrorRate ?? 0.10);
+}
+
 // Reach for something other than the best move on the table.
 function slip(candidates, best, rng) {
   const others = candidates.filter(c => c !== best);
   if (!others.length) return best;
   return others[Math.floor(rng() * others.length)];
+}
+
+// A practiced player does not normally enumerate every legal subset in their
+// hand. They notice a few salient lines — the biggest hit, an obvious Rally or
+// barricade, and occasionally an exact finish — then compare those. Keep this
+// separate from the generic error model: overlooking a line is not the same as
+// deliberately reaching for a random legal move.
+function exactNextTurnFromKnownCards(view, hand, outcome, seat) {
+  if (!view.solo || outcome.kills) return null;
+  const afterAttack = without(hand, outcome.cards);
+  // Plan around the sacrifice this policy would normally prefer. Rally cards
+  // are deliberately excluded: their identities are not known yet.
+  const payment = choosePayment(afterAttack, outcome.counter);
+  if (!payment) return null;
+  const knownNextHand = without(afterAttack, payment);
+  if (!knownNextHand.length) return null;
+
+  const nextView = {
+    ...view,
+    enemy: {
+      ...view.enemy,
+      damage: view.enemy.damage + outcome.damage,
+      shield: outcome.shieldAfter,
+      effectiveAttack: Math.max(0, view.enemy.attack - outcome.shieldAfter),
+    },
+    players: view.players.map((p, i) => (
+      i === seat ? { ...p, handCount: knownNextHand.length } : p
+    )),
+  };
+  const exacts = enumeratePlays(knownNextHand, { companion: view.rules.pamphleteerCompanion })
+    .filter(cards => outcomeOf(nextView, cards, seat).exact);
+  return exacts.reduce((best, cards) => (
+    !best || cards.length < best.length ? cards : best
+  ), null);
+}
+
+function humanShortlist(view, hand, plays, seat, rng, opts) {
+  const outcomes = plays.map(cards => ({ cards, o: outcomeOf(view, cards, seat), recognizedExact: false }));
+  const picked = [];
+  const add = entry => {
+    if (entry && !picked.some(p => p.cards === entry.cards)) picked.push(entry);
+  };
+  const bestBy = fn => outcomes.reduce((best, entry) => (
+    !best || fn(entry.o) > fn(best.o) ? entry : best
+  ), null);
+
+  // These are the lines players tend to see without exhaustively searching.
+  add(bestBy(o => o.damage));
+  add(bestBy(o => o.drawsMine * 10 - o.spent));
+  add(bestBy(o => o.shieldAfter * 10 - o.spent));
+  add(bestBy(o => -o.spentValue - o.spent));
+
+  // Carry through a plan made on the preceding turn. The same card objects are
+  // still in the hand, so this does not reveal anything the player did not know.
+  if (opts.plannedCards?.length) {
+    const intended = outcomes.find(entry => (
+      entry.o.exact
+      && entry.cards.length === opts.plannedCards.length
+      && entry.cards.every(card => opts.plannedCards.includes(card))
+    ));
+    if (intended) intended.recognizedExact = true;
+    add(intended);
+  }
+
+  // Planning is intentionally solo-only. It uses the hand after the likely
+  // sacrifice and never samples or peeks at cards that Rally might draw.
+  const planRecognition = opts.planRecognition ?? 0.65;
+  if (view.solo && rng && rng() < planRecognition) {
+    for (const entry of outcomes) {
+      entry.o.plannedCards = exactNextTurnFromKnownCards(view, hand, entry.o, seat);
+      entry.o.plannedExact = !!entry.o.plannedCards;
+    }
+    const setups = outcomes.filter(x => x.o.plannedExact);
+    add(setups.reduce((best, entry) => (
+      !best
+      || entry.o.spentValue + entry.o.overkill < best.o.spentValue + best.o.overkill
+        ? entry : best
+    ), null));
+  }
+
+  // Exact arithmetic is noticed some of the time, not on every hand. When it
+  // is noticed, prefer the least expensive clean finish.
+  const exactRecognition = opts.exactRecognition ?? 0.55;
+  if (rng && rng() < exactRecognition) {
+    const exacts = outcomes.filter(x => x.o.exact);
+    const noticed = exacts.reduce((best, entry) => (
+      !best || entry.o.spentValue < best.o.spentValue ? entry : best
+    ), null);
+    if (noticed) noticed.recognizedExact = true;
+    add(noticed);
+  }
+
+  // A couple of less-obvious candidates represent ordinary table scanning.
+  const budget = Math.max(4, opts.candidateBudget ?? 6);
+  const remaining = outcomes.filter(x => !picked.includes(x));
+  while (picked.length < budget && remaining.length) {
+    const i = rng ? Math.floor(rng() * remaining.length) : 0;
+    add(remaining.splice(i, 1)[0]);
+  }
+  return picked;
 }
 
 // Paying a blow without thinking: throw cards in as they come to hand until the
@@ -276,12 +391,15 @@ export function decide(view, hand, talk, opts = {}) {
   const mayRegroup = view.canRegroup && opts.allowRegroup !== false;
 
   if (view.phase === 'discard') {
-    const pay = errs(opts)
+    const paymentSlip = tier === 'human'
+      && opts.rng
+      && opts.rng() < (opts.paymentErrorRate ?? 0.08);
+    const pay = errs(opts) || paymentSlip
       ? carelessPayment(hand, view.pendingDamage, opts.rng)
-      : (tier === 'strong'
+        : (tier === 'strong'
         ? optimalPayment(hand, view.pendingDamage)
         : (tier === 'decent' ? cheapestPayment(hand, view.pendingDamage)?.cards ?? null
-          : choosePayment(hand, view.pendingDamage)));
+          : choosePayment(hand, view.pendingDamage, tier === 'human' ? opts.plannedCards : [])));
     if (pay) return { type: 'discard', cards: pay };
     if (mayRegroup) return { type: 'regroup' };
     return { type: 'discard', cards: [...hand] }; // doomed, but the engine decides that
@@ -306,10 +424,14 @@ export function decide(view, hand, talk, opts = {}) {
   const candidates = [];
   let best = null;
   let bestScore = -Infinity;
-  for (const cards of enumeratePlays(hand, { companion: view.rules.pamphleteerCompanion })) {
-    const o = outcomeOf(view, cards, seat);
-    const score = scorePlay(ctx, o);
+  const plays = enumeratePlays(hand, { companion: view.rules.pamphleteerCompanion });
+  const considered = tier === 'human'
+    ? humanShortlist(view, hand, plays, seat, opts.rng, opts)
+    : plays.map(cards => ({ cards, o: outcomeOf(view, cards, seat) }));
+  for (const { cards, o, recognizedExact = true } of considered) {
+    const score = scorePlay({ ...ctx, recognizeExact: tier !== 'human' || recognizedExact }, o);
     const action = { type: 'play', cards };
+    if (o.plannedCards?.length) action.plannedCards = o.plannedCards;
     candidates.push(action);
     if (score > bestScore) { bestScore = score; best = action; }
   }
@@ -330,7 +452,7 @@ export function decide(view, hand, talk, opts = {}) {
     // and a citoyen who misplays a card does not misplay a motion.
     if (score > bestScore) { bestScore = score; best = action; }
   }
-  return errs(opts) ? slip(candidates, best, opts.rng) : best;
+  return (errs(opts) || humanAttackSlip(opts)) ? slip(candidates, best, opts.rng) : best;
 }
 
 // A motion carries when the mover is visibly out of road, or when enough of the

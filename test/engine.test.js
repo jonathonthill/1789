@@ -2,20 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newGame, playCards, yieldTurn, discardForDamage, regroup,
+  usePamphleteer, callPamphleteerAssembly,
   surrenderGame, callAssembly, castVote, syncAssembly,
   validatePlay, validateDiscard, canYield, previewPlay, viewFor,
   currentShield, enemyAttack, effectiveEnemyAttack, cardValue, resolveRules,
+  serializeGame, restoreGame,
 } from '../shared/engine.js';
 
 const names2 = ['Danton', 'Robespierre'];
 const names3 = ['Danton', 'Robespierre', 'Marat'];
 const names4 = [...names3, 'Desmoulins'];
 
-// Several scenarios below exercise a rule the game no longer ships as its
-// default — a Pamphleteer who is shielded and works alone, or a Regroup that
-// resets the whole table. The engine still obeys all of them, so those tests
-// pin what they are testing rather than tracking whatever the default becomes.
-const ALONE = { pamphleteerImmune: true, pamphleteerCompanion: false };
 const TABLE_REGROUP = { regroupScope: 'table', regroups: 2 };
 
 // Force a known hand / enemy for scenario tests.
@@ -31,19 +28,21 @@ function rig(state, { hands, enemy, tavernTop, discard } = {}) {
 }
 
 test('deck composition per player count', () => {
-  for (const [n, jesters, hand] of [[1, 2, 8], [2, 2, 6], [3, 2, 5], [4, 3, 5]]) {
+  for (const [n, hand] of [[1, 5], [2, 5], [3, 4], [4, 4]]) {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
-    assert.equal(all.filter(c => c.r === 'X').length, jesters, `${n}p jesters`);
+    assert.equal(all.filter(c => c.r === 'X').length, 0, `${n}p Pamphleteers are not hand cards`);
+    assert.equal(s.pamphleteersRemaining, 2, `${n}p shared Pamphleteers`);
     assert.equal(all.filter(c => c.r === 'A').length, 4, `${n}p companions`);
-    assert.equal(all.length, 36 + 4 + jesters - 0, `${n}p tavern+hands size`);
+    assert.equal(all.length, 40, `${n}p tavern+hands size`);
     for (const p of s.players) assert.equal(p.hand.length, hand, `${n}p hand size`);
     assert.equal(s.castle.length, 11);
     assert.equal(s.enemy.card.r, 'J', 'first enemy is a Jack');
+    assert.equal(viewFor(s, 0).enemy.health, n === 4 ? 25 : 20, `${n}p Officer endurance`);
     // castle order: next 3 are Jacks, then 4 Queens, then 4 Kings (top = end)
     const ranks = [...s.castle].reverse().map(c => c.r);
     assert.deepEqual(ranks, ['J', 'J', 'J', 'Q', 'Q', 'Q', 'Q', 'K', 'K', 'K', 'K']);
-    if (n === 1) assert.equal(s.regroupsRemaining, 2);
+    assert.equal(s.regroupsRemaining, 1);
   }
 });
 
@@ -55,6 +54,18 @@ test('a requested starting player leads the first turn', () => {
     () => newGame(names2, { seed: 1, startingPlayer: 2 }),
     /starting player out of range/,
   );
+});
+
+test('a serialized solo game resumes with the exact future shuffle sequence', () => {
+  const original = newGame(['Danton'], { seed: 1789 });
+  original.regroupsRemaining = 2;
+  const restored = restoreGame(serializeGame(original));
+
+  regroup(original, 0);
+  regroup(restored, 0);
+
+  assert.deepEqual(serializeGame(restored), serializeGame(original));
+  assert.throws(() => restoreGame({ playerCount: 1 }), /not valid/);
 });
 
 test('combo legality', () => {
@@ -94,15 +105,15 @@ test('companion pairing rules', () => {
 
 test('Les Renforts is worth one and combines its suit power with its partner', () => {
   assert.equal(cardValue({ r: 'A', s: 'H' }), 1);
-  const s = newGame(names2, { seed: 4 });
+  const s = newGame(names3, { seed: 4 });
   rig(s, {
-    hands: [[{ r: 8, s: 'H' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }]],
+    hands: [[{ r: 8, s: 'H' }, { r: 'A', s: 'C' }, { r: 9, s: 'S' }], [{ r: 3, s: 'H' }], []],
     enemy: { r: 'J', s: 'D' },
   });
-  const before = s.players[0].hand.length + s.players[1].hand.length - 2; // minus played
+  const before = s.players.reduce((n, p) => n + p.hand.length, 0) - 2; // minus played
   playCards(s, 0, [{ r: 8, s: 'H' }, { r: 'A', s: 'C' }]);
   assert.equal(s.enemy.damage, 18, 'the Ace adds its value and clubs power');
-  const after = s.players[0].hand.length + s.players[1].hand.length;
+  const after = s.players.reduce((n, p) => n + p.hand.length, 0);
   assert.equal(after - before, 9, 'both powers use the full value of the play');
 });
 
@@ -166,11 +177,11 @@ test('spades shield reduces enemy attack cumulatively; zero damage skips discard
 });
 
 test('enemy immunity: spades give no shield vs Jack of Spades until Pamphleteer, then prior spades count', () => {
-  const s = newGame(names3, { seed: 7, rules: ALONE });
+  const s = newGame(names3, { seed: 7 });
   rig(s, {
     hands: [
       [{ r: 8, s: 'S' }, { r: 5, s: 'H' }, { r: 4, s: 'C' }, { r: 9, s: 'D' }],
-      [{ r: 'X', s: null }, { r: 3, s: 'D' }],
+      [{ r: 3, s: 'D' }],
       [{ r: 2, s: 'C' }, { r: 9, s: 'H' }],
     ],
     enemy: { r: 'J', s: 'S' },
@@ -238,26 +249,24 @@ test('a sacrifice that immediately dooms the next citoyen still leaves lastSacri
     'the snapshot survives the loss so the client can still animate the sacrifice before the loss screen');
 });
 
-test('Pamphleteer breaks immunity and passes play clockwise', () => {
-  const s = newGame(names3, { seed: 9, rules: ALONE });
+test('a shared Pamphleteer breaks immunity for zero damage and leaves the turn intact', () => {
+  const s = newGame(['Danton'], { seed: 9 });
   rig(s, {
-    hands: [
-      [{ r: 'X', s: null }, { r: 6, s: 'S' }, { r: 5, s: 'H' }],
-      [{ r: 6, s: 'S' }, { r: 5, s: 'H' }],
-      [{ r: 3, s: 'C' }],
-    ],
+    hands: [[{ r: 6, s: 'S' }, { r: 5, s: 'H' }]],
     enemy: { r: 'J', s: 'S' },
   });
-  playCards(s, 0, [{ r: 'X', s: null }]);
+  usePamphleteer(s, 0);
   assert.equal(s.phase, 'play');
   assert.equal(s.enemy.immunityCancelled, true);
-  assert.equal(s.current, 1);
-  playCards(s, 1, [{ r: 6, s: 'S' }]);
+  assert.equal(s.enemy.damage, 0);
+  assert.equal(s.current, 0);
+  assert.equal(s.pamphleteersRemaining, 1);
+  playCards(s, 0, [{ r: 6, s: 'S' }]);
   assert.equal(currentShield(s), 6, 'immunity broken — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
 });
 
-test('lying low skips the strike as well as the attack, once per citoyen per royal', () => {
+test('lying low skips the strike as well as the attack, once per citoyen per tier', () => {
   const s = newGame(names3, { seed: 10 });
   rig(s, {
     hands: [
@@ -280,7 +289,7 @@ test('lying low skips the strike as well as the attack, once per citoyen per roy
   assert.throws(() => yieldTurn(s, 0), /already lain low/);
 });
 
-test('an attack does not restore a spent Lay Low; the next royal does', () => {
+test('Lay Low refreshes at Queens and Kings, not at every royal', () => {
   const s = newGame(names2, { seed: 110 });
   rig(s, {
     hands: [[{ r: 2, s: 'H' }, { r: 10, s: 'C' }], [{ r: 3, s: 'H' }, { r: 4, s: 'H' }]],
@@ -294,13 +303,22 @@ test('an attack does not restore a spent Lay Low; the next royal does', () => {
   discardForDamage(s, 0, [{ r: 10, s: 'C' }]);
   assert.equal(canYield(s, 1), false, 'attacking is not how the right comes back');
 
-  // Fell the Jack: the royal who steps up faces a table with its ducks restored.
+  // Fell a Jack: another Officer does not restore Lay Low.
   s.players[1].hand.push({ r: 9, s: 'C' });
   s.enemy.damage = 11;
   playCards(s, 1, [{ r: 9, s: 'C' }]);        // 9 clubs doubled = 18 → overkill
   assert.equal(s.enemy.card.r, 'J', 'a fresh royal is on the table');
-  assert.ok(s.players.every(p => !p.laidLow), 'every citoyen may lie low again');
-  assert.equal(canYield(s, 0), true);
+  assert.ok(s.players.every(p => p.laidLow), 'the spent right remains spent within Officers');
+
+  // Make this the fourth Officer; entering Queens restores the right.
+  s.castle = [{ r: 'K', s: 'S' }, { r: 'Q', s: 'D' }];
+  s.players[0].hand = [{ r: 10, s: 'C' }];
+  s.current = 0;
+  s.enemy.damage = 1;
+  playCards(s, 0, [{ r: 10, s: 'C' }]);
+  assert.equal(s.enemy.card.r, 'Q');
+  assert.ok(s.players.every(p => !p.laidLow), 'entering Queens restores Lay Low');
+  assert.equal(canYield(s, 1), true);
 });
 
 test('exact kill claims the royal for the slayer’s hand; overkill removes it; the turn passes on', () => {
@@ -403,17 +421,22 @@ test('an empty hand is saved by lying low, and lost once that duck is spent', ()
   assert.equal(s.phase, 'lost', 'back to a citoyen with no cards and no duck left');
 });
 
-test('solo: regroup resets the deck, refills to 8, spends the pool; Lay Low is never available', () => {
+test('solo: regroup resets the deck, refills to 5, spends the pool; Lay Low is never available', () => {
   const s = newGame(['Citoyen'], { seed: 16, rules: TABLE_REGROUP });
-  assert.equal(s.players[0].hand.length, 8);
+  assert.equal(s.players[0].hand.length, 5);
   rig(s, { enemy: { r: 'J', s: 'H' }, discard: [{ r: 4, s: 'H' }, { r: 5, s: 'H' }] });
-  const outsideTheFight = s.tavern.length + s.discard.length + s.players[0].hand.length;
+  const redealPool = s.tavern.length + s.players[0].hand.length;
   regroup(s, 0);
-  assert.equal(s.players[0].hand.length, 8);
-  assert.equal(s.discard.length, 0, 'La Prison empties back into Le Peuple');
-  assert.equal(s.tavern.length + 8, outsideTheFight, 'and nothing is lost in the reshuffle');
+  assert.equal(s.players[0].hand.length, 5);
+  assert.equal(s.discard.length, 2, 'La Prison stays put');
+  assert.equal(s.tavern.length + 5, redealPool, 'every returned hand card remains in the redeal pool');
   assert.equal(s.regroupsRemaining, 1);
   assert.equal(s.regroupsUsed, 1);
+  assert.deepEqual(
+    { type: s.lastEvent.type, playerIdx: s.lastEvent.playerIdx, viaAssembly: s.lastEvent.viaAssembly },
+    { type: 'regroup', playerIdx: 0, viaAssembly: false },
+    'the client can animate the solo La Retraite card once',
+  );
   assert.throws(() => callAssembly(s, 0), /no Assemblée to convene alone/i);
   // Lying low only ever helps by passing the turn to someone else, so solo never offers it.
   assert.equal(canYield(s, 0), false, 'solo can never lie low — there is no one else to pass the turn to');
@@ -429,7 +452,7 @@ test('two-player: l’Assemblée carries a Regroup, which resets the deck for th
     discard: [{ r: 4, s: 'H' }, { r: 5, s: 'H' }],
   });
   s.tavern = Array.from({ length: 20 }, (_, i) => ({ r: 2 + (i % 9), s: 'S' }));
-  const pool = 2 + 20 + 0 + 2; // La Prison, Le Peuple, and both hands (the 2♣ is in play)
+  const pool = 20 + 0 + 2; // Le Peuple and both hands (La Prison and the 2♣ in play stay put)
 
   playCards(s, 0, [{ r: 2, s: 'C' }]); // 4 damage, the Jack lives — and strikes back
   assert.equal(s.phase, 'discard', 'a Regroup may still rescue an otherwise fatal hand');
@@ -444,16 +467,18 @@ test('two-player: l’Assemblée carries a Regroup, which resets the deck for th
   castVote(s, 1, true);
 
   assert.equal(s.assembly, null);
-  assert.equal(s.players[0].hand.length, 6, 'the mover refills to the two-player hand limit');
-  assert.equal(s.players[1].hand.length, 6, 'and so does everyone else');
-  assert.equal(s.discard.length, 0, 'La Prison is emptied back into Le Peuple');
-  assert.equal(s.tavern.length + 12, pool, 'every card outside the fight was reshuffled and dealt from');
-  assert.ok(
-    [...s.tavern, ...s.players.flatMap(p => p.hand)].some(c => c.r === 4 && c.s === 'H'),
-    'a prisoner is back in circulation rather than stranded in La Prison',
-  );
+  assert.equal(s.players[0].hand.length, 5, 'the mover refills to the two-player hand limit');
+  assert.equal(s.players[1].hand.length, 5, 'and so does everyone else');
+  assert.equal(s.discard.length, 2, 'La Prison stays put');
+  assert.equal(s.tavern.length + 10, pool, 'every hand card and Peuple card remains accounted for');
+  assert.deepEqual(s.discard, [{ r: 4, s: 'H' }, { r: 5, s: 'H' }]);
   assert.equal(s.regroupsRemaining, 1, 'one spent from the shared pool of two');
   assert.equal(s.regroupsUsed, 1);
+  assert.deepEqual(
+    { type: s.lastEvent.type, playerIdx: s.lastEvent.playerIdx, viaAssembly: s.lastEvent.viaAssembly },
+    { type: 'regroup', playerIdx: 0, viaAssembly: true },
+    'a carried motion identifies the special card and mover for animation',
+  );
 });
 
 test('a Regroup leaves the cards already committed against the royal in play', () => {
@@ -535,18 +560,19 @@ test('a citoyen who drops mid-vote leaves the floor entirely, and a lost mover d
   assert.equal(s.regroupsUsed, 1, 'and spends nothing');
 });
 
-test('jester rejected in combos; jester value 1 as discard', () => {
-  const s = newGame(names3, { seed: 17, rules: ALONE });
+test('Pamphleteers are zero-value shared resources and cannot be played from a hand', () => {
+  const s = newGame(names3, { seed: 17 });
   rig(s, {
     hands: [[{ r: 'X', s: null }, { r: 5, s: 'H' }], [{ r: 2, s: 'C' }], [{ r: 2, s: 'D' }]],
     enemy: { r: 'J', s: 'H' },
   });
-  assert.ok(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'H' }]), 'jester must be alone');
-  assert.equal(cardValue({ r: 'X', s: null }), 1);
+  assert.match(validatePlay(s, 0, [{ r: 'X', s: null }]), /shared resource/);
+  assert.match(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'H' }]), /shared resource/);
+  assert.equal(cardValue({ r: 'X', s: null }), 0);
 });
 
 test('preview matches immunity context', () => {
-  const s = newGame(names2, { seed: 18, rules: ALONE });
+  const s = newGame(names2, { seed: 18 });
   rig(s, {
     hands: [[{ r: 7, s: 'C' }], [{ r: 2, s: 'H' }]],
     enemy: { r: 'J', s: 'C' },
@@ -597,35 +623,35 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
 
 test('rules resolve from partial and hostile input; difficulty sets royal power', () => {
   const medium = {
-    difficulty: 'medium', drawOnVictory: 1, regroups: 1, regroupDraw: 3,
-    royalStrikeBonus: 0, regroupScope: 'table', handSizeDelta: 0, pamphleteers: 2,
-    exactKillTo: 'hand', pamphleteerImmune: false, pamphleteerCompanion: true,
+    difficulty: 'medium', drawOnVictory: 0, transitionDraw: 1, regroups: 1, regroupOnTransition: 0, regroupDraw: 2,
+    royalStrikeBonus: 0, royalHealthBonus: 0, regroupScope: 'table', handSizeDelta: 0, pamphleteers: 2,
+    exactKillTo: 'hand', pamphleteerImmune: true, pamphleteerCompanion: false,
   };
-  assert.deepEqual(resolveRules(null, 3), medium);
+  assert.deepEqual(resolveRules(null, 3), { ...medium, regroupDraw: 3 });
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, regroups: 2 },
-    'alone, two Regroups refill the hand',
+    { ...medium, drawOnVictory: 2, transitionDraw: 0, regroupOnTransition: 1, regroupDraw: 3 },
+    'alone gets two Pamphleteers and two Spoils per royal, no transition draw, and staged Regroups',
   );
   assert.deepEqual(
     resolveRules(null, 2),
-    { ...medium, regroupDraw: 2 },
+    medium,
     'two citoyens retain the table-wide Regroup with its legacy draw setting',
   );
   assert.deepEqual(
     resolveRules(null, 4),
-    { ...medium, pamphleteers: 3 },
-    'four citoyens gain the third Pamphleteer',
+    { ...medium, regroupDraw: 3, royalHealthBonus: 5 },
+    'four citoyens have one Regroup and tougher royals',
   );
 
   // Difficulty changes royal power without moving the Regroup rules.
   assert.deepEqual(
     resolveRules({ difficulty: 'hard' }, 3),
-    { ...medium, difficulty: 'hard', royalStrikeBonus: 2 },
+    { ...medium, difficulty: 'hard', regroupDraw: 3, royalStrikeBonus: 2 },
   );
   assert.deepEqual(
     resolveRules({ difficulty: 'easy' }, 3),
-    { ...medium, difficulty: 'easy', royalStrikeBonus: -2 },
+    { ...medium, difficulty: 'easy', regroupDraw: 3, royalStrikeBonus: -2 },
   );
   // The study may still name the underlying value directly.
   assert.equal(resolveRules({ difficulty: 'easy', royalStrikeBonus: 4 }, 3).royalStrikeBonus, 4);
@@ -641,10 +667,10 @@ test('rules resolve from partial and hostile input; difficulty sets royal power'
   assert.equal(resolveRules({ handSizeDelta: '-1' }, 2).handSizeDelta, -1, 'numeric strings survive the form');
 
   // Rules the register does not recognise are dropped, whatever a stale client sends.
-  assert.deepEqual(resolveRules({ afterKill: 'choose', jesterCancels: 'never' }, 3), medium);
+  assert.deepEqual(resolveRules({ afterKill: 'choose', jesterCancels: 'never' }, 3), { ...medium, regroupDraw: 3 });
   // A named rule only accepts its own vocabulary.
   assert.equal(resolveRules({ exactKillTo: 'guillotine' }, 2).exactKillTo, 'hand');
-  assert.equal(resolveRules({ pamphleteerImmune: 'no' }, 2).pamphleteerImmune, false);
+  assert.equal(resolveRules({ pamphleteerImmune: 'no' }, 2).pamphleteerImmune, true);
   assert.equal(resolveRules({ difficulty: 'impossible' }, 2).difficulty, 'medium');
   assert.equal(resolveRules({ regroupDraw: 9 }, 2).regroupDraw, 4, 'a draw beyond four is pointless and clamps');
 });
@@ -674,7 +700,7 @@ test('an exact kill can be sent atop Le Peuple instead of into the slayer’s ha
 
 test('the spoils are gathered before a royal is laid on Le Peuple, not after', () => {
   // Otherwise the table draws the royal straight back and the rule means nothing.
-  const s = newGame(names3, { seed: 74, rules: { exactKillTo: 'peuple', drawOnVictory: 2 } });
+  const s = newGame(names3, { seed: 74, rules: { exactKillTo: 'peuple', drawOnVictory: 2, royalHealthBonus: 0 } });
   rig(s, {
     hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'D' }], [], []],
     enemy: { r: 'J', s: 'D' },
@@ -730,8 +756,61 @@ test('the Spoils of Victory deal every citoyen a share, never past the hand limi
   assert.equal(full.tavern.length, before - 2, 'only the emptied slayer draws');
 });
 
+test('tier transitions raise the hand limit before rewards and deal each table its transition card', () => {
+  const solo = newGame(['Citoyen'], { seed: 168 });
+  solo.regroupsRemaining = 0; // the opening Regroup has already been spent
+  rig(solo, {
+    hands: [[{ r: 2, s: 'C' }, { r: 3, s: 'H' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  solo.castle = [{ r: 'K', s: 'S' }, { r: 'Q', s: 'D' }];
+  solo.enemy.damage = 19;
+  playCards(solo, 0, [{ r: 2, s: 'C' }]);
+  assert.equal(solo.handSize, 6);
+  assert.equal(solo.regroupsRemaining, 1, 'entering Queens adds a Regroup to the pool');
+  assert.equal(solo.lastEvent.transition.regroupsGained, 1);
+  assert.equal(solo.lastEvent.transition.drawn, 0, 'alone, the tier itself draws nothing extra');
+  assert.equal(solo.lastEvent.spoilsDrawn, 2, 'the per-royal Spoils are the whole reward');
+  assert.equal(solo.players[0].hand.length, 3, 'one card kept back, plus the two Spoils');
+
+  // Unused Regroups carry forward, so entering Kings adds rather than refills.
+  rig(solo, { hands: [[{ r: 2, s: 'C' }]], enemy: { r: 'Q', s: 'H' } });
+  solo.castle = [{ r: 'K', s: 'S' }];
+  solo.enemy.damage = 29;
+  playCards(solo, 0, [{ r: 2, s: 'C' }]);
+  assert.equal(solo.handSize, 7);
+  assert.equal(solo.regroupsRemaining, 2, 'the Queen-tier Regroup carries into Kings');
+  assert.equal(solo.lastEvent.transition.regroupsGained, 1);
+
+  const two = newGame(names2, { seed: 166 });
+  rig(two, {
+    hands: [[{ r: 2, s: 'C' }, { r: 3, s: 'H' }], [{ r: 4, s: 'S' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  two.castle = [{ r: 'K', s: 'S' }, { r: 'Q', s: 'D' }];
+  two.enemy.damage = 19;
+  playCards(two, 0, [{ r: 2, s: 'C' }]);
+  assert.equal(two.handSize, 6, 'the Queen limit is active before rewards');
+  assert.deepEqual(two.lastEvent.spoilsByPlayer, [0, 0]);
+  assert.deepEqual(two.lastEvent.transition.byPlayer, [1, 1]);
+  assert.deepEqual(two.players.map(p => p.hand.length), [2, 2]);
+
+  const three = newGame(names3, { seed: 167 });
+  rig(three, {
+    hands: [[{ r: 2, s: 'C' }, { r: 3, s: 'H' }], [{ r: 4, s: 'S' }], [{ r: 5, s: 'D' }]],
+    enemy: { r: 'J', s: 'H' },
+  });
+  three.castle = [{ r: 'K', s: 'S' }, { r: 'Q', s: 'D' }];
+  three.enemy.damage = 24;
+  playCards(three, 0, [{ r: 2, s: 'C' }]);
+  assert.equal(three.handSize, 5);
+  assert.deepEqual(three.lastEvent.spoilsByPlayer, [0, 0, 0]);
+  assert.equal(three.lastEvent.transition.drawn, 3, 'larger tables receive one tier Spoil each');
+  assert.deepEqual(three.players.map(p => p.hand.length), [2, 2, 2]);
+});
+
 test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
-  const s = newGame(names3, { seed: 164, rules: { drawOnVictory: 1 } });
+  const s = newGame(names3, { seed: 164, rules: { drawOnVictory: 1, royalHealthBonus: 0 } });
   rig(s, {
     hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'D' }], [], []],
     enemy: { r: 'J', s: 'D' },
@@ -756,82 +835,31 @@ test('an exact-kill royal is the slayer’s spoil, not an extra card', () => {
   assert.deepEqual(solo.lastEvent.spoilsByPlayer, [0]);
 });
 
-test('an unprotected Pamphleteer suffers the blow, then play passes clockwise', () => {
-  const s = newGame(names3, { seed: 64, rules: { pamphleteers: 2, pamphleteerImmune: false } });
-  rig(s, { hands: [[{ r: 'X', s: null }, { r: 9, s: 'D' }, { r: 8, s: 'C' }], [], []], enemy: { r: 'J', s: 'S' } });
-  playCards(s, 0, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'discard', 'the reprisal lands');
-  assert.equal(s.pendingDamage, 10);
-  assert.ok(s.enemy.immunityCancelled, 'immunity is broken all the same');
-  discardForDamage(s, 0, [{ r: 9, s: 'D' }, { r: 8, s: 'C' }]);
-  assert.equal(s.current, 1);
-  assert.equal(s.phase, 'play');
-});
-
-test('a protected Pamphleteer skips the reprisal, as the rulebook has it', () => {
-  const s = newGame(names3, { seed: 64, rules: { pamphleteers: 2, pamphleteerImmune: true } });
-  rig(s, { hands: [[{ r: 'X', s: null }, { r: 9, s: 'D' }], [], []], enemy: { r: 'J', s: 'S' } });
-  playCards(s, 0, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'play');
-  assert.equal(s.enemy.damage, 1, 'the Pamphleteer contributes his own point of damage');
-  assert.equal(s.current, 1, 'protection skips the blow, not the clockwise handoff');
-  assert.equal(s.players[0].hand.length, 1, 'nothing was paid');
-});
-
-test('barricades can absorb an unprotected Pamphleteer’s reprisal entirely', () => {
-  const s = newGame(names3, { seed: 65, rules: { pamphleteers: 2, pamphleteerImmune: false } });
-  rig(s, { hands: [[{ r: 10, s: 'S' }], [{ r: 'X', s: null }], []], enemy: { r: 'J', s: 'H' } });
-  playCards(s, 0, [{ r: 10, s: 'S' }]);   // 10 damage, 10 of shield — the Jack strikes for nothing
-  assert.equal(s.current, 1, 'nothing to pay, so the turn simply passes');
-  playCards(s, 1, [{ r: 'X', s: null }]);
-  assert.equal(s.phase, 'play');
-  assert.equal(s.current, 2, 'no blow to pay, so play passes immediately');
-});
-
-test('the Pamphleteer may bring one companion, whose power lands through immunity', () => {
-  const alone = newGame(names3, { seed: 66, rules: { pamphleteers: 2, pamphleteerCompanion: false } });
-  rig(alone, { hands: [[{ r: 'X', s: null }, { r: 8, s: 'C' }], [], []], enemy: { r: 'J', s: 'C' } });
-  assert.match(
-    validatePlay(alone, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }]),
-    /works alone/,
-    'barred unless the rule allows it',
+test('multiplayer Pamphleteers require a strict-majority vote and spend nothing when rejected', () => {
+  const carried = newGame(names3, { seed: 64 });
+  rig(carried, { hands: [[{ r: 8, s: 'C' }], [], []], enemy: { r: 'J', s: 'C' } });
+  callPamphleteerAssembly(carried, 0);
+  assert.equal(carried.assembly.kind, 'pamphleteer');
+  castVote(carried, 1, true);
+  castVote(carried, 2, false);
+  assert.equal(carried.pamphleteersRemaining, 1, '2–1 carries and spends one');
+  assert.equal(carried.enemy.immunityCancelled, true);
+  assert.equal(carried.current, 0, 'the mover still has the turn');
+  assert.equal(carried.enemy.damage, 0, 'the Pamphleteer deals no damage');
+  assert.deepEqual(
+    { type: carried.lastEvent.type, playerIdx: carried.lastEvent.playerIdx, viaAssembly: carried.lastEvent.viaAssembly },
+    { type: 'pamphleteer', playerIdx: 0, viaAssembly: true },
   );
+  playCards(carried, 0, [{ r: 8, s: 'C' }]);
+  assert.equal(carried.enemy.damage, 16, 'the subsequent attack uses the broken immunity');
 
-  const paired = newGame(names3, { seed: 66, rules: { pamphleteers: 2 } });
-  rig(paired, { hands: [[{ r: 'X', s: null }, { r: 8, s: 'C' }, { r: 8, s: 'H' }], [], []], enemy: { r: 'J', s: 'C' } });
-  assert.equal(validatePlay(paired, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }]), null);
-  assert.match(
-    validatePlay(paired, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }, { r: 8, s: 'H' }]),
-    /only one companion/,
-  );
-  // A club companion against a club royal: immunity falls first, so the mob doubles.
-  const preview = previewPlay(paired, [{ r: 'X', s: null }, { r: 8, s: 'C' }]);
-  assert.ok(preview.doubled, 'the companion’s suit power survives the royal’s immunity');
-  assert.equal(preview.damage, 18);
-  playCards(paired, 0, [{ r: 'X', s: null }, { r: 8, s: 'C' }]);
-  assert.equal(paired.enemy.damage, 18);
-  assert.ok(paired.enemy.immunityCancelled);
-});
-
-test('a companion does not cost the Pamphleteer his protection or clockwise handoff', () => {
-  const shielded = newGame(names3, { seed: 67, rules: { pamphleteers: 2, pamphleteerCompanion: true, pamphleteerImmune: true } });
-  rig(shielded, { hands: [[{ r: 'X', s: null }, { r: 4, s: 'D' }], [], []], enemy: { r: 'J', s: 'S' } });
-  playCards(shielded, 0, [{ r: 'X', s: null }, { r: 4, s: 'D' }]);
-  assert.equal(shielded.phase, 'play', 'shielded, so no blow to pay');
-  assert.equal(shielded.current, 1);
-  assert.equal(shielded.enemy.damage, 5);
-
-  const exposed = newGame(names3, {
-    seed: 67,
-    rules: { pamphleteers: 2, pamphleteerCompanion: true, pamphleteerImmune: false },
-  });
-  rig(exposed, { hands: [[{ r: 'X', s: null }, { r: 4, s: 'D' }, { r: 9, s: 'H' }, { r: 3, s: 'S' }], [], []], enemy: { r: 'J', s: 'S' } });
-  playCards(exposed, 0, [{ r: 'X', s: null }, { r: 4, s: 'D' }]);
-  assert.equal(exposed.phase, 'discard', 'exposed, so the reprisal lands');
-  assert.equal(exposed.pendingDamage, 10);
-  discardForDamage(exposed, 0, [{ r: 9, s: 'H' }, { r: 3, s: 'S' }]);
-  assert.equal(exposed.phase, 'play');
-  assert.equal(exposed.current, 1);
+  const rejected = newGame(names4, { seed: 65 });
+  callPamphleteerAssembly(rejected, 0);
+  castVote(rejected, 1, true);
+  castVote(rejected, 2, false);
+  castVote(rejected, 3, false);
+  assert.equal(rejected.pamphleteersRemaining, 2, 'a 2–2 tie falls and spends nothing');
+  assert.equal(rejected.enemy.immunityCancelled, false);
 });
 
 test('a Regroup reaches only as far as its scope allows', () => {
@@ -869,7 +897,7 @@ test('a Regroup reaches only as far as its scope allows', () => {
   callAssembly(table, 0);
   castVote(table, 1, true);
   castVote(table, 2, true);
-  assert.equal(table.discard.length, 0);
+  assert.equal(table.discard.length, 3, 'the table-wide rule leaves La Prison untouched');
   for (const q of table.players) assert.equal(q.hand.length, table.handSize, 'the whole table draws afresh');
 });
 
@@ -935,17 +963,18 @@ test('a narrow Regroup can fail to save a citoyen that a wide one would', () => 
 });
 
 test('hand size shifts by one from the per-count default', () => {
-  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: -1 } }).handSize, 4);
-  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: 1 } }).handSize, 6);
+  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: -1 } }).handSize, 3);
+  assert.equal(newGame(names4, { seed: 50, rules: { handSizeDelta: 1 } }).handSize, 5);
   const s = newGame(names2, { seed: 50, rules: { handSizeDelta: 1 } });
-  for (const p of s.players) assert.equal(p.hand.length, 7, 'opening hands honour the new limit');
+  for (const p of s.players) assert.equal(p.hand.length, 6, 'opening hands honour the new limit');
 });
 
-test('the Pamphleteer count sets what is shuffled into Le Peuple; at zero immunity never lifts', () => {
+test('the Pamphleteer count sets the shared pool; at zero immunity never lifts', () => {
   for (const n of [0, 1, 2, 3]) {
     const s = newGame(names3, { seed: 51, rules: { pamphleteers: n } });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
-    assert.equal(all.filter(c => c.r === 'X').length, n, `${n} Pamphleteers in play`);
+    assert.equal(all.filter(c => c.r === 'X').length, 0, 'Pamphleteers never enter Le Peuple');
+    assert.equal(s.pamphleteersRemaining, n, `${n} shared Pamphleteers`);
   }
   const none = newGame(names2, { seed: 52, rules: { pamphleteers: 0 } });
   rig(none, { hands: [[{ r: 6, s: 'S' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'S' } });
@@ -959,7 +988,7 @@ test('after a kill the next citoyen always faces the newcomer', () => {
     hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }]],
     enemy: { r: 'J', s: 'H' },
   });
-  s.enemy.damage = 19;
+  s.enemy.damage = 24;
   playCards(s, 0, [{ r: 2, s: 'C' }]); // 2 clubs doubled = 4 → overkill
   assert.equal(s.current, 1, 'the turn passes on');
   assert.equal(s.phase, 'play');
@@ -969,7 +998,7 @@ test('after a kill the next citoyen always faces the newcomer', () => {
     hands: [[{ r: 2, s: 'C' }], [{ r: 3, s: 'C' }], [{ r: 4, s: 'C' }]],
     enemy: { r: 'J', s: 'H' },
   });
-  stale.enemy.damage = 19;
+  stale.enemy.damage = 24;
   playCards(stale, 0, [{ r: 2, s: 'C' }]);
   assert.equal(stale.current, 1);
 
@@ -993,9 +1022,9 @@ test('an exact kill always claims the royal for the slayer’s hand, and Rally d
   };
 
   const toHand = setup();
-  assert.equal(toHand.handSize, 6);
+  assert.equal(toHand.handSize, 5);
   playCards(toHand, 0, [{ r: 10, s: 'H' }]);
-  assert.equal(toHand.players[0].hand.length, 6, 'Rally stops at five so the royal fits');
+  assert.equal(toHand.players[0].hand.length, 5, 'Rally stops at four so the royal fits');
   assert.deepEqual(toHand.players[0].hand.at(-1), { r: 'J', s: 'S' }, 'the royal joins the hand');
   assert.ok(!toHand.tavern.some(c => c.r === 'J'), 'and not the deck');
 
@@ -1003,51 +1032,25 @@ test('an exact kill always claims the royal for the slayer’s hand, and Rally d
   const over = setup();
   over.enemy.damage = 11;
   playCards(over, 0, [{ r: 10, s: 'H' }]);
-  assert.equal(over.players[0].hand.length, 6, 'a full hand from Rally');
+  assert.equal(over.players[0].hand.length, 5, 'a full hand from Rally');
   assert.deepEqual(over.discard.at(-1), { r: 10, s: 'H' });
   assert.ok(!over.discard.some(c => c.r === 'J'), 'the guillotined royal is removed from circulation');
 });
 
-test('Pamphleteer play always passes clockwise, returning to the solo player', () => {
-  const solo = newGame(['Citoyen'], { seed: 58, rules: ALONE });
-  rig(solo, { hands: [[{ r: 'X', s: null }, { r: 5, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
-  solo.tavern = Array.from({ length: 12 }, () => ({ r: 4, s: 'D' }));
-  playCards(solo, 0, [{ r: 'X', s: null }]);
-  assert.equal(solo.phase, 'play', 'the turn simply carries on');
-  assert.equal(solo.current, 0);
-  assert.equal(solo.enemy.immunityCancelled, true, 'immunity still falls');
-
-  // At a table, clockwise means the next citoyen.
-  const table = newGame(names2, { seed: 58, rules: ALONE });
-  rig(table, { hands: [[{ r: 'X', s: null }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
-  playCards(table, 0, [{ r: 'X', s: null }]);
-  assert.equal(table.phase, 'play');
-  assert.equal(table.current, 1);
-});
-
-test('the Pamphleteer may work alone or with one partner, but never another Pamphleteer', () => {
-  const s = newGame(names2, { seed: 57, rules: ALONE });
-  rig(s, {
-    hands: [[{ r: 'X', s: null }, { r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }]],
-    enemy: { r: 'J', s: 'H' },
-  });
-  assert.equal(validatePlay(s, 0, [{ r: 'X', s: null }]), null, 'alone is the only legal Pamphleteer play');
-  assert.match(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]), /works alone/);
-  assert.match(validatePlay(s, 0, [{ r: 'X', s: null }, { r: 'X', s: null }]), /Only one Pamphleteer/);
-  // Two Pamphleteers stay barred even where a companion is allowed: the second
-  // is not a companion, it is a second Pamphleteer.
-  const open = newGame(names2, { seed: 57 });
-  rig(open, { hands: [[{ r: 'X', s: null }, { r: 'X', s: null }, { r: 5, s: 'C' }], [{ r: 2, s: 'C' }]], enemy: { r: 'J', s: 'H' } });
-  assert.equal(validatePlay(open, 0, [{ r: 'X', s: null }, { r: 5, s: 'C' }]), null, 'one partner is legal by default');
-  assert.match(validatePlay(open, 0, [{ r: 'X', s: null }, { r: 'X', s: null }]), /Only one Pamphleteer/);
+test('a Pamphleteer cannot be wasted after immunity is already broken', () => {
+  const s = newGame(['Citoyen'], { seed: 58 });
+  usePamphleteer(s, 0);
+  assert.equal(s.pamphleteersRemaining, 1);
+  assert.throws(() => usePamphleteer(s, 0), /cannot take the floor/);
+  assert.equal(s.pamphleteersRemaining, 1);
 });
 
 test('view hides other hands but shows counts', () => {
   const s = newGame(names3, { seed: 20 });
   const v = viewFor(s, 1);
   assert.equal(v.you.index, 1);
-  assert.equal(v.you.hand.length, 5);
-  assert.equal(v.players[0].handCount, 5);
+  assert.equal(v.you.hand.length, 4);
+  assert.equal(v.players[0].handCount, 4);
   assert.ok(!('hand' in v.players[0]));
 });
 

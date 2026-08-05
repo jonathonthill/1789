@@ -13,7 +13,18 @@
 // The starting numbers came from the balance study in scripts/sim; later live
 // rules changes may supersede that historical recommendation.
 
-export const HAND_SIZE = { 1: 8, 2: 6, 3: 5, 4: 5 };
+// Hand limits rise when the Revolution reaches a new tier. The opening values
+// descend cleanly with table size; the larger limits are unlocked before the
+// tier-ending Spoils are dealt.
+export const HAND_SIZE_BY_TIER = {
+  1: { J: 5, Q: 6, K: 7 },
+  2: { J: 5, Q: 6, K: 7 },
+  3: { J: 4, Q: 5, K: 6 },
+  4: { J: 4, Q: 5, K: 6 },
+};
+export const HAND_SIZE = Object.fromEntries(
+  Object.entries(HAND_SIZE_BY_TIER).map(([n, tiers]) => [n, tiers.J]),
+);
 
 // La Constitution offers one difficulty. It changes how hard every royal
 // strikes while leaving the rest of the rules stable and teachable.
@@ -37,7 +48,19 @@ export const RULE_SPEC = {
   drawOnVictory: {
     label: 'Les Dépouilles',
     values: [0, 1, 2],
-    default: 1,
+    bySize: { 1: 2, 2: 0, 3: 0, 4: 0 },
+    exposed: false,
+  },
+
+  // After the fourth Officer and fourth Queen fall, every citoyen draws one
+  // card (still capped by the newly raised limit). At multiplayer tables this
+  // is the tier's only Spoil; they receive none after individual royals. Solo
+  // already takes its Spoils after every royal, so it gets nothing extra here —
+  // the raised hand limit and the earned Regroup are the transition's reward.
+  transitionDraw: {
+    label: 'Tier-transition draw',
+    values: [0, 1],
+    bySize: { 1: 0, 2: 1, 3: 1, 4: 1 },
     exposed: false,
   },
 
@@ -47,7 +70,17 @@ export const RULE_SPEC = {
   regroups: {
     label: 'Regroups',
     values: [0, 1, 2, 3],
-    bySize: { 1: 2, 2: 1, 3: 1, 4: 1 },
+    bySize: { 1: 1, 2: 1, 3: 1, 4: 1 },
+    exposed: false,
+  },
+  // Solo begins with one Regroup and earns another on entering each new tier.
+  // Unspent Regroups remain in the pool, so all three can be carried to Kings —
+  // banking them for the Kings is the strongest line solo has, and the balance
+  // study says taking that away costs roughly ten points of win rate.
+  regroupOnTransition: {
+    label: 'Regroups gained at tier transitions',
+    values: [0, 1],
+    bySize: { 1: 1, 2: 0, 3: 0, 4: 0 },
     exposed: false,
   },
   // How many cards each citoyen takes when a Regroup is a shared draw rather
@@ -68,12 +101,20 @@ export const RULE_SPEC = {
     fromDifficulty: true,
     exposed: false,
   },
+  // Four-player tables give every royal five additional endurance without
+  // making the counterattack itself more punishing.
+  royalHealthBonus: {
+    label: 'Royal endurance bonus',
+    values: [0, 5],
+    bySize: { 1: 0, 2: 0, 3: 0, 4: 5 },
+    exposed: false,
+  },
 
   // ---- the shape of the game, not a difficulty setting ---------------------
 
-  // What a Regroup actually resets. Under the rulebook default, every hand and
-  // all of La Prison return to Le Peuple, which is shuffled before fresh hands
-  // are dealt around the table.
+  // What a Regroup actually resets. Under the rulebook default, every hand
+  // returns to Le Peuple while La Prison stays put; the combined deck is
+  // shuffled before fresh hands are dealt around the table.
   regroupScope: {
     label: 'What a Regroup resets',
     // Weakest first. 'draw' resets nothing at all — the table simply takes a
@@ -91,7 +132,7 @@ export const RULE_SPEC = {
   pamphleteers: {
     label: 'Pamphleteers',
     values: [0, 1, 2, 3],
-    bySize: { 1: 2, 2: 2, 3: 2, 4: 3 },
+    bySize: { 1: 2, 2: 2, 3: 2, 4: 2 },
     exposed: false,
   },
   // Where an exact kill sends the royal: won over to the slayer's own hand, or
@@ -107,7 +148,7 @@ export const RULE_SPEC = {
   pamphleteerImmune: {
     label: 'The Pamphleteer’s protection',
     values: [true, false],
-    default: false,
+    default: true,
     exposed: false,
   },
   // Whether the Pamphleteer may take the floor alongside one other card. He
@@ -116,7 +157,7 @@ export const RULE_SPEC = {
   pamphleteerCompanion: {
     label: 'The Pamphleteer’s companion',
     values: [false, true],
-    default: true,
+    default: false,
     exposed: false,
   },
 };
@@ -142,7 +183,8 @@ function fallbackFor(key, n, difficulty) {
 // "Défaut (n)", and handSize is included for the label even though the rule
 // itself is stored as a delta.
 export function rulebookFor(n, difficulty = RULE_SPEC.difficulty.default) {
-  const out = { handSize: HAND_SIZE[n] ?? 6 };
+  const tiers = HAND_SIZE_BY_TIER[n] ?? HAND_SIZE_BY_TIER[2];
+  const out = { handSize: tiers.J, handSizes: { ...tiers } };
   for (const k of RULE_KEYS) out[k] = fallbackFor(k, n, difficulty);
   return out;
 }

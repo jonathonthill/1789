@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import * as engine from '../shared/engine.js';
+import { createOutcomeStore, outcomeFromState } from './outcomes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -16,6 +17,8 @@ const io = new Server(server);
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SHARED_DIR = path.join(__dirname, '..', 'shared');
+const OUTCOME_FILE = process.env.OUTCOME_LOG_PATH || path.join(__dirname, '..', 'data', 'game-outcomes.jsonl');
+const outcomeStore = createOutcomeStore(OUTCOME_FILE);
 
 // ---- build stamp -----------------------------------------------------------
 // Everything the browser downloads, fingerprinted by size and mtime at boot.
@@ -57,6 +60,22 @@ app.get('/version', (_req, res) => {
   res.json({ build: BUILD, updatedAt: UPDATED_AT });
 });
 
+// Anonymous, completed-game telemetry. Solo games are submitted by the browser;
+// multiplayer games are recorded directly from their authoritative room state.
+app.use(express.json({ limit: '16kb' }));
+app.post('/api/outcomes', (req, res) => {
+  try {
+    const result = outcomeStore.record(req.body);
+    res.status(result.recorded ? 201 : 200).json({ ok: true, duplicate: result.duplicate });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+app.get('/api/outcomes/summary', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(outcomeStore.summary());
+});
+
 // Code revalidates on every request (cheap — an unchanged file answers 304);
 // the paintings, audio and cutscenes are large and change rarely, so they get
 // an hour before the browser asks again.
@@ -89,6 +108,7 @@ function makeRoom(hostName) {
     players: [],     // { token, name, socketId|null }
     state: null,
     rules: { ...engine.DEFAULT_RULES }, // La Constitution, as set by the host
+    gameMeta: null,
     lastActivity: Date.now(),
   };
   rooms.set(code, room);
@@ -158,16 +178,33 @@ function syncAndBroadcast(room) {
     engine.syncAssembly(room.state, connectedSeats(room));
     if (room.state.phase === 'won' || room.state.phase === 'lost') room.status = 'ended';
   }
+  logRoomOutcome(room);
   broadcastState(room);
 }
 
 // Hosting is an administrative role, not a permanent first-player advantage.
 // Draw a fresh starter for the opening game and every rematch.
 function newRoomGame(room) {
+  room.gameMeta = { id: crypto.randomUUID(), startedAt: new Date().toISOString(), logged: false };
   return engine.newGame(room.players.map(p => p.name), {
     rules: room.rules,
     startingPlayer: crypto.randomInt(room.players.length),
   });
+}
+
+function logRoomOutcome(room) {
+  if (room.status !== 'ended' || !room.state || !room.gameMeta || room.gameMeta.logged) return;
+  try {
+    outcomeStore.record(outcomeFromState({
+      gameId: room.gameMeta.id,
+      mode: 'multiplayer',
+      startedAt: room.gameMeta.startedAt,
+      state: room.state,
+    }));
+    room.gameMeta.logged = true;
+  } catch (error) {
+    console.error('Could not record game outcome:', error.message);
+  }
 }
 
 io.on('connection', socket => {
@@ -260,11 +297,13 @@ io.on('connection', socket => {
         case 'yield': engine.yieldTurn(s, idx); break;
         case 'discard': engine.discardForDamage(s, idx, msg.cards ?? []); break;
         case 'assembly': engine.callAssembly(s, idx, connectedSeats(room)); break;
+        case 'pamphleteerAssembly': engine.callPamphleteerAssembly(s, idx, connectedSeats(room)); break;
         case 'vote': engine.castVote(s, idx, !!msg.aye); break;
         case 'surrender': engine.surrenderGame(s, idx); break;
         default: return cb?.({ ok: false, error: 'Unknown action.' });
       }
       if (s.phase === 'won' || s.phase === 'lost') room.status = 'ended';
+      logRoomOutcome(room);
       cb?.({ ok: true });
       broadcastState(room);
     } catch (e) {

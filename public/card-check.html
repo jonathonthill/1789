@@ -64,8 +64,8 @@ for (const r of ['J', 'Q', 'K']) {
   section(`Royalty · ${({J:'Jacks',Q:'Queens',K:'Kings'})[r]}`, SUITS.map(s => ({ r, s })), { subtitle: true });
 }
 
-// Pamphleteer
-section('Pamphleteer', [{ r: 'X', s: null }]);
+// Shared special cards
+section('Shared specials', [{ r: 'X', s: null }, { r: 'R', s: null }]);
 </script>
 </body>
 </html>

@@ -29,6 +29,7 @@
     </label>
     <div class="home-buttons">
       <button id="btn-resume" class="btn primary" hidden></button>
+      <button id="btn-resume-solo" class="btn primary" hidden></button>
       <button id="btn-create" class="btn primary">Form a Salon <small>host a game for 2–4</small></button>
       <div class="join-row">
         <input id="code-input" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters">
@@ -154,7 +155,9 @@
   <div id="action-bar" class="action-bar">
     <div id="projection" class="projection"></div>
     <div class="action-buttons">
-      <button id="btn-regroup" class="btn small ghost" hidden>Regroup (2)</button>
+      <button id="btn-pamphleteer" class="btn small ghost" hidden>Pamphleteer</button>
+      <button id="btn-regroup" class="btn small ghost" hidden>La Retraite (2)</button>
+      <button id="btn-assembly" class="btn small ghost" hidden>l'Assemblée</button>
       <button id="btn-yield" class="btn small" hidden>Lay Low</button>
       <button id="btn-confirm" class="btn small primary" disabled>Attaquez!</button>
     </div>
@@ -234,6 +237,38 @@
   </div>
 </div>
 
+<div id="tier-overlay" class="overlay reward-overlay" hidden>
+  <div id="tier-stage" class="tier-stage reward-stage">
+    <img class="tier-liberty" src="/img/specials/tier-victory.png" alt="" aria-hidden="true">
+    <div class="tier-copy">
+      <strong>The Revolution Advances</strong>
+      <span id="tier-name"></span>
+    </div>
+    <div class="reward-hand" aria-hidden="true">
+      <div id="tier-fan-before" class="reward-fan reward-fan-before"></div>
+      <div id="tier-fan-after" class="reward-fan reward-fan-after"></div>
+      <div class="hand-limit"><span>Hand limit</span> <b id="tier-limit-before"></b><i>→</i><b id="tier-limit-after"></b></div>
+    </div>
+    <div class="reward-dismiss">tap to continue</div>
+  </div>
+</div>
+
+<div id="spoils-overlay" class="overlay reward-overlay" hidden>
+  <div id="spoils-stage" class="spoils-stage reward-stage">
+    <div class="spoils-card" aria-hidden="true"></div>
+    <div class="spoils-copy">
+      <strong>Les Dépouilles</strong>
+      <span id="spoils-sub">The spoils of victory join your hand</span>
+    </div>
+    <div class="reward-hand" aria-hidden="true">
+      <div id="spoils-fan-before" class="reward-fan reward-fan-before"></div>
+      <div id="spoils-fan-after" class="reward-fan reward-fan-after"></div>
+      <div class="reward-hand-label"><span id="spoils-player-name"></span> · <b id="spoils-hand-count"></b></div>
+    </div>
+    <div class="reward-dismiss">tap to continue</div>
+  </div>
+</div>
+
 <div id="sheet" class="sheet" hidden>
   <div class="sheet-panel" role="dialog" aria-modal="true">
     <div id="sheet-grip" class="sheet-grip" role="button" tabindex="0" aria-label="Drag down or tap to close"></div>
@@ -257,6 +292,20 @@
 <div id="assembly" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="assembly-title">
   <div class="modal-panel assembly-panel">
     <h2 id="assembly-title" class="modal-title">l'Assemblée</h2>
+    <div id="assembly-chooser" hidden>
+      <p class="assembly-prompt">I move to use…</p>
+      <div class="assembly-cards">
+        <button id="assembly-pick-pamphleteer" class="assembly-card-choice" type="button">
+          <span class="assembly-card-art" id="assembly-card-pamphleteer"></span>
+          <span class="assembly-card-count" id="assembly-count-pamphleteer"></span>
+        </button>
+        <button id="assembly-pick-regroup" class="assembly-card-choice" type="button">
+          <span class="assembly-card-art" id="assembly-card-regroup"></span>
+          <span class="assembly-card-count" id="assembly-count-regroup"></span>
+        </button>
+      </div>
+      <button id="assembly-cancel" class="btn small ghost assembly-cancel" type="button">Cancel</button>
+    </div>
     <p id="assembly-motion" class="modal-sub"></p>
     <ul id="assembly-tally" class="assembly-tally"></ul>
     <div id="assembly-actions" class="modal-actions" hidden>

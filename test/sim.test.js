@@ -51,7 +51,7 @@ test('what a bot predicts a play will do is what the engine then does', () => {
 test('an exact kill is predicted exactly, under either destination', () => {
   for (const exactKillTo of ['hand', 'peuple']) {
     const hand = [{ r: 10, s: 'S' }, { r: 10, s: 'D' }, { r: 4, s: 'H' }];
-    const s = fresh(12, { exactKillTo, drawOnVictory: 0 }, [hand, [], []], { r: 'J', s: 'D' });
+    const s = fresh(12, { exactKillTo, drawOnVictory: 0, royalHealthBonus: 0 }, [hand, [], []], { r: 'J', s: 'D' });
     const view = viewFor(s, 0);
     const cards = [hand[0], hand[1]];
     const o = outcomeOf(view, cards);
@@ -151,4 +151,23 @@ test('the tiers differ, and every one of them plays legally', () => {
   const decent = rate('decent');
   const good = rate('good');
   assert.ok(good > decent, `a table that talks and thinks does better (${good} vs ${decent})`);
+});
+
+test('the human policy is deterministic by seed, legal, and terminates', () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const first = playGame({ players: 1, rules: {}, seed, tier: 'human' });
+    const replay = playGame({ players: 1, rules: {}, seed, tier: 'human' });
+    assert.deepEqual(replay, first, `seed ${seed} replays exactly`);
+    assert.ok(first.actions > 0 && first.actions < 4000);
+    assert.ok(first.royalsFelled >= 0 && first.royalsFelled <= 12);
+    if (first.won) assert.equal(first.royalsFelled, 12);
+  }
+});
+
+test('solo exact-kill planning does not alter multiplayer decisions', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const never = playGame({ players: 2, rules: {}, seed, tier: 'human', humanProfile: { planRecognition: 0 } });
+    const always = playGame({ players: 2, rules: {}, seed, tier: 'human', humanProfile: { planRecognition: 1 } });
+    assert.deepEqual(always, never, `seed ${seed} is unaffected at a table`);
+  }
 });

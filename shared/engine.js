@@ -1,6 +1,7 @@
 // Régicide 1789 — pure rules engine (rulebook-faithful Regicide).
 // Runs identically in Node (server-authoritative multiplayer) and the browser (solo).
-// Cards: { r, s } where r ∈ 2..10 | 'A' (Les Renforts) | 'J' | 'Q' | 'K' | 'X' (Pamphleteer, s=null)
+// Cards: { r, s } where r ∈ 2..10 | 'A' (Les Renforts) | 'J' | 'Q' | 'K'.
+// 'X' is retained only as the visual identifier for the shared Pamphleteer token.
 // Suits: 'S' | 'H' | 'D' | 'C'
 
 export const SUITS = ['S', 'H', 'D', 'C'];
@@ -8,14 +9,14 @@ export const SUITS = ['S', 'H', 'D', 'C'];
 // La Constitution's rules live in one register, shared/rules.js — see there for
 // what each one means and which ones the menu currently offers. The turn always
 // passes to the next citoyen once a royal falls.
-import { HAND_SIZE, DEFAULT_RULES, resolveRules, rulebookFor } from './rules.js';
+import { HAND_SIZE, HAND_SIZE_BY_TIER, DEFAULT_RULES, resolveRules, rulebookFor } from './rules.js';
 export { DEFAULT_RULES, resolveRules, rulebookFor };
 export { RULE_SPEC, RULE_KEYS, EXPOSED_RULE_KEYS } from './rules.js';
 
 export const ENEMY_STATS = { J: { attack: 10, health: 20 }, Q: { attack: 15, health: 30 }, K: { attack: 20, health: 40 } };
 
 export function cardValue(c) {
-  if (c.r === 'X') return 1;
+  if (c.r === 'X') return 0;
   if (c.r === 'A') return 1;
   if (c.r === 'J') return 10;
   if (c.r === 'Q') return 15;
@@ -29,11 +30,22 @@ export function sameCard(a, b) { return a.r === b.r && a.s === b.s; }
 function makeRng(seed) {
   // mulberry32 — deterministic when a numeric seed is given (tests), random otherwise
   let a = seed >>> 0;
-  return function () {
+  const rng = function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  rng.getState = () => a >>> 0;
+  return rng;
+}
+
+function bindRng(state, rng) {
+  state.rngState = rng.getState();
+  state._rng = () => {
+    const value = rng();
+    state.rngState = rng.getState();
+    return value;
   };
 }
 
@@ -68,21 +80,23 @@ export function newGame(playerNames, opts = {}) {
     tavern.push({ r: 'A', s });
     for (let r = 2; r <= 10; r++) tavern.push({ r, s });
   }
-  for (let i = 0; i < rules.pamphleteers; i++) tavern.push({ r: 'X', s: null });
   shuffle(tavern, rng);
 
   const state = {
     playerCount: n,
     rules,
     handSize: Math.max(1, HAND_SIZE[n] + rules.handSizeDelta),
+    tierRank: null,
     solo: n === 1,
+    pamphleteersRemaining: rules.pamphleteers,
+    pamphleteersUsed: 0,
     regroupsRemaining: rules.regroups, // one pool, spent by whoever l'Assemblée backs
     regroupsUsed: 0,
     assembly: null,       // open motion: { caller, voters, votes }
     players: playerNames.map(name => ({
       name,
       hand: [],
-      laidLow: false,     // has spent their one Lay Low against the royal on the table
+      laidLow: false,     // has spent their one Lay Low during the current tier
     })),
     castle,
     tavern,
@@ -101,14 +115,40 @@ export function newGame(playerNames, opts = {}) {
     log: [],
     lastEvent: null,      // { type: 'reveal'|'defeat', ... } for client animation
     result: null,         // on loss: { reason }
-    rngState: null,
+    rngState: rng.getState(),
   };
-  state._rng = rng;
+  bindRng(state, rng);
 
   for (const p of state.players) drawTo(state, p);
   revealEnemy(state);
   state.lastEvent = { type: 'reveal', seq: state.revealSeq };
   log(state, `The Revolution begins. ${n === 1 ? 'You stand alone, citoyen.' : `${n} citoyens take to the streets. ${state.players[startingPlayer].name} leads the first attack.`}`);
+  return state;
+}
+
+// Browser solo games can be closed and resumed. Functions are deliberately
+// omitted from the snapshot, while the PRNG cursor is retained so every later
+// shuffle and threat variant continues along the same sequence.
+export function serializeGame(state) {
+  return JSON.parse(JSON.stringify(state, (key, value) => key === '_rng' ? undefined : value));
+}
+
+export function restoreGame(snapshot) {
+  let state;
+  try {
+    state = JSON.parse(JSON.stringify(snapshot));
+  } catch {
+    throw new Error('The saved game is unreadable.');
+  }
+  const arrays = ['castle', 'tavern', 'discard', 'playedCombos', 'players', 'log'];
+  if (!state || state.playerCount !== 1 || state.solo !== true
+    || !arrays.every(key => Array.isArray(state[key])) || state.players.length !== 1
+    || !['play', 'discard', 'won', 'lost'].includes(state.phase)
+    || !Number.isInteger(state.rngState)) {
+    throw new Error('The saved game is not valid.');
+  }
+  state.rules = resolveRules(state.rules, 1);
+  bindRng(state, makeRng(state.rngState));
   return state;
 }
 
@@ -129,14 +169,25 @@ function revealEnemy(state) {
     threatVariant: Math.floor(state._rng() * 3),
   };
   state.playedCombos = [];
-  // Each citoyen may duck one royal in a fight; a new royal restores the right.
-  for (const p of state.players) p.laidLow = false;
+  // Lay Low refreshes only when the Revolution crosses into Queens or Kings,
+  // not for every royal within the same tier.
+  if (state.tierRank !== card.r) {
+    for (const p of state.players) p.laidLow = false;
+    state.tierRank = card.r;
+  }
+}
+
+function handLimitFor(state, rank) {
+  const tiers = HAND_SIZE_BY_TIER[state.playerCount] ?? HAND_SIZE_BY_TIER[2];
+  return Math.max(1, tiers[rank] + state.rules.handSizeDelta);
 }
 
 export function enemyAttack(state) {
   return Math.max(0, ENEMY_STATS[state.enemy.card.r].attack + state.rules.royalStrikeBonus);
 }
-export function enemyHealth(state) { return ENEMY_STATS[state.enemy.card.r].health; }
+export function enemyHealth(state) {
+  return ENEMY_STATS[state.enemy.card.r].health + state.rules.royalHealthBonus;
+}
 
 // Spades shield is dynamic: vs a Spades enemy, spade plays only count once the
 // Pamphleteer has broken immunity — including spades played BEFORE him.
@@ -188,11 +239,7 @@ export function validatePlay(state, playerIdx, cards) {
   }
   const jesters = cards.filter(c => c.r === 'X').length;
   if (jesters > 0) {
-    if (jesters > 1) return 'Only one Pamphleteer may take the floor.';
-    if (cards.length === 1) return null;
-    if (!state.rules.pamphleteerCompanion) return 'The Pamphleteer works alone.';
-    if (cards.length === 2) return null; // the Pamphleteer and one other voice
-    return 'The Pamphleteer may bring only one companion.';
+    return 'Pamphleteers are a shared resource; call one before making your attack.';
   }
   if (cards.length === 1) return null;
   const companions = cards.filter(c => c.r === 'A').length;
@@ -378,10 +425,32 @@ function defeatEnemy(state, playerIdx) {
     log(state, 'The last King is dead. Vive la République!');
     return;
   }
+  // Crossing into Queens or Kings raises the hand limit before Spoils are
+  // shared, so a previously full hand can take advantage of the new space.
+  // Multiplayer tables then receive their transition card — the tier's only
+  // Spoil. Solo draws none: it has already taken its Spoils from the royal
+  // that ended the tier. Raising the limit by itself never draws a card.
+  const oldTier = state.tierRank;
+  const nextTier = state.castle[state.castle.length - 1].r;
+  const tierChanged = nextTier !== oldTier;
+  const handSizeBefore = state.handSize;
+  if (tierChanged) state.handSize = handLimitFor(state, nextTier);
+  const regroupsGained = tierChanged ? state.rules.regroupOnTransition : 0;
+  if (regroupsGained) {
+    state.regroupsRemaining += regroupsGained;
+    log(state, `The Revolution advances — ${regroupsGained} Regroup gained. (${state.regroupsRemaining} available)`);
+  }
   // A royal won over by exact damage is the slayer's spoil, not a bonus on
   // top of it. Other citoyens still receive their normal share. With the
   // standard one-spoil rule this means solo receives only the captured royal.
   const spoils = claimSpoils(state, playerIdx, toHand ? 1 : 0);
+  const transitionByPlayer = state.players.map(() => 0);
+  const transitionDrawn = tierChanged && state.rules.transitionDraw > 0
+    ? shareDraw(state, playerIdx, state.rules.transitionDraw, 0, transitionByPlayer)
+    : 0;
+  if (transitionDrawn) {
+    log(state, `The Revolution advances to ${nextTier === 'Q' ? 'the Queens' : 'the Kings'} — ${transitionDrawn} transition card${transitionDrawn === 1 ? '' : 's'} drawn.`);
+  }
   // A royal felled to the last point is laid on Le Peuple only once the spoils
   // have been gathered from it — otherwise the table would simply draw them
   // straight back, and the rule would mean nothing.
@@ -395,6 +464,15 @@ function defeatEnemy(state, playerIdx) {
     playedCards,
     spoilsDrawn: spoils.total,
     spoilsByPlayer: spoils.byPlayer,
+    transition: tierChanged ? {
+      from: oldTier,
+      to: nextTier,
+      handSizeBefore,
+      handSizeAfter: state.handSize,
+      drawn: transitionDrawn,
+      byPlayer: transitionByPlayer,
+      regroupsGained,
+    } : null,
   };
   // The slayer skips the counterattack and hands on: the newcomer is faced by
   // the next citoyen round the table (alone, that is the slayer again).
@@ -455,7 +533,7 @@ function beginSuffering(state, playerIdx) {
 }
 
 // Lying low is a true duck: no attack, and the royal finds nobody to strike.
-// It is rationed instead of paid for — once per citoyen per royal. That keeps
+// It is rationed instead of paid for — once per citoyen per tier. That keeps
 // it available to whoever is handed a fresh royal on an empty hand (the one
 // player a counterattack-paying Lay Low could never actually save), while
 // still costing the table a turn of damage it did not deal.
@@ -556,11 +634,44 @@ function checkTurnStart(state) {
   }
 }
 
+// ---- Pamphleteer -----------------------------------------------------------
+// Two Pamphleteers sit beside the table as a shared, single-use resource. They
+// deal no damage, provoke no reprisal, and do not spend the active citoyen's
+// turn; they simply break the current royal's immunity.
+
+export function canUsePamphleteer(state, playerIdx) {
+  return playerIdx === state.current
+    && !state.assembly
+    && state.phase === 'play'
+    && !!state.enemy
+    && !state.enemy.immunityCancelled
+    && state.pamphleteersRemaining > 0;
+}
+
+function applyPamphleteer(state, playerIdx, viaAssembly = false) {
+  if (!canUsePamphleteer(state, playerIdx)) throw new Error('A Pamphleteer cannot take the floor now.');
+  state.pamphleteersRemaining--;
+  state.pamphleteersUsed++;
+  state.enemy.immunityCancelled = true;
+  state.actionSeq++;
+  state.lastEffects = null;
+  state.lastPlay = null;
+  state.lastSacrifice = null;
+  state.lastEvent = { type: 'pamphleteer', seq: state.actionSeq, playerIdx, viaAssembly };
+  log(state, `${state.players[playerIdx].name} unleashes a Pamphleteer — the enemy's immunity is broken! (${state.pamphleteersRemaining} left)`);
+  return state;
+}
+
+export function usePamphleteer(state, playerIdx = state.current) {
+  if (!state.solo) throw new Error('A Pamphleteer needs l’Assemblée’s consent.');
+  return applyPamphleteer(state, playerIdx);
+}
+
 // ---- Regroup ---------------------------------------------------------------
 // The table shares one pool of Regroups. Alone you simply spend one; at a table
-// l'Assemblée must carry the motion first (see below). A Regroup resets the
-// deck for EVERYONE — every card that is not committed in play returns to Le
-// Peuple to be shuffled and dealt afresh — and does NOT cancel enemy immunity.
+// l'Assemblée must carry the motion first (see below). A Regroup returns every
+// hand to Le Peuple, shuffles, and deals round by round until every citoyen is
+// full or the deck runs out. La Prison and cards committed in play stay put.
 export function canRegroup(state, playerIdx) {
   return playerIdx === state.current
     && !state.assembly
@@ -576,10 +687,9 @@ export function regroup(state, playerIdx = state.current) {
   return applyRegroup(state, playerIdx);
 }
 
-// Everything except the cards committed against the current royal goes back
-// into Le Peuple: every citoyen's hand and all of La Prison. Le Régime and the
-// royal on the table are untouched.
-function applyRegroup(state, playerIdx) {
+// Every hand goes back into Le Peuple. La Prison, Le Régime, the current royal,
+// and cards already committed against that royal are untouched.
+function applyRegroup(state, playerIdx, viaAssembly = false) {
   const p = state.players[playerIdx];
   const scope = state.rules.regroupScope;
   // At its narrowest a Regroup resets nothing at all: the table simply takes a
@@ -587,12 +697,13 @@ function applyRegroup(state, playerIdx) {
   // than a fresh start, and a far smaller step than any reshuffle.
   if (scope === 'draw') {
     const drawn = shareDraw(state, playerIdx, state.rules.regroupDraw);
-    finishRegroup(state, p, `${p.name} calls the citoyens together — ${drawn} card${drawn === 1 ? '' : 's'} come up from Le Peuple`);
+    finishRegroup(state, p, `${p.name} calls the citoyens together — ${drawn} card${drawn === 1 ? '' : 's'} come up from Le Peuple`, playerIdx, viaAssembly);
     return state;
   }
-  // La Prison empties back into Le Peuple for every scope but the narrowest,
-  // where a Regroup reaches no further than the caller's own hand.
-  if (scope !== 'caller') {
+  // The legacy caller-and-prison scope remains available for simulation and
+  // old saved Constitutions. The rulebook's table-wide Retraite leaves La
+  // Prison untouched.
+  if (scope === 'callerAndPrison') {
     state.tavern.push(...state.discard);
     state.discard = [];
   }
@@ -616,20 +727,20 @@ function applyRegroup(state, playerIdx) {
     caller: `${p.name}'s hand returns to Le Peuple, shuffled, and is dealt afresh`,
     callerAndPrison: `${p.name}'s hand and all of La Prison return to Le Peuple, shuffled, and a fresh hand is dealt`,
     table: state.solo
-      ? 'Every card outside the fight returns to Le Peuple, shuffled'
-      : `${p.name} calls the table in: every hand and all of La Prison return to Le Peuple, shuffled, and fresh hands are dealt all round`,
+      ? 'Your hand returns to Le Peuple, shuffled, and is dealt afresh'
+      : `${p.name} calls the table in: every hand returns to Le Peuple, shuffled, and cards are dealt round by round until hands are full or Le Peuple runs out`,
   }[scope];
-  finishRegroup(state, p, scopeTold);
+  finishRegroup(state, p, scopeTold, playerIdx, viaAssembly);
   return state;
 }
 
 // Spend the Regroup and see whether it was enough. Shared by every scope, so a
 // narrow Regroup and a wide one are accounted for and checked identically.
-function finishRegroup(state, p, told) {
+function finishRegroup(state, p, told, playerIdx, viaAssembly) {
   state.regroupsRemaining--;
   state.regroupsUsed++;
   state.actionSeq++;
-  state.lastEvent = { type: 'regroup', seq: state.actionSeq };
+  state.lastEvent = { type: 'regroup', seq: state.actionSeq, playerIdx, viaAssembly };
   state.lastEffects = null;
   state.lastPlay = null;
   state.lastSacrifice = null;
@@ -664,6 +775,7 @@ export function callAssembly(state, playerIdx, eligible = null) {
   if (state.phase !== 'play' && state.phase !== 'discard') throw new Error('Not now.');
   const seats = eligible ?? state.players.map((_, i) => i);
   state.assembly = {
+    kind: 'regroup',
     caller: playerIdx,
     voters: seats.filter(i => i !== playerIdx && i >= 0 && i < state.players.length),
     votes: {},
@@ -671,6 +783,22 @@ export function callAssembly(state, playerIdx, eligible = null) {
   state.actionSeq++;
   state.lastEvent = null;
   log(state, `${state.players[playerIdx].name} convenes l’Assemblée — a motion to Regroup.`);
+  return resolveAssembly(state);
+}
+
+export function callPamphleteerAssembly(state, playerIdx, eligible = null) {
+  if (state.solo) throw new Error('There is no Assemblée to convene alone.');
+  if (!canUsePamphleteer(state, playerIdx)) throw new Error('A Pamphleteer cannot take the floor now.');
+  const seats = eligible ?? state.players.map((_, i) => i);
+  state.assembly = {
+    kind: 'pamphleteer',
+    caller: playerIdx,
+    voters: seats.filter(i => i !== playerIdx && i >= 0 && i < state.players.length),
+    votes: {},
+  };
+  state.actionSeq++;
+  state.lastEvent = null;
+  log(state, `${state.players[playerIdx].name} convenes l’Assemblée — a motion to unleash a Pamphleteer.`);
   return resolveAssembly(state);
 }
 
@@ -714,7 +842,9 @@ function resolveAssembly(state) {
   state.actionSeq++;
   if (ayes * 2 > seated) {
     log(state, `The motion carries, ${ayes}–${seated - ayes}.`);
-    return applyRegroup(state, caller);
+    return a.kind === 'pamphleteer'
+      ? applyPamphleteer(state, caller, true)
+      : applyRegroup(state, caller, true);
   }
   log(state, `The motion falls, ${ayes}–${seated - ayes}. Nothing is spent.`);
   return state;
@@ -733,11 +863,15 @@ export function viewFor(state, playerIdx) {
   return {
     playerCount: state.playerCount,
     handSize: state.handSize,
+    tierRank: state.tierRank,
     solo: state.solo,
     rules: state.rules,
     regroupsRemaining: state.regroupsRemaining,
     regroupsUsed: state.regroupsUsed,
+    pamphleteersRemaining: state.pamphleteersRemaining,
+    pamphleteersUsed: state.pamphleteersUsed,
     assembly: state.assembly ? {
+      kind: state.assembly.kind,
       caller: state.assembly.caller,
       voters: state.assembly.voters,
       votes: state.assembly.votes,
@@ -782,6 +916,7 @@ export function viewFor(state, playerIdx) {
     lastSacrifice: state.lastSacrifice,
     canYield: playerIdx != null ? canYield(state, playerIdx) : canYield(state, state.current),
     canRegroup: canRegroup(state, playerIdx ?? state.current),
+    canUsePamphleteer: canUsePamphleteer(state, playerIdx ?? state.current),
     lastEvent: state.lastEvent,
     result: state.result,
   };

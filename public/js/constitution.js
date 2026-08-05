@@ -37,7 +37,7 @@ const ALL_SETTINGS = [
   },
   {
     key: 'regroups',
-    label: 'Regroups',
+    label: 'La Retraite cards',
     hint: 'A pool shared by the whole table. At a table, l’Assemblée must carry the motion before one is spent.',
     slider: true,
     options: counts([0, 1, 2, 3]),
@@ -45,7 +45,7 @@ const ALL_SETTINGS = [
   {
     key: 'pamphleteers',
     label: 'Pamphleteers',
-    hint: 'How many shuffle into Le Peuple. At zero, no royal ever loses its suit immunity — the hardest setting here.',
+    hint: 'How many shared, single-use Pamphleteers wait beside the table. At zero, no royal ever loses its suit immunity.',
     slider: true,
     options: counts([0, 1, 2, 3]),
   },
@@ -73,7 +73,7 @@ const ALL_SETTINGS = [
   {
     key: 'pamphleteerImmune',
     label: 'The Pamphleteer’s protection',
-    hint: 'Whether the citoyen who unleashes the Pamphleteer escapes the reprisal or takes the blow before play passes clockwise.',
+    hint: 'Legacy setting retained for saved Constitutions; shared Pamphleteers now provoke no reprisal.',
     slider: true,
     options: [
       { value: true, label: 'Shielded' },
@@ -174,7 +174,11 @@ export function summarize(rules, playerCount) {
 export function gameRulesSummary(rules, playerCount) {
   const n = Math.min(4, Math.max(1, playerCount || 1));
   const resolved = resolveRules(rules, n);
-  const regroup = `${resolved.regroups} Regroup${resolved.regroups === 1 ? '' : 's'} — reshuffle every hand and La Prison, then refill to ${rulebookFor(n).handSize + resolved.handSizeDelta}`;
+  const book = rulebookFor(n);
+  const limits = ['J', 'Q', 'K'].map(rank => book.handSizes[rank] + resolved.handSizeDelta);
+  const regroup = n === 1
+    ? `${resolved.regroups} initially; gain ${resolved.regroupOnTransition} at Queens and Kings — unused La Retraite cards carry forward`
+    : `${resolved.regroups} La Retraite card${resolved.regroups === 1 ? '' : 's'} — shuffle every hand into Le Peuple, then redeal to the current limit or until it runs out`;
   const royalPower = {
     easy: 'Easy — Officers / Queens / Kings strike 8 / 13 / 18',
     medium: 'Medium — Officers / Queens / Kings strike 10 / 15 / 20',
@@ -182,8 +186,16 @@ export function gameRulesSummary(rules, playerCount) {
   }[resolved.difficulty];
   return [
     ['Royal power', royalPower],
-    ['Hand limit', `${rulebookFor(n).handSize + resolved.handSizeDelta} cards`],
-    ['Pamphleteers', `${resolved.pamphleteers}, exposed, alone or with one partner`],
-    ['Regroup', regroup],
+    ['Royal endurance', `${20 + resolved.royalHealthBonus} / ${30 + resolved.royalHealthBonus} / ${40 + resolved.royalHealthBonus} for Officers / Queens / Kings`],
+    ['Hand limits', `${limits.join(' / ')} for Officers / Queens / Kings`],
+    ['Spoils', resolved.drawOnVictory
+      ? `${resolved.drawOnVictory} per citoyen after each royal`
+      : 'None after individual royals'],
+    ['Tier transition', n === 1
+      ? 'Hand limit rises and you gain 1 La Retraite at Queens and Kings'
+      : 'Each citoyen draws 1 tier Spoil at Queens and Kings'],
+    ['Lay Low', n === 1 ? 'Not available alone' : 'Once per citoyen per tier'],
+    ['Pamphleteers', `${resolved.pamphleteers} shared — majority vote, zero damage, turn continues`],
+    ['La Retraite', regroup],
   ];
 }

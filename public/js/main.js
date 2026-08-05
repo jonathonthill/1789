@@ -39,9 +39,160 @@ let animBusy = false;
 let pendingView = null;
 let lastHandCount = 0;       // "your" hand size as of the last processed view
 let lobbyCount = 2;          // citoyens in the salon, floored at 2 for rule display
+let assemblyChooserOpen = false;
+let soloGameId = null;
+let soloStartedAt = null;
+let soloOutcomeQueued = false;
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
+
+const SOLO_SAVE_KEY = 'r1789_solo_game_v1';
+const SOLO_TAB_KEY = 'r1789_solo_active';
+
+function savedSoloGame() {
+  const saved = load(SOLO_SAVE_KEY);
+  return saved?.state
+    && ['play', 'discard'].includes(saved.state.phase)
+    && Array.isArray(saved.state.castle)
+    ? saved
+    : null;
+}
+
+function clearSoloSave() {
+  try { save(SOLO_SAVE_KEY, null); } catch {}
+  try { sessionStorage.removeItem(SOLO_TAB_KEY); } catch {}
+}
+
+function persistSoloGame() {
+  if (mode !== 'solo' || !soloState) return;
+  if (soloState.phase === 'won' || soloState.phase === 'lost') {
+    clearSoloSave();
+    return;
+  }
+  try {
+    save(SOLO_SAVE_KEY, {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      gameId: soloGameId,
+      startedAt: soloStartedAt,
+      handOrder,
+      state: engine.serializeGame(soloState),
+    });
+    sessionStorage.setItem(SOLO_TAB_KEY, soloGameId);
+  } catch { /* Storage may be unavailable; gameplay must still continue. */ }
+}
+
+function resumeSoloGame() {
+  const saved = savedSoloGame();
+  if (!saved) {
+    clearSoloSave();
+    showResumeButton();
+    return homeError('That solo game is no longer available.');
+  }
+  try {
+    soloState = engine.restoreGame(saved.state);
+  } catch {
+    clearSoloSave();
+    showResumeButton();
+    return homeError('That solo save could not be restored. Start a new game.');
+  }
+  mode = 'solo';
+  soloGameId = saved.gameId || freshGameId();
+  soloStartedAt = Number.isFinite(saved.startedAt) ? saved.startedAt : Date.now();
+  soloOutcomeQueued = false;
+  handOrder = Array.isArray(saved.handOrder) ? saved.handOrder : [];
+  staged = [];
+  lastAnimSeq = soloState.revealSeq ?? 0;
+  lastPhaseKey = '';
+  endHandled = false;
+  lastPlayActionSeq = soloState.actionSeq;
+  lastActionSeq = soloState.actionSeq;
+  lastHandCount = soloState.players[0]?.hand.length ?? 0;
+  try { sessionStorage.setItem(SOLO_TAB_KEY, soloGameId); } catch {}
+  $('#btn-resume-solo').hidden = true;
+  $('#name-input').value = soloState.players[0]?.name ?? $('#name-input').value;
+  onView(engine.viewFor(soloState, 0));
+}
+
+// Completed solo games are queued locally first, then delivered when a network
+// is available. The server de-duplicates by game id, so retries are safe.
+const OUTCOME_QUEUE_KEY = 'r1789_outcome_queue';
+let flushingOutcomes = false;
+function freshGameId() {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+function lossKind(reason = '') {
+  const text = String(reason).toLowerCase();
+  if (text.includes('surrender')) return 'surrender';
+  if (text.includes('no cards')) return 'no_cards';
+  if (text.includes('withstand') || text.includes('damage')) return 'damage';
+  return 'other';
+}
+function beginSoloTracking() {
+  soloGameId = freshGameId();
+  soloStartedAt = Date.now();
+  soloOutcomeQueued = false;
+}
+function queueSoloOutcome(v) {
+  if (soloOutcomeQueued || !soloGameId || (v.phase !== 'won' && v.phase !== 'lost')) return;
+  soloOutcomeQueued = true;
+  const outcome = {
+    gameId: soloGameId,
+    mode: 'solo',
+    outcome: v.phase === 'won' ? 'win' : 'loss',
+    lossKind: v.phase === 'lost' ? lossKind(v.result?.reason) : null,
+    playerCount: 1,
+    durationSeconds: Math.max(0, Math.round((Date.now() - soloStartedAt) / 1000)),
+    actionCount: v.actionSeq,
+    royalsDefeated: v.phase === 'won' ? 12 : Math.max(0, 12 - v.castleCount - (v.enemy ? 1 : 0)),
+    tierReached: v.phase === 'won' ? 'K' : (v.enemy?.card?.r ?? null),
+    regroupsUsed: v.regroupsUsed,
+    pamphleteersUsed: v.pamphleteersUsed,
+    cardsRemaining: {
+      peuple: v.tavernCount,
+      prison: v.discardCount,
+      hands: v.players.reduce((total, player) => total + player.handCount, 0),
+    },
+    rules: v.rules,
+  };
+  try {
+    const queue = load(OUTCOME_QUEUE_KEY) ?? [];
+    queue.push(outcome);
+    save(OUTCOME_QUEUE_KEY, queue.slice(-50));
+  } catch {
+    // Private browsing can disable local storage. A best-effort direct send
+    // still records the game without getting in the way of the end screen.
+    fetch('/api/outcomes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(outcome), keepalive: true,
+    }).catch(() => {});
+  }
+  flushOutcomeQueue();
+}
+async function flushOutcomeQueue() {
+  if (flushingOutcomes || !navigator.onLine) return;
+  flushingOutcomes = true;
+  try {
+    while (true) {
+      const queue = load(OUTCOME_QUEUE_KEY) ?? [];
+      if (!queue.length) break;
+      const response = await fetch('/api/outcomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(queue[0]),
+        keepalive: true,
+      });
+      if (!response.ok) break;
+      const current = load(OUTCOME_QUEUE_KEY) ?? [];
+      save(OUTCOME_QUEUE_KEY, current.filter(item => item.gameId !== queue[0].gameId));
+    }
+  } catch { /* Keep the queue for the next page load or online event. */ }
+  finally { flushingOutcomes = false; }
+}
+window.addEventListener('online', flushOutcomeQueue);
+flushOutcomeQueue();
 
 // The seat session lives in BOTH storages: sessionStorage wins so each tab keeps
 // its own seat (two tabs in one browser can't hijack each other), while
@@ -145,6 +296,7 @@ function pseudoState(v) {
     enemy: v.enemy ? { card: v.enemy.card, damage: v.enemy.damage, immunityCancelled: v.enemy.immunityCancelled } : null,
     discard: { length: v.discardCount },
     tavern: { length: v.tavernCount },
+    pamphleteersRemaining: v.pamphleteersRemaining ?? 0,
     pendingDamage: v.pendingDamage,
   };
 }
@@ -176,11 +328,25 @@ let rejoinInFlight = false;
 function showResumeButton() {
   const btn = $('#btn-resume');
   const resumable = storedSession(localStorage);
-  if (!resumable?.code) { btn.hidden = true; return; }
-  session = resumable;
-  btn.innerHTML = `Rejoin salon ${esc(resumable.code)} <small>as ${esc(resumable.name ?? 'Citoyen')}</small>`;
-  btn.hidden = false;
-  btn.onclick = () => tryRejoin();
+  if (resumable?.code) {
+    session = resumable;
+    btn.innerHTML = `Rejoin salon ${esc(resumable.code)} <small>as ${esc(resumable.name ?? 'Citoyen')}</small>`;
+    btn.hidden = false;
+    btn.onclick = () => tryRejoin();
+  } else {
+    btn.hidden = true;
+  }
+
+  const soloBtn = $('#btn-resume-solo');
+  const solo = savedSoloGame();
+  if (solo) {
+    const defeated = Math.max(0, 12 - solo.state.castle.length - (solo.state.enemy ? 1 : 0));
+    soloBtn.innerHTML = `Continue solo revolution <small>${defeated} of 12 royals defeated</small>`;
+    soloBtn.hidden = false;
+    soloBtn.onclick = resumeSoloGame;
+  } else {
+    soloBtn.hidden = true;
+  }
 }
 
 function tryRejoin({ silent = false, preserveFallback = false } = {}) {
@@ -226,8 +392,10 @@ function sendAction(action, cb) {
       else if (action.type === 'yield') engine.yieldTurn(s, 0);
       else if (action.type === 'discard') engine.discardForDamage(s, 0, action.cards);
       else if (action.type === 'regroup') engine.regroup(s, 0);
+      else if (action.type === 'pamphleteer') engine.usePamphleteer(s, 0);
       else if (action.type === 'assembly') throw new Error('There is no Assemblée to convene alone.');
       else if (action.type === 'surrender') engine.surrenderGame(s, 0);
+      persistSoloGame();
       onView(engine.viewFor(s, 0));
       cb?.({ ok: true });
     } catch (e) { cb?.({ ok: false, error: e.message }); }
@@ -417,6 +585,7 @@ $('#btn-solo').onclick = () => {
     onAdopt: rules => {
       mode = 'solo';
       soloState = engine.newGame([myName()], { rules });
+      beginSoloTracking();
       lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
       onView(engine.viewFor(soloState, 0));
     },
@@ -466,6 +635,8 @@ $('#btn-leave').onclick = () => {
 // ── view pipeline: animations, then render ──────────────────────────────────
 function onView(v) {
   view = v;
+  if (mode === 'solo') persistSoloGame();
+  if (mode === 'solo' && (v.phase === 'won' || v.phase === 'lost')) queueSoloOutcome(v);
   if (animBusy) { pendingView = v; return; }
   routeView(v);
 }
@@ -549,16 +720,20 @@ function routeView(v) {
               audio.sfx(ev.exact ? 'draw' : 'guillotine');
               showRoyalDefeat(ev.card, ev.exact, captureRecipient(v, ev), () => {
                 // Exact-kill recruits arrive with the royal's judgment. Spoils
-                // remain held back until their own draw follows the blade.
-                renderHand(v, arrivals.spoils);
-                renderSeats(v, ev.spoilsByPlayer);
-                animateSpoils(v, ev, () => {
-                  audio.sfx('enemy');
-                  showEntrance(v.enemy, done);
+                // and tier rewards remain held back until their own beats.
+                renderHand(v, arrivals.rewards);
+                renderSeats(v, defeatSeatHolds(v, ev, false));
+                animateTierAdvance(v, ev, () => {
+                  renderHand(v, arrivals.spoils);
+                  renderSeats(v, ev.spoilsByPlayer);
+                  animateSpoils(v, ev, () => {
+                    audio.sfx('enemy');
+                    showEntrance(v.enemy, done);
+                  });
                 });
               });
             });
-          }, { holdAfter: arrivals.captured + arrivals.spoils });
+          }, { holdAfter: arrivals.captured + arrivals.rewards });
         }));
         return;
       } else {
@@ -588,14 +763,10 @@ function routeView(v) {
       });
     } else if (isNewAction && v.lastSacrifice) {
       withAnim(done => animateSacrifice(v, done), () => animateEffects(v, prevHandCount));
+    } else if (isNewAction && (v.lastEvent?.type === 'regroup' || v.lastEvent?.type === 'pamphleteer')) {
+      withAnim(done => animateSharedSpecial(v, done));
     } else {
       renderGame(v);
-      // A Regroup empties La Prison and every hand back into Le Peuple, which
-      // swells and is reshuffled — give it the riffle that explains the jump.
-      if (isNewAction && v.lastEvent?.type === 'regroup') {
-        audio.sfx('shuffle');
-        riffleDeck($('#stack-tavern'));
-      }
       animateEffects(v, prevHandCount);
     }
   };
@@ -688,7 +859,7 @@ function animateEffects(v, prevHandCount, done, { holdAfter = 0 } = {}) {
 // The event supplies the spoil allocation; the final hand delta accounts for
 // Rally without exposing anyone else's cards.
 function defeatArrivals(v, prevHandCount, event) {
-  if (!v.you) return { total: 0, captured: 0, spoils: 0 };
+  if (!v.you) return { total: 0, captured: 0, spoils: 0, transition: 0, rewards: 0 };
   const slayer = v.lastPlay?.playerIdx;
   const removed = slayer === v.you.index ? (v.lastPlay?.cards.length ?? 0) : 0;
   const total = Math.max(0, v.you.hand.length - (prevHandCount - removed));
@@ -696,12 +867,25 @@ function defeatArrivals(v, prevHandCount, event) {
     && (v.rules?.exactKillTo ?? 'hand') === 'hand'
     && slayer === v.you.index ? 1 : 0;
   const spoils = Math.min(total - captured, event?.spoilsByPlayer?.[v.you.index] ?? 0);
-  return { total, captured, spoils: Math.max(0, spoils) };
+  const transition = Math.min(
+    total - captured - spoils,
+    event?.transition?.byPlayer?.[v.you.index] ?? 0,
+  );
+  return {
+    total,
+    captured,
+    spoils: Math.max(0, spoils),
+    transition: Math.max(0, transition),
+    rewards: Math.max(0, spoils) + Math.max(0, transition),
+  };
 }
 
 function defeatSeatHolds(v, event, includeCapture) {
   const holds = (event?.spoilsByPlayer ?? []).slice();
   while (holds.length < v.players.length) holds.push(0);
+  for (let i = 0; i < holds.length; i++) {
+    holds[i] += event?.transition?.byPlayer?.[i] ?? 0;
+  }
   const slayer = v.lastPlay?.playerIdx;
   if (includeCapture
     && event?.exact
@@ -724,11 +908,137 @@ function animateSpoils(v, event, done) {
     return;
   }
   audio.sfx('draw');
-  flyCards($('#stack-tavern'), $('#hand-zone'), drawn, cardBackSVG(), () => {
+  const afterCount = v.you.hand.length;
+  const beforeCount = Math.max(0, afterCount - drawn);
+  showSpoilsReward(v.players[v.you.index]?.name ?? 'Citoyen', beforeCount, afterCount, drawn, () => {
     renderHand(v);
     renderSeats(v);
     done?.();
   });
+}
+
+// The increased hand limit is its own victory beat. Any transition cards are
+// revealed by releasing the held-back cards only after the new slot appears;
+// Spoils remain hidden for the following overlay.
+function animateTierAdvance(v, event, done) {
+  const transition = event?.transition;
+  if (!transition) { done?.(); return; }
+  audio.sfx('draw');
+  showTierAdvance(transition, done);
+}
+
+// A shared special is not dealt from a hand or placed into a pile. It appears
+// at the same rest point as a remote play, pauses, then leaves the game by
+// travelling straight up. Only after it clears do we render its resolved state.
+function animateSharedSpecial(v, done) {
+  const ev = v.lastEvent;
+  const card = ev.type === 'pamphleteer' ? { r: 'X' } : { r: 'R' };
+  const royal = $('#enemy-zone');
+  const rect = royal?.getBoundingClientRect();
+  $('#assembly').hidden = true;
+  assemblyChooserOpen = false;
+  if (!rect) { renderGame(v); done?.(); return; }
+
+  const ghost = document.createElement('div');
+  ghost.className = 'special-play-card';
+  ghost.innerHTML = cardSVG(card);
+  ghost.style.left = `${rect.left + rect.width / 2}px`;
+  ghost.style.top = `${Math.min(window.innerHeight - 150, rect.bottom + 12)}px`;
+  ghost.style.setProperty('--special-card-w', `${Math.max(70, Math.min(98, rect.width * .7))}px`);
+  document.body.appendChild(ghost);
+  void ghost.offsetWidth;
+  ghost.classList.add('playing');
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    ghost.remove();
+    renderGame(v);
+    if (ev.type === 'regroup') {
+      audio.sfx('shuffle');
+      riffleDeck($('#stack-tavern'));
+    } else {
+      audio.sfx('pamphleteer');
+    }
+    done?.();
+  };
+  ghost.addEventListener('animationend', finish, { once: true });
+  setTimeout(finish, 1900);
+}
+
+function rewardFan(count) {
+  const n = Math.max(0, count);
+  if (!n) return '';
+  const fanW = 230, cardW = 46;
+  const step = n === 1 ? 0 : Math.min(cardW * .66, (fanW - cardW) / (n - 1));
+  const x0 = (fanW - (cardW + step * (n - 1))) / 2;
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    const rot = n === 1 ? 0 : -10 + 20 * i / (n - 1);
+    html += `<span class="reward-fan-card" style="left:${(x0 + i * step).toFixed(1)}px;`
+      + `transform:rotate(${rot.toFixed(1)}deg)">${cardBackSVG()}</span>`;
+  }
+  return html;
+}
+
+const rewardTimers = new Map();
+const rewardCallbacks = new Map();
+
+function finishReward(id) {
+  const overlay = $(`#${id}-overlay`);
+  if (!overlay || overlay.hidden) return;
+  clearTimeout(rewardTimers.get(id));
+  rewardTimers.delete(id);
+  overlay.onclick = null;
+  $(`#${id}-stage`)?.classList.remove('playing');
+  overlay.hidden = true;
+  const cb = rewardCallbacks.get(id);
+  rewardCallbacks.delete(id);
+  cb?.();
+}
+
+function playReward(id, duration, done) {
+  const overlay = $(`#${id}-overlay`);
+  const stage = $(`#${id}-stage`);
+  clearTimeout(rewardTimers.get(id));
+  rewardCallbacks.set(id, done);
+  stage.classList.remove('playing');
+  overlay.hidden = false;
+  // onclick is used instead of a newly bound closure so repeat rewards cannot
+  // accumulate stale skip handlers.
+  overlay.onclick = () => finishReward(id);
+  void stage.offsetWidth;
+  stage.classList.add('playing');
+  rewardTimers.set(id, setTimeout(() => finishReward(id), duration));
+}
+
+function showTierAdvance(transition, done) {
+  const before = transition.handSizeBefore;
+  const after = transition.handSizeAfter;
+  $('#tier-name').textContent = transition.to === 'Q' ? 'The Queens' : 'The Kings';
+  $('#tier-limit-before').textContent = before;
+  $('#tier-limit-after').textContent = after;
+  $('#tier-fan-before').innerHTML = rewardFan(before);
+  $('#tier-fan-after').innerHTML = rewardFan(after);
+  // Let the new tier land as a celebration rather than a transition card: the
+  // motion completes early, then the final hand-limit state holds for reading.
+  playReward('tier', 4500, done);
+}
+
+function showSpoilsReward(playerName, beforeCount, afterCount, drawn, done) {
+  $('#spoils-player-name').textContent = playerName;
+  $('#spoils-hand-count').textContent = beforeCount;
+  $('#spoils-sub').textContent = drawn === 1
+    ? 'A mystery card joins your hand'
+    : `${drawn} mystery cards join your hand`;
+  $('#spoils-fan-before').innerHTML = rewardFan(beforeCount);
+  $('#spoils-fan-after').innerHTML = rewardFan(afterCount);
+  $('.spoils-card').innerHTML = cardBackSVG();
+  setTimeout(() => {
+    if (!$('#spoils-overlay').hidden) $('#spoils-hand-count').textContent = afterCount;
+  }, 1960);
+  playReward('spoils', 2850, done);
 }
 
 // A just-played combo: the cards rise from the hand (acting player) or fade
@@ -790,9 +1100,12 @@ function captureRecipient(v, ev) {
   const slayer = v.lastPlay?.playerIdx;
   if (slayer == null) return null;
   const player = v.players[slayer];
+  const laterRewards = (ev.spoilsByPlayer?.[slayer] ?? 0)
+    + (ev.transition?.byPlayer?.[slayer] ?? 0);
   return {
     name: player?.name ?? 'The slayer',
-    handCount: player?.handCount ?? (slayer === v.you?.index ? v.you?.hand.length : 1),
+    handCount: Math.max(1,
+      (player?.handCount ?? (slayer === v.you?.index ? v.you?.hand.length : 1)) - laterRewards),
     isYou: v.solo || slayer === v.you?.index,
   };
 }
@@ -800,10 +1113,11 @@ function captureRecipient(v, ev) {
 function setEnemyBarsForCard(card, hp, atk) {
   const stats = engine.ENEMY_STATS[card.r];
   const maxAttack = Math.max(0, stats.attack + (view?.rules?.royalStrikeBonus ?? 0));
-  const hpRatio = hp / stats.health;
+  const maxHealth = stats.health + (view?.rules?.royalHealthBonus ?? 0);
+  const hpRatio = hp / maxHealth;
   const hpWrap = $('.hp-wrap');
   $('#hp-bar').style.width = `${hpRatio * 100}%`;
-  $('#hp-text').textContent = `${hp} / ${stats.health}`;
+  $('#hp-text').textContent = `${hp} / ${maxHealth}`;
   hpWrap.classList.toggle('low', hpRatio <= .5);
   hpWrap.classList.toggle('critical', hpRatio <= .25);
   const atkRatio = maxAttack > 0 ? atk / maxAttack : 0;
@@ -1144,6 +1458,8 @@ window.addEventListener('resize', () => layoutHand());
 
 function renderActions(v) {
   const confirm = $('#btn-confirm'), yield_ = $('#btn-yield'), regroup = $('#btn-regroup');
+  const pamphleteer = $('#btn-pamphleteer');
+  const assemblyButton = $('#btn-assembly');
   const you = v.you, myTurn = you && v.current === you.index;
   const ps = pseudoState(v);
 
@@ -1154,8 +1470,8 @@ function renderActions(v) {
     yield_.hidden = !!v.solo;
     yield_.disabled = !v.canYield;
     yield_.title = v.canYield
-      ? 'Skip your turn entirely — no attack, and no strike against you. Once per royal.'
-      : 'You have already lain low against this royal.';
+      ? 'Skip your turn entirely — no attack, and no strike against you. Once per tier.'
+      : 'You have already lain low during this tier.';
   } else if (v.phase === 'discard' && myTurn) {
     confirm.textContent = 'Sacrifice';
     const total = staged.reduce((s, c) => s + engine.cardValue(c), 0);
@@ -1170,11 +1486,20 @@ function renderActions(v) {
   // Alone you simply spend a Regroup; at a table you must move for one and let
   // l'Assemblée decide.
   const left = v.regroupsRemaining ?? 0;
-  regroup.hidden = !v.canRegroup || !myTurn;
-  regroup.textContent = v.solo ? `Regroup (${left})` : `l'Assemblée (${left})`;
-  regroup.title = v.solo
-    ? 'Put your hand back into Le Peuple, shuffle, and draw a fresh one'
-    : 'Move for a Regroup — the table votes, then every hand and La Prison are shuffled into Le Peuple and fresh hands are dealt';
+  regroup.hidden = !v.solo || !v.canRegroup || !myTurn;
+  regroup.textContent = `La Retraite (${left})`;
+  regroup.title = 'Discard the affected hand, return it to Le Peuple, and draw according to this table’s rules';
+
+  const pamphleteers = v.pamphleteersRemaining ?? 0;
+  pamphleteer.hidden = !v.solo || !v.canUsePamphleteer || !myTurn;
+  pamphleteer.textContent = `Pamphleteer (${pamphleteers})`;
+  pamphleteer.title = v.solo
+    ? 'Break this royal’s immunity without spending your turn'
+    : 'Move to unleash a shared Pamphleteer — the table votes, and your turn continues if it carries';
+
+  assemblyButton.hidden = !!v.solo || !myTurn || (!v.canRegroup && !v.canUsePamphleteer);
+  assemblyButton.textContent = "l'Assemblée";
+  assemblyButton.title = 'Move to use a shared Pamphleteer or La Retraite card';
 
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
   renderAssembly(v);
@@ -1183,13 +1508,34 @@ function renderActions(v) {
 // ── l'Assemblée ─────────────────────────────────────────────────────────────
 function renderAssembly(v) {
   const a = v.assembly;
-  $('#assembly').hidden = !a;
+  if (a) assemblyChooserOpen = false;
+  const choosing = assemblyChooserOpen && !a;
+  $('#assembly').hidden = !a && !choosing;
+  $('#assembly-chooser').hidden = !choosing;
+  $('#assembly-motion').hidden = !a;
+  $('#assembly-tally').hidden = !a;
+  if (choosing) {
+    const pLeft = v.pamphleteersRemaining ?? 0;
+    const rLeft = v.regroupsRemaining ?? 0;
+    $('#assembly-card-pamphleteer').innerHTML = cardSVG({ r: 'X' });
+    $('#assembly-card-regroup').innerHTML = cardSVG({ r: 'R' });
+    $('#assembly-count-pamphleteer').textContent = `×${pLeft}`;
+    $('#assembly-count-regroup').textContent = `×${rLeft}`;
+    $('#assembly-pick-pamphleteer').setAttribute('aria-label', `Use Pamphleteer, ${pLeft} available`);
+    $('#assembly-pick-regroup').setAttribute('aria-label', `Use La Retraite, ${rLeft} available`);
+    $('#assembly-pick-pamphleteer').disabled = !v.canUsePamphleteer;
+    $('#assembly-pick-regroup').disabled = !v.canRegroup;
+    $('#assembly-actions').hidden = true;
+    $('#assembly-wait').hidden = true;
+    return;
+  }
   if (!a) return;
   const mover = v.players[a.caller]?.name ?? 'A citoyen';
-  $('#assembly-motion').innerHTML =
-    `<strong>${esc(mover)}</strong> moves to Regroup — every hand and La Prison return to Le Peuple,
-     which is shuffled before fresh hands are dealt all round.
-     ${v.regroupsRemaining} remain${v.regroupsRemaining === 1 ? 's' : ''} in the pool.`;
+  $('#assembly-motion').innerHTML = a.kind === 'pamphleteer'
+    ? `<strong>${esc(mover)}</strong> moves to unleash a Pamphleteer — it deals no damage, breaks this royal’s immunity, and leaves the mover’s turn intact. ${v.pamphleteersRemaining} remain in the pool.`
+    : `<strong>${esc(mover)}</strong> moves to use La Retraite — every hand returns to Le Peuple,
+       which is shuffled and redealt round by round until hands are full or it runs out. La Prison stays put.
+       ${v.regroupsRemaining} remain in the pool.`;
   $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
     const answered = i === a.caller ? true : a.votes[i] !== undefined;
     const aye = i === a.caller ? true : a.votes[i];
@@ -1210,6 +1556,18 @@ const castVote = aye => {
 };
 $('#assembly-aye').onclick = () => castVote(true);
 $('#assembly-nay').onclick = () => castVote(false);
+$('#assembly-cancel').onclick = () => {
+  assemblyChooserOpen = false;
+  $('#assembly').hidden = true;
+};
+$('#assembly-pick-pamphleteer').onclick = () => {
+  audio.sfx('select');
+  sendAction({ type: 'pamphleteerAssembly' }, flashError);
+};
+$('#assembly-pick-regroup').onclick = () => {
+  audio.sfx('select');
+  sendAction({ type: 'assembly' }, flashError);
+};
 
 function flashError(res) {
   if (res?.ok === false) {
@@ -1232,6 +1590,16 @@ $('#btn-regroup').onclick = () => {
   if (view?.solo) { sendAction({ type: 'regroup' }, flashError); return; }
   audio.sfx('select');
   sendAction({ type: 'assembly' }, flashError);
+};
+$('#btn-assembly').onclick = () => {
+  staged = [];
+  assemblyChooserOpen = true;
+  audio.sfx('select');
+  renderAssembly(view);
+};
+$('#btn-pamphleteer').onclick = () => {
+  staged = [];
+  sendAction({ type: view?.solo ? 'pamphleteer' : 'pamphleteerAssembly' }, flashError);
 };
 
 // ── cutscenes (game-start and victory) ────────────────────────────────────
@@ -1303,6 +1671,7 @@ $('#btn-rematch').onclick = () => {
     onAdopt: rules => {
       if (solo) {
         soloState = engine.newGame([myName()], { rules });
+        beginSoloTracking();
         lastAnimSeq = 0; endHandled = false; staged = []; handOrder = [];
         onView(engine.viewFor(soloState, 0));
       } else {
@@ -1314,14 +1683,16 @@ $('#btn-rematch').onclick = () => {
 function exitToHome(forgetSession = false) {
   if (mode === 'mp' && forgetSession) { saveSession(null); session = null; }
   if (mode === 'mp') { socket?.disconnect(); socket = null; }
+  if (mode === 'solo') { try { sessionStorage.removeItem(SOLO_TAB_KEY); } catch {} }
   mode = null; soloState = null; view = null; staged = []; handOrder = [];
   show('home');
+  showResumeButton();
 }
 
 $('#btn-quit').onclick = () => {
   const msg = mode === 'mp'
     ? 'Leave this salon? Your seat stays reserved — rejoin any time with the same browser.'
-    : 'Abandon this solo game?';
+    : 'Leave this solo game? You can continue it later from this browser.';
   if (!window.confirm(msg)) return;
   exitToHome(); // multiplayer keeps its seat for rejoining
 };
@@ -1336,7 +1707,10 @@ $('#btn-surrender').onclick = () => {
       exitToHome(true);
     });
   } else {
-    exitToHome();
+    sendAction({ type: 'surrender' }, res => {
+      if (!res?.ok) return flashError(res);
+      exitToHome();
+    });
   }
 };
 $('#btn-home').onclick = () => {
@@ -1538,6 +1912,7 @@ function attachHandCard(el, card, zone, onTap) {
     el.style.translate = '';
 
     handOrder = [...zone.children].filter(c => c.classList.contains('hand-card')).map(c => c.dataset.card);
+    persistSoloGame();
   }
 
   function updateDrag(clientX) {
@@ -1600,7 +1975,7 @@ let walkthroughReturnFocus = null;
 function maybeWalkthrough() {
   // Respect the completion flag from the coach marks this replaces, so
   // returning players are not treated as first-time users again.
-  if (load('r1789_walkthrough_v1') || load('r1789_coach') || walkthroughStep >= 0) return;
+  if (load('r1789_walkthrough_v3') || walkthroughStep >= 0) return;
   openWalkthrough(view);
 }
 
@@ -1616,7 +1991,7 @@ function openWalkthrough(v) {
 
 function closeWalkthrough() {
   if (walkthroughStep < 0) return;
-  save('r1789_walkthrough_v1', true);
+  save('r1789_walkthrough_v3', true);
   save('r1789_coach', true);
   walkthroughStep = -1;
   walkthroughPages = [];
@@ -1667,16 +2042,14 @@ document.addEventListener('keydown', e => {
 // Mobile Safari will sit on a cached build for days, so the page carries the
 // build stamp it was served with and asks the server what it is running now —
 // on load, whenever the tab returns to the foreground, and on every socket
-// reconnect (the phone-unlock case). A stale tab reloads itself, unless a solo
-// game is in progress: that state lives only in this tab and reloading would
-// throw it away, so those players get a banner and choose their moment.
+// reconnect (the phone-unlock case). Solo state is saved after every action,
+// so either kind of game can safely survive an automatic refresh.
 const BUILD = document.querySelector('meta[name="build"]')?.content ?? '';
 const RELOADED_FOR = 'r1789_reloaded_for';
 let updatePending = false;
 
 function safeToReload() {
-  if (mode !== 'solo') return true; // a salon seat is rejoined silently on load
-  return !soloState || soloState.phase === 'won' || soloState.phase === 'lost';
+  return true;
 }
 
 function offerReload() {
@@ -1723,11 +2096,14 @@ if (debugParams.has('win')) {
 } else if (debugParams.has('begin')) {
   playCutscene('begin', () => show('home'));
 } else {
-  // Same-tab refresh (sessionStorage) rejoins silently — the phone-lock case.
-  // A brand-new tab only OFFERS to resume the seat found in localStorage, so a
-  // second player on the same browser can't accidentally hijack it.
+  // Same-tab refresh rejoins silently — the phone-lock case. A brand-new tab
+  // only offers locally saved games, so it cannot silently take over play.
+  const soloSave = savedSoloGame();
+  const tabSoloId = (() => { try { return sessionStorage.getItem(SOLO_TAB_KEY); } catch { return null; } })();
   const tabSession = (() => { try { return JSON.parse(sessionStorage.getItem('r1789_session')); } catch { return null; } })();
-  if (tabSession?.code) {
+  if (soloSave && tabSoloId && tabSoloId === soloSave.gameId) {
+    resumeSoloGame();
+  } else if (tabSession?.code) {
     session = tabSession;
     tryRejoin({ preserveFallback: true });
   } else {
