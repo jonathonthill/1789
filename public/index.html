@@ -70,7 +70,7 @@
   <div class="cutscene-frame">
     <video id="begin-video" class="cutscene-video" src="/video/begin.mp4" playsinline preload="none"></video>
   </div>
-  <div class="cutscene-skip">Tap to skip</div>
+  <div class="cutscene-skip">tap to skip</div>
 </section>
 
 <!-- ═══ GAME ═══ -->
@@ -145,8 +145,24 @@
     <div id="seats" class="seats"></div>
   </div>
 
+  <!-- Pooled, not held: the chips hang off the shared area — under the other
+       citoyens at a table, under the board itself when alone. -->
+  <div id="supply-chips" class="supply-chips" hidden>
+    <button id="chip-pamphleteer" class="supply-chip" type="button">
+      <span class="supply-chip-art" aria-hidden="true"></span>
+      <span class="supply-chip-name">Pamphleteer</span>
+      <span class="supply-chip-pips" aria-hidden="true"></span>
+    </button>
+    <button id="chip-regroup" class="supply-chip" type="button">
+      <span class="supply-chip-art" aria-hidden="true"></span>
+      <span class="supply-chip-name">La Retraite</span>
+      <span class="supply-chip-pips" aria-hidden="true"></span>
+    </button>
+  </div>
+
   <div class="turn-area">
     <div class="status-zone">
+      <div id="skip-hint" class="skip-hint" hidden>tap to skip</div>
       <div id="status-strip" class="status-strip" data-info="status"></div>
     </div>
     <div id="hand-zone" class="hand-zone"></div>
@@ -155,9 +171,6 @@
   <div id="action-bar" class="action-bar">
     <div id="projection" class="projection"></div>
     <div class="action-buttons">
-      <button id="btn-pamphleteer" class="btn small ghost" hidden>Pamphleteer</button>
-      <button id="btn-regroup" class="btn small ghost" hidden>La Retraite (2)</button>
-      <button id="btn-assembly" class="btn small ghost" hidden>l'Assemblée</button>
       <button id="btn-yield" class="btn small" hidden>Lay Low</button>
       <button id="btn-confirm" class="btn small primary" disabled>Attaquez!</button>
     </div>
@@ -171,7 +184,7 @@
   <div class="cutscene-frame">
     <video id="victory-video" class="cutscene-video" src="/video/victory.mp4" playsinline preload="none"></video>
   </div>
-  <div class="cutscene-skip">Tap to skip</div>
+  <div class="cutscene-skip">tap to skip</div>
 </section>
 
 <!-- ═══ END ═══ -->
@@ -195,7 +208,7 @@
       <div id="entrance-threat" class="speech-text"></div>
     </div>
     <div id="entrance-facts" class="entrance-facts"></div>
-    <div class="entrance-dismiss">tap to continue</div>
+    <div class="entrance-dismiss">tap to skip</div>
   </div>
 </div>
 
@@ -206,6 +219,7 @@
       <div id="g-victim" class="g-victim"></div>
     </div>
     <div id="g-caption" class="g-caption"></div>
+    <div class="g-dismiss">tap to skip</div>
   </div>
 </div>
 
@@ -233,7 +247,7 @@
       <div id="capture-fan-after" class="capture-fan capture-fan-after"></div>
       <span class="capture-seat-name"><span id="capture-player-name"></span> · <b id="capture-hand-count"></b></span>
     </div>
-    <div class="capture-dismiss">tap to continue</div>
+    <div class="capture-dismiss">tap to skip</div>
   </div>
 </div>
 
@@ -289,30 +303,23 @@
   </div>
 </div>
 
-<div id="assembly" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="assembly-title">
-  <div class="modal-panel assembly-panel">
-    <h2 id="assembly-title" class="modal-title">l'Assemblée</h2>
-    <div id="assembly-chooser" hidden>
-      <p class="assembly-prompt">I move to use…</p>
-      <div class="assembly-cards">
-        <button id="assembly-pick-pamphleteer" class="assembly-card-choice" type="button">
-          <span class="assembly-card-art" id="assembly-card-pamphleteer"></span>
-          <span class="assembly-card-count" id="assembly-count-pamphleteer"></span>
-        </button>
-        <button id="assembly-pick-regroup" class="assembly-card-choice" type="button">
-          <span class="assembly-card-art" id="assembly-card-regroup"></span>
-          <span class="assembly-card-count" id="assembly-count-regroup"></span>
-        </button>
-      </div>
-      <button id="assembly-cancel" class="btn small ghost assembly-cancel" type="button">Cancel</button>
+<div id="motion" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="motion-title">
+  <div class="modal-panel motion-panel">
+    <h2 id="motion-title" class="modal-title"></h2>
+    <p id="motion-caption" class="motion-caption"></p>
+    <div id="motion-card" class="motion-card"></div>
+    <p id="motion-line" class="motion-line"></p>
+    <p id="motion-remain" class="motion-remain"></p>
+    <ul id="motion-tally" class="assembly-tally" hidden></ul>
+    <div id="motion-confirm-actions" class="modal-actions" hidden>
+      <button id="motion-cancel" class="btn small ghost" type="button">Cancel</button>
+      <button id="motion-confirm" class="btn small primary" type="button">Spend it</button>
     </div>
-    <p id="assembly-motion" class="modal-sub"></p>
-    <ul id="assembly-tally" class="assembly-tally"></ul>
-    <div id="assembly-actions" class="modal-actions" hidden>
-      <button id="assembly-nay" class="btn small ghost" type="button">Nay</button>
-      <button id="assembly-aye" class="btn small primary" type="button">Yea</button>
+    <div id="motion-vote" class="modal-actions" hidden>
+      <button id="motion-nay" class="btn small ghost" type="button">Nay</button>
+      <button id="motion-aye" class="btn small primary" type="button">Yea</button>
     </div>
-    <p id="assembly-wait" class="assembly-wait" hidden>The floor is still debating…</p>
+    <p id="motion-wait" class="assembly-wait" hidden></p>
   </div>
 </div>
 

@@ -73,12 +73,22 @@ export const RULE_SPEC = {
     bySize: { 1: 1, 2: 1, 3: 1, 4: 1 },
     exposed: false,
   },
-  // Solo begins with one Regroup and earns another on entering each new tier.
-  // Unspent Regroups remain in the pool, so all three can be carried to Kings —
-  // banking them for the Kings is the strongest line solo has, and the balance
-  // study says taking that away costs roughly ten points of win rate.
+  // Adds to the pool at each tier transition and lets unspent Regroups bank:
+  // with this on, solo could carry all three to the Kings. Kept for study and
+  // for old saved Constitutions — solo now refreshes instead (see below).
   regroupOnTransition: {
     label: 'Regroups gained at tier transitions',
+    values: [0, 1],
+    bySize: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    exposed: false,
+  },
+  // Solo holds one Regroup, and a new tier hands it back if it was spent. It
+  // refreshes rather than accumulates: there is one to spend against the
+  // Officers, one against the Queens and one against the Kings, and nothing to
+  // gain by hoarding it. Restoring never takes a Regroup away, so a pool
+  // already at its opening size is left alone.
+  regroupTierReset: {
+    label: 'Regroups restored at tier transitions',
     values: [0, 1],
     bySize: { 1: 1, 2: 0, 3: 0, 4: 0 },
     exposed: false,
@@ -129,10 +139,12 @@ export const RULE_SPEC = {
     default: 0,
     exposed: false,
   },
+  // Alone there is one Pamphleteer to spend across the whole Revolution; a
+  // table shares two.
   pamphleteers: {
     label: 'Pamphleteers',
     values: [0, 1, 2, 3],
-    bySize: { 1: 2, 2: 2, 3: 2, 4: 2 },
+    bySize: { 1: 1, 2: 2, 3: 2, 4: 2 },
     exposed: false,
   },
   // Where an exact kill sends the royal: won over to the slayer's own hand, or

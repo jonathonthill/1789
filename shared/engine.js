@@ -93,6 +93,7 @@ export function newGame(playerNames, opts = {}) {
     regroupsRemaining: rules.regroups, // one pool, spent by whoever l'Assemblée backs
     regroupsUsed: 0,
     assembly: null,       // open motion: { caller, voters, votes }
+    lastAssemblyResult: null, // the finished tally of the most recent motion
     players: playerNames.map(name => ({
       name,
       hand: [],
@@ -435,10 +436,20 @@ function defeatEnemy(state, playerIdx) {
   const tierChanged = nextTier !== oldTier;
   const handSizeBefore = state.handSize;
   if (tierChanged) state.handSize = handLimitFor(state, nextTier);
-  const regroupsGained = tierChanged ? state.rules.regroupOnTransition : 0;
+  // A new tier renews La Retraite. Restoring hands the opening pool back if it
+  // was spent — never taking one away, so an untouched pool stays as it is and
+  // nothing is banked by holding on. Gaining stacks on top of whatever remains;
+  // the two compose, restoring first.
+  let regroupsGained = 0;
+  if (tierChanged) {
+    if (state.rules.regroupTierReset) {
+      regroupsGained += Math.max(0, state.rules.regroups - state.regroupsRemaining);
+    }
+    regroupsGained += state.rules.regroupOnTransition;
+  }
   if (regroupsGained) {
     state.regroupsRemaining += regroupsGained;
-    log(state, `The Revolution advances — ${regroupsGained} Regroup gained. (${state.regroupsRemaining} available)`);
+    log(state, `The Revolution advances — La Retraite is renewed. (${state.regroupsRemaining} available)`);
   }
   // A royal won over by exact damage is the slayer's spoil, not a bonus on
   // top of it. Other citoyens still receive their normal share. With the
@@ -840,6 +851,14 @@ function resolveAssembly(state) {
   const caller = a.caller;
   state.assembly = null;
   state.actionSeq++;
+  // The deciding vote is cast and the motion resolves in the same action, so no
+  // view a client ever receives holds the finished tally. Record it, or the
+  // floor could never be shown how its own vote went. seq only has to identify
+  // this motion to the client — a carried one bumps actionSeq again below.
+  state.lastAssemblyResult = {
+    kind: a.kind, caller, voters: [...a.voters], votes: { ...a.votes },
+    ayes, seated, carried: ayes * 2 > seated, seq: state.actionSeq,
+  };
   if (ayes * 2 > seated) {
     log(state, `The motion carries, ${ayes}–${seated - ayes}.`);
     return a.kind === 'pamphleteer'
@@ -880,6 +899,7 @@ export function viewFor(state, playerIdx) {
         && state.assembly.voters.includes(playerIdx)
         && state.assembly.votes[playerIdx] === undefined,
     } : null,
+    lastAssemblyResult: state.lastAssemblyResult ?? null,
     players: state.players.map((p, i) => ({
       name: p.name,
       handCount: p.hand.length,

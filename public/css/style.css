@@ -329,35 +329,27 @@ input { user-select: text; -webkit-user-select: text; }
 
 .help-rule-badges { margin: 8px 0 4px; }
 
-.assembly-panel { max-width: 420px; }
-.assembly-prompt {
-  margin: 2px 0 14px; text-align: center; color: var(--ink-soft);
-  font-family: var(--serif-fell); font-size: 1.12rem; font-style: italic;
+/* The motion: one card shown large, whether it is a solo player confirming a
+   spend or a table voting on someone else's move. */
+.motion-panel { max-width: 340px; text-align: center; }
+.motion-caption {
+  margin: 2px 0 12px; color: var(--ink-soft);
+  font-family: var(--serif-fell); font-size: 1.06rem; font-style: italic;
 }
-.assembly-cards { display: flex; justify-content: center; align-items: flex-start; gap: 22px; }
-.assembly-card-choice {
-  position: relative; width: 126px; padding: 0 0 34px; border: 0; background: none;
-  color: var(--ink); cursor: pointer; border-radius: 12px;
+.motion-card {
+  width: min(148px, 42vw); margin: 0 auto 14px;
+  filter: drop-shadow(0 7px 9px rgba(30,20,8,.28));
 }
-.assembly-card-art {
-  display: block; width: 100%; filter: drop-shadow(0 7px 8px rgba(30,20,8,.25));
-  transition: transform .18s ease, filter .18s ease;
+.motion-card svg { display: block; width: 100%; height: auto; }
+.motion-line { margin: 0 0 7px; font-size: .95rem; line-height: 1.35; color: var(--ink); }
+.motion-remain {
+  margin: 0 0 15px; font-family: var(--serif-display); font-size: .76rem;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); opacity: .82;
 }
-.assembly-card-art svg { display: block; width: 100%; height: auto; }
-.assembly-card-choice:hover .assembly-card-art,
-.assembly-card-choice:focus-visible .assembly-card-art {
-  transform: translateY(-5px); filter: drop-shadow(0 10px 11px rgba(30,20,8,.34));
-}
-.assembly-card-choice:focus-visible { outline: 2px solid var(--royal); outline-offset: 5px; }
-.assembly-card-choice:disabled { cursor: not-allowed; opacity: .42; }
-.assembly-card-choice:disabled .assembly-card-art { filter: grayscale(.7); transform: none; }
-.assembly-card-count {
-  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
-  min-width: 48px; padding: 3px 11px; border: 1.5px solid var(--gold);
-  border-radius: 999px; background: var(--royal); color: var(--paper);
-  font: 700 .9rem var(--serif-display); box-shadow: 0 2px 6px rgba(30,20,8,.22);
-}
-.assembly-cancel { display: block; margin: 18px auto 0; }
+/* The same line carries the verdict once the floor has voted. */
+.motion-remain.carried { color: var(--good); opacity: 1; font-weight: 700; }
+.motion-remain.fallen { color: var(--crimson); opacity: 1; font-weight: 700; }
+.motion-panel .assembly-tally { text-align: left; }
 .assembly-tally { list-style: none; padding: 0; margin: 0; }
 .assembly-tally li {
   display: flex; justify-content: space-between; align-items: center;
@@ -789,6 +781,66 @@ input {
 .projection .warn { color: #f0a9b4; font-weight: bold; }
 .action-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 4px; }
 
+/* ── the shared specials, one chip apiece ────────────────────────────────────
+   Pooled rather than held, so they hang off the shared half of the screen
+   instead of the action bar: directly under the other citoyens at a table, and
+   under the board itself when alone. The flexible gap in .status-zone falls
+   below them, which keeps them attached to the table and clear of your hand. */
+.supply-chips {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  padding: 7px 10px 3px;
+}
+/* [hidden] must beat the display above, or an empty pool leaves a bare row. */
+.supply-chips[hidden], .supply-chip[hidden] { display: none; }
+/* Alone there is no seat rail between the chips and the board, so they hang
+   straight off its gilt edge and need roughly double the clearance to breathe. */
+#screen-game:not(.multiplayer) .supply-chips { padding-top: 20px; }
+/* The same solid plate the action buttons carry — gradient, gilt rim, inset
+   highlight and drop shadow — kept in a pill so they still read as tokens
+   drawn from a pool rather than actions. */
+.supply-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 3px 11px 3px 4px; border: 1.5px solid var(--gold); border-radius: 999px;
+  background: linear-gradient(180deg, #27397a, var(--royal) 55%, var(--royal-deep));
+  color: var(--paper);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 3px 8px rgba(16,20,40,.35);
+  font-family: var(--serif-display); font-size: .76rem; letter-spacing: .04em;
+  cursor: pointer;
+  transition: transform .06s, box-shadow .06s, opacity .2s, filter .15s;
+}
+.supply-chip:disabled { opacity: .45; cursor: default; filter: none; }
+.supply-chip:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 3px; }
+.supply-chip-art { flex: 0 0 auto; width: 22px; border-radius: 2px; overflow: hidden; }
+.supply-chip-art svg { display: block; width: 100%; height: auto; }
+/* Spent out entirely, the chip stays as a record of what the Constitution gave. */
+.supply-chip.empty .supply-chip-art { filter: grayscale(.85) brightness(.82); }
+.supply-chip-pips { display: inline-flex; gap: 3px; }
+.supply-pip {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gold-hi); border: 1px solid var(--gold);
+}
+/* A hollow ring disappeared into the solid plate, so a spent pip reads as an
+   empty socket instead: sunk darker than the plate, with a dimmed gilt rim. */
+.supply-pip.spent {
+  background: rgba(9,14,34,.55); border-color: rgba(217,188,99,.5);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,.45);
+}
+.supply-chip-over {
+  font-weight: 700; color: var(--gold-hi); font-variant-numeric: tabular-nums;
+}
+@media (hover: hover) and (pointer: fine) {
+  .supply-chip:hover:not(:disabled) { filter: brightness(1.12); }
+}
+.supply-chip:active:not(:disabled) {
+  transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+}
+/* Below this the name is the first thing to go: the art and pips carry it. */
+@media (max-width: 420px) {
+  .supply-chip-name { display: none; }
+  .supply-chip { padding: 3px 9px 3px 4px; gap: 6px; }
+}
+
 .pause-banner {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(140px + env(safe-area-inset-bottom));
@@ -831,10 +883,6 @@ input {
   box-shadow: 0 0 0 1px rgba(217,188,99,.45), 0 0 50px rgba(0,0,0,.65), 0 24px 60px rgba(0,0,0,.55);
 }
 .cutscene-video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cutscene-skip {
-  color: rgba(248,241,223,.65); font-size: .8rem; font-style: italic;
-  animation: blink 2s steps(1) infinite;
-}
 
 /* ── end screen ── */
 #screen-end { animation: fadein .5s ease; }
@@ -910,7 +958,7 @@ input {
   color: var(--paper); background: rgba(12,10,22,.42);
 }
 .entrance-facts .badge { display: inline-block; background: var(--crimson-deep); color: var(--paper); border: 1px solid rgba(217,188,99,.5); border-radius: 6px; padding: 1px 8px; font-size: .82rem; }
-.entrance-dismiss { color: rgba(248, 241, 223, .55); font-size: .8rem; font-style: italic; margin-top: 14px; animation: blink 2s steps(1) infinite; }
+/* the dismiss/skip labels are styled together further down */
 
 /* guillotine */
 .guillotine-stage { text-align: center; }
@@ -975,14 +1023,21 @@ input {
   100% { opacity: 0; transform: rotate(-9.5deg) scaleX(1.04); }
 }
 .g-caption { color: var(--paper); font-family: var(--serif-display); font-size: 1.6rem; margin-top: 16px; opacity: 0; }
-.g-caption.show { animation: fadein .4s ease forwards; }
+/* The blade speaks first: the verdict is only pronounced once the card has
+   actually been parted (the cut glints at .83s), never over a raised blade. */
+.g-caption.show { animation: fadein .4s ease .92s forwards; }
 .g-caption .sub { display: block; font-family: var(--serif-fell); font-size: .95rem; font-style: italic; color: var(--gold-hi); }
 
 /* exact kill: the royal stays whole, takes the cockade, and joins the
    slayer's hand. This is deliberately a separate visual language from the
    guillotine, which is reserved for royals removed from the game. */
 .capture-stage {
-  position: relative; width: min(100vw, 720px); height: min(500px, calc(100dvh - 16px));
+  /* The royal's resting height drives the layout: the caption hangs from it
+     rather than from the bottom of the stage, so the card can never come down
+     on top of its own announcement on a tall screen. */
+  --royal-top: 33%;
+  --royal-half: 104px;
+  position: relative; width: min(100vw, 720px); height: min(560px, calc(100dvh - 16px));
   overflow: hidden; isolation: isolate;
 }
 .capture-stage::before {
@@ -992,13 +1047,13 @@ input {
     radial-gradient(ellipse at 50% 100%, rgba(27,42,94,.42), transparent 55%);
 }
 .capture-burst {
-  position: absolute; z-index: 1; left: 50%; top: 39%;
+  position: absolute; z-index: 1; left: 50%; top: var(--royal-top);
   width: 290px; height: 290px; border: 2px solid var(--gold-hi); border-radius: 50%;
   opacity: 0; transform: translate(-50%, -50%) scale(.38);
   box-shadow: 0 0 0 8px rgba(217,188,99,.08), 0 0 34px rgba(217,188,99,.3);
 }
 .capture-royal {
-  position: absolute; z-index: 4; left: 50%; top: 39%;
+  position: absolute; z-index: 4; left: 50%; top: var(--royal-top);
   width: 148px; height: 207px; transform: translate(-50%, -50%);
   transform-origin: 50% 50%; filter: drop-shadow(0 6px 14px rgba(20,12,6,.45));
 }
@@ -1021,7 +1076,8 @@ input {
 }
 .capture-pin-glint::after { transform: translate(-50%,-50%) rotate(90deg); }
 .capture-caption {
-  position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 165px;
+  position: absolute; z-index: 3; left: 12px; right: 12px;
+  top: calc(var(--royal-top) + var(--royal-half) + 11px);
   text-align: center; opacity: 0; color: var(--paper); transform: translateY(8px);
 }
 .capture-caption strong {
@@ -1050,14 +1106,13 @@ input {
   color: var(--ink-soft); white-space: nowrap; box-shadow: 0 1px 3px rgba(60,40,10,.2);
 }
 .capture-seat-name b { font-weight: 400; }
-.capture-dismiss {
-  position: absolute; z-index: 9; left: 0; right: 0; top: 5px;
-  color: rgba(248,241,223,.55); font-size: .78rem; font-style: italic;
-  text-align: center; animation: blink 2s steps(1) infinite;
-}
-
+/* The beats run in the order the story does, each waiting on the one before it:
+   the royal is presented (0—.33s), the cockade is pinned and bursts (.61—1.23s),
+   only then is the conversion announced (1.28s), the card travels down into the
+   hand (landing at 2.62s), and only once it is there does the fan take its new
+   card and the count change (2.5s onward). */
 .capture-stage.playing .capture-royal {
-  animation: capture-card-trip 3.1s cubic-bezier(.25,.8,.25,1) both;
+  animation: capture-card-trip 2.62s cubic-bezier(.25,.8,.25,1) both;
 }
 .capture-stage.playing .capture-cockade {
   animation: capture-pin-cockade .62s cubic-bezier(.18,1.42,.4,1) .61s both;
@@ -1065,12 +1120,12 @@ input {
 .capture-stage.playing .capture-pin-glint { animation: capture-glint .34s ease-out 1.11s both; }
 .capture-stage.playing .capture-burst { animation: capture-burst .7s ease-out 1.09s both; }
 .capture-stage.playing .capture-caption {
-  animation: capture-caption-in .3s ease-out both, capture-caption-out .26s ease-in 2.46s forwards;
+  animation: capture-caption-in .3s ease-out 1.28s both, capture-caption-out .26s ease-in 2.24s forwards;
 }
-.capture-stage.playing .capture-hand { animation: capture-hand-receive .42s ease-out 2.68s both; }
-.capture-stage.playing .capture-fan-before { animation: capture-fan-out .18s ease-in 2.46s forwards; }
+.capture-stage.playing .capture-hand { animation: capture-hand-receive .42s ease-out 2.56s both; }
+.capture-stage.playing .capture-fan-before { animation: capture-fan-out .18s ease-in 2.5s forwards; }
 .capture-stage.playing .capture-fan-after {
-  animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 2.46s both;
+  animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 2.52s both;
 }
 @keyframes capture-pin-cockade {
   0% { opacity: 0; transform: translate(92px,-54px) rotate(58deg) scale(1.5); }
@@ -1079,13 +1134,13 @@ input {
 }
 @keyframes capture-card-trip {
   0% { opacity: 0; transform: translate(-50%,-50%) scale(.92); }
-  10.5% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
-  20% { transform: translate(-50%,-50%) scale(1); }
-  35% { transform: translate(-50%,-50%) scale(.96) rotate(-1.4deg); }
-  43% { transform: translate(-50%,-50%) scale(1.03) rotate(.8deg); }
-  75.5% { opacity: 1; transform: translate(-50%,-50%) scale(1.03) rotate(0); }
-  88.5% { opacity: .58; }
-  100% { opacity: 0; transform: translate(-50%,106px) scale(.31) rotate(7deg); }
+  12.5% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  24% { transform: translate(-50%,-50%) scale(1); }
+  41% { transform: translate(-50%,-50%) scale(.96) rotate(-1.4deg); }
+  51% { transform: translate(-50%,-50%) scale(1.03) rotate(.8deg); }
+  78% { opacity: 1; transform: translate(-50%,-50%) scale(1.03) rotate(0); }
+  88% { opacity: .58; }
+  100% { opacity: 0; transform: translate(-50%,140px) scale(.31) rotate(7deg); }
 }
 @keyframes capture-glint {
   0% { opacity: 0; transform: scale(.25) rotate(0); }
@@ -1113,8 +1168,11 @@ input {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (max-width: 420px) {
-  .capture-royal, .capture-burst { top: 36%; }
-  .capture-caption { bottom: 160px; }
+  /* A narrow column wraps the subtitle onto a second line, so the royal sits
+     higher and the announcement is set a little smaller to keep clear of the
+     hand fan beneath it. */
+  .capture-stage { --royal-top: 30%; }
+  .capture-caption strong { font-size: 1.35rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .capture-stage.playing .capture-royal,
@@ -1128,6 +1186,9 @@ input {
     animation-duration: .01ms;
     animation-delay: 0ms;
   }
+  /* Collapsing the caption's in-then-out pair would leave it on its final
+     frame — invisible. Reduced motion still has to read the verdict. */
+  .capture-stage.playing .capture-caption { animation: capture-caption-in .01ms both; }
 }
 
 /* tier advance and Spoils share the same before/after hand-fan grammar as an
@@ -1174,11 +1235,6 @@ input {
 }
 .hand-limit b { color: var(--crimson); font: 700 1rem var(--serif-display); }
 .hand-limit i { margin: 0 7px; color: var(--gold); font-style: normal; }
-.reward-dismiss {
-  position: absolute; z-index: 8; left: 0; right: 0; top: 5px; text-align: center;
-  color: rgba(248,241,223,.55); font-size: .78rem; font-style: italic;
-  animation: blink 2s steps(1) infinite;
-}
 .tier-stage.playing .tier-liberty { animation: tier-liberty-rise .72s cubic-bezier(.2,.9,.3,1) both; }
 .tier-stage.playing .tier-copy { animation: capture-caption-in .35s ease-out .35s both; }
 .tier-stage.playing .reward-hand { animation: capture-hand-receive .46s ease-out 1.12s both; }
@@ -1195,20 +1251,20 @@ input {
 }
 .spoils-card svg { display: block; width: 100%; height: 100%; }
 .spoils-copy { top: 58px; opacity: 0; }
-.spoils-stage.playing .spoils-card { animation: spoil-card-trip 2.5s cubic-bezier(.25,.8,.25,1) both; }
+/* Same rule as the capture: the mystery card reaches the fan (1.95s) before the
+   fan gains a card and the count moves. */
+.spoils-stage.playing .spoils-card { animation: spoil-card-trip 1.95s cubic-bezier(.25,.8,.25,1) both; }
 .spoils-stage.playing .spoils-copy { animation: capture-caption-in .32s ease-out .18s both; }
-.spoils-stage.playing .reward-hand { animation: capture-hand-receive .42s ease-out 2.02s both; }
-.spoils-stage.playing .reward-fan-before { animation: capture-fan-out .18s ease-in 1.84s forwards; }
-.spoils-stage.playing .reward-fan-after { animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 1.84s both; }
+.spoils-stage.playing .reward-hand { animation: capture-hand-receive .42s ease-out 1.9s both; }
+.spoils-stage.playing .reward-fan-before { animation: capture-fan-out .18s ease-in 1.86s forwards; }
+.spoils-stage.playing .reward-fan-after { animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 1.88s both; }
 @keyframes spoil-card-trip {
   0% { opacity: 0; transform: translate(-50%,-85%) rotate(-7deg) scale(.9); }
-  12% { opacity: 1; transform: translate(-50%,-50%) rotate(-3deg) scale(1); }
-  66% { opacity: 1; transform: translate(-50%,-50%) rotate(1deg) scale(1); }
+  15% { opacity: 1; transform: translate(-50%,-50%) rotate(-3deg) scale(1); }
+  68% { opacity: 1; transform: translate(-50%,-50%) rotate(1deg) scale(1); }
   100% { opacity: 0; transform: translate(-50%,165px) rotate(7deg) scale(.34); }
 }
 @media (max-width: 420px) {
-  .assembly-cards { gap: 13px; }
-  .assembly-card-choice { width: 108px; }
   .tier-liberty { width: min(285px, 72vw); height: 310px; }
   .tier-copy { top: 286px; }
 }
@@ -1228,16 +1284,34 @@ input {
   }
 }
 
-/* Every cinematic uses one stable affordance. Keeping it fixed to the viewport
-   prevents the label jumping between the top, flowing content, and the area
-   below a video as one animation hands off to the next. */
+/* Every cinematic uses the same affordance, and each one carries it directly
+   beneath its own stage — the label belongs to the animation it interrupts, not
+   to the bottom of the screen, where it reads as a permanent fixture of the
+   page and sits nowhere near what it is offering to cut short. */
 .entrance-dismiss,
 .capture-dismiss,
 .reward-dismiss,
-.cutscene-skip {
-  position: fixed; z-index: 20; left: 0; right: 0; top: auto;
-  bottom: max(10px, env(safe-area-inset-bottom)); margin: 0;
-  text-align: center;
+.g-dismiss,
+.cutscene-skip,
+.skip-hint {
+  color: rgba(248, 241, 223, .55); font-size: .78rem; font-style: italic;
+  text-align: center; animation: blink 2s steps(1) infinite;
+  pointer-events: none;
+}
+.entrance-dismiss { margin-top: 14px; }
+.g-dismiss { margin-top: 12px; }
+/* The capture and reward stages are fixed-height boxes: their labels ride the
+   bottom edge, under the hand fan that closes each one out. */
+.capture-dismiss, .reward-dismiss {
+  position: absolute; z-index: 9; left: 0; right: 0; bottom: 6px;
+}
+/* Cards crossing the table have no stage of their own, so the board lends them
+   the strip directly beneath it. */
+.skip-hint { position: absolute; z-index: 5; left: 0; right: 0; top: 2px; }
+.status-zone { position: relative; }
+@media (prefers-reduced-motion: reduce) {
+  .entrance-dismiss, .capture-dismiss, .reward-dismiss,
+  .g-dismiss, .cutscene-skip, .skip-hint { animation: none; }
 }
 
 /* bottom sheet */
@@ -1744,4 +1818,8 @@ body.walkthrough-open { overflow: hidden; }
   #screen-game.multiplayer .action-bar { padding-top: 2px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
   #screen-game.multiplayer .projection { min-height: 16px; font-size: .76rem; }
   #screen-game.multiplayer .btn.small { padding: 8px 13px; font-size: .8rem; }
+  /* The seat rail already spends this screen's height; the chips give some back. */
+  #screen-game.multiplayer .supply-chips { padding: 4px 8px 2px; gap: 6px; }
+  #screen-game.multiplayer .supply-chip { padding: 2px 9px 2px 3px; font-size: .7rem; }
+  #screen-game.multiplayer .supply-chip-art { width: 19px; }
 }

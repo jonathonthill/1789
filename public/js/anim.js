@@ -12,6 +12,36 @@ const SWORD_ICON = `<span class="strike-icon"><svg viewBox="0 0 24 24" focusable
   `<polygon points="12,1 13.6,5 13.6,14 10.4,14 10.4,5"/><rect x="5.5" y="13" width="13" height="2.2" rx=".6"/>` +
   `<rect x="10.8" y="15.2" width="2.4" height="5" rx=".8"/><circle cx="12" cy="21.3" r="1.8"/></svg></span>`;
 
+// ── skipping ────────────────────────────────────────────────────────────────
+// Every beat that takes time — an overlay, a card's flight — registers the one
+// function that jumps it to its end, and withdraws it again the moment it ends
+// on its own. A tap anywhere (see the document handler in main.js) runs whatever
+// is registered right then, so one tap skips one beat and the sequence carries
+// on from there. Beats that genuinely run side by side (a play and its suit
+// powers) are both registered, so a single tap settles the pair together.
+const skipHandlers = new Set();
+let skipWatcher = null;
+
+export function onSkippableChange(fn) { skipWatcher = fn; }
+export function skipArmed() { return skipHandlers.size > 0; }
+export function armSkip(fn) {
+  skipHandlers.add(fn);
+  skipWatcher?.(true);
+}
+export function disarmSkip(fn) {
+  if (skipHandlers.delete(fn)) skipWatcher?.(skipHandlers.size > 0);
+}
+export function skipNow() {
+  if (!skipHandlers.size) return false;
+  // Snapshot and clear first: a handler's own finish will start the next beat,
+  // which registers itself, and that beat must survive this tap.
+  const pending = [...skipHandlers];
+  skipHandlers.clear();
+  skipWatcher?.(false);
+  for (const fn of pending) fn();
+  return true;
+}
+
 let entranceTimer = null;
 let typeTimer = null;
 let onEntranceDone = null;
@@ -37,6 +67,7 @@ export function showEntrance(enemy, done) {
   textEl.classList.remove('done');
   $('#entrance-overlay').hidden = false;
   onEntranceDone = done;
+  armSkip(dismissEntrance);
 
   // typewriter
   clearInterval(typeTimer);
@@ -53,6 +84,7 @@ export function showEntrance(enemy, done) {
 
 export function dismissEntrance() {
   if ($('#entrance-overlay').hidden) return;
+  disarmSkip(dismissEntrance);
   clearTimeout(entranceTimer);
   clearInterval(typeTimer);
   $('#entrance-overlay').hidden = true;
@@ -81,6 +113,15 @@ export function flyCards(fromEl, toEl, count, svg, then) {
   const x0 = f.left, y0 = f.top;
   const dx = (t.left + t.width / 2) - (f.left + f.width / 2);
   const dy = (t.top + t.height / 2) - (f.top + f.height / 2);
+  const ghosts = [];
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    disarmSkip(finish);
+    for (const { ghost, anim } of ghosts) { anim.cancel(); ghost.remove(); }
+    then?.();
+  };
   for (let i = 0; i < n; i++) {
     const ghost = document.createElement('div');
     ghost.className = 'fly-card';
@@ -93,8 +134,10 @@ export function flyCards(fromEl, toEl, count, svg, then) {
       { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
       { transform: `translate(${dx}px,${dy}px) rotate(${(i % 2 ? 1 : -1) * 14}deg)`, opacity: .9 },
     ], { duration: 480, delay: i * 90, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' });
-    anim.onfinish = () => { ghost.remove(); if (i === n - 1) then?.(); };
+    ghosts.push({ ghost, anim });
+    anim.onfinish = () => { ghost.remove(); if (i === n - 1) finish(); };
   }
+  armSkip(finish);
 }
 
 // A played combo's journey: rise from the hand (or, for players who never
@@ -159,10 +202,32 @@ export function animatePlayedCards({ cards, origin, destinationEl, onArrived, on
     }
   });
 
-  const arriveDelay = (origin ? RISE_MS : FADE_MS) + (n - 1) * STAGGER + 40;
-  setTimeout(() => {
+  // One exit for every path — the timers running out, or a tap cutting the trip
+  // short. Skipping still passes through `onArrived` first, so the caller's
+  // beats (the bars reacting, then the pile filling) land in the same order
+  // they would have at full length.
+  let arrived = false, settled = false;
+  let arriveTimer = 0, holdTimer = 0, landTimer = 0;
+  const arrive = () => {
+    if (arrived) return;
+    arrived = true;
     onArrived?.();
-    setTimeout(() => {
+  };
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    disarmSkip(finish);
+    clearTimeout(arriveTimer); clearTimeout(holdTimer); clearTimeout(landTimer);
+    arrive();
+    ghosts.forEach(g => g.remove());
+    onDone?.();
+  };
+  armSkip(finish);
+
+  const arriveDelay = (origin ? RISE_MS : FADE_MS) + (n - 1) * STAGGER + 40;
+  arriveTimer = setTimeout(() => {
+    arrive();
+    holdTimer = setTimeout(() => {
       const t = destinationEl.getBoundingClientRect();
       const tx = t.left + t.width / 2 - halfW, ty = t.top + t.height / 2 - halfH;
       ghosts.forEach((ghost, i) => {
@@ -174,10 +239,7 @@ export function animatePlayedCards({ cards, origin, destinationEl, onArrived, on
         ghost.style.opacity = '.85';
         ghost.style.transform = `rotate(${(i % 2 ? 1 : -1) * 14}deg)`;
       });
-      setTimeout(() => {
-        ghosts.forEach(g => g.remove());
-        onDone?.();
-      }, FLY_MS + (n - 1) * FLY_STAGGER + 40);
+      landTimer = setTimeout(finish, FLY_MS + (n - 1) * FLY_STAGGER + 40);
     }, HOLD_MS);
   }, arriveDelay);
 }
@@ -237,29 +299,57 @@ export function severFall(container, { speed = 1, done } = {}) {
   severRaf = requestAnimationFrame(step);
 }
 
+let guillotineFallTimer = null;
+let guillotineDoneTimer = null;
+let onGuillotineDone = null;
+
+// Timeout and tap share one exit, exactly as the capture judgment does, so a
+// skipped execution can never run its continuation twice.
+function finishGuillotine() {
+  const overlay = $('#guillotine-overlay');
+  if (!overlay || overlay.hidden) return;
+  disarmSkip(finishGuillotine);
+  clearTimeout(guillotineFallTimer);
+  clearTimeout(guillotineDoneTimer);
+  cancelAnimationFrame(severRaf);
+  overlay.hidden = true;
+  const cb = onGuillotineDone;
+  onGuillotineDone = null;
+  cb?.();
+}
+
 function showGuillotine(enemyCard, done) {
   const meta = enemyMeta(enemyCard);
+  // Same compatibility guard as the capture overlay: a client paired with an
+  // older entry document still gets the skip affordance.
+  const stage = $('#guillotine-overlay .guillotine-stage');
+  if (stage && !$('#guillotine-overlay .g-dismiss')) {
+    stage.insertAdjacentHTML('beforeend', '<div class="g-dismiss">tap to skip</div>');
+  }
   $('#g-victim').innerHTML = victimSVG(enemyCard);
   const victim = $('#g-victim');
   const blade = $('#g-blade');
   const caption = $('#g-caption');
   cancelAnimationFrame(severRaf);
+  clearTimeout(guillotineFallTimer);
+  clearTimeout(guillotineDoneTimer);
   victim.classList.remove('severed');
   blade.classList.remove('drop');
   caption.classList.remove('show');
   for (const t of victim.querySelectorAll('.vh-tumble')) t.style.transform = '';
   caption.innerHTML = `${EXCLAIM.guillotine}<span class="sub">${meta.name} is no more</span>`;
+  onGuillotineDone = done;
   $('#guillotine-overlay').hidden = false;
   // force reflow so the animation classes retrigger
   void blade.offsetWidth;
   blade.classList.add('drop');
   victim.classList.add('severed');
+  // The verdict is announced by the blade, not before it: the caption's own
+  // delay holds it back until the card has been parted (see .g-caption.show).
   caption.classList.add('show');
-  setTimeout(() => severFall(victim), 870);
-  setTimeout(() => {
-    $('#guillotine-overlay').hidden = true;
-    done?.();
-  }, ROYAL_DEFEAT_MS);
+  armSkip(finishGuillotine);
+  guillotineFallTimer = setTimeout(() => severFall(victim), 870);
+  guillotineDoneTimer = setTimeout(finishGuillotine, ROYAL_DEFEAT_MS);
 }
 
 // Build the same compact facedown fan used by multiplayer seats, widened for
@@ -289,9 +379,9 @@ let onCaptureDone = null;
 function finishCapture() {
   const overlay = $('#capture-overlay');
   if (!overlay || overlay.hidden) return;
+  disarmSkip(finishCapture);
   clearTimeout(captureCountTimer);
   clearTimeout(captureDoneTimer);
-  overlay.removeEventListener('click', finishCapture);
   $('#capture-stage').classList.remove('playing');
   overlay.hidden = true;
   const cb = onCaptureDone;
@@ -330,7 +420,7 @@ function ensureCaptureOverlay() {
           <div id="capture-fan-after" class="capture-fan capture-fan-after"></div>
           <span class="capture-seat-name"><span id="capture-player-name"></span> · <b id="capture-hand-count"></b></span>
         </div>
-        <div class="capture-dismiss">tap to continue</div>
+        <div class="capture-dismiss">tap to skip</div>
       </div>
     </div>`);
 }
@@ -347,7 +437,6 @@ function showCapture(enemyCard, recipient, done) {
   clearTimeout(captureCountTimer);
   clearTimeout(captureDoneTimer);
   const overlay = $('#capture-overlay');
-  overlay.removeEventListener('click', finishCapture);
   onCaptureDone = done;
   stage.classList.remove('playing');
   $('#capture-card').innerHTML = cardSVG(enemyCard);
@@ -357,14 +446,17 @@ function showCapture(enemyCard, recipient, done) {
   $('#capture-fan-before').innerHTML = captureFan(beforeCount);
   $('#capture-fan-after').innerHTML = captureFan(afterCount);
   overlay.hidden = false;
-  overlay.addEventListener('click', finishCapture);
+  armSkip(finishCapture);
 
   // Retrigger every CSS timeline even when two exact kills happen in a row.
   void stage.offsetWidth;
   stage.classList.add('playing');
+  // The count follows the card: it changes once the royal has actually
+  // travelled down into the fan (capture-card-trip lands at 2.62s), never
+  // while the card is still held up in the middle of the stage.
   captureCountTimer = setTimeout(() => {
     $('#capture-hand-count').textContent = afterCount;
-  }, 2660);
+  }, 2600);
   captureDoneTimer = setTimeout(finishCapture, ROYAL_DEFEAT_MS);
 }
 

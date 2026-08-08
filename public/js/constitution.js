@@ -176,8 +176,11 @@ export function gameRulesSummary(rules, playerCount) {
   const resolved = resolveRules(rules, n);
   const book = rulebookFor(n);
   const limits = ['J', 'Q', 'K'].map(rank => book.handSizes[rank] + resolved.handSizeDelta);
+  const regroupReset = resolved.regroupTierReset
+    ? `; spent or not, you hold ${resolved.regroups} again at Queens and Kings, so there is nothing to gain by saving ${resolved.regroups === 1 ? 'it' : 'them'}`
+    : '';
   const regroup = n === 1
-    ? `${resolved.regroups} initially; gain ${resolved.regroupOnTransition} at Queens and Kings — unused La Retraite cards carry forward`
+    ? `${resolved.regroups} La Retraite card${resolved.regroups === 1 ? '' : 's'} — shuffle your hand into Le Peuple and redeal to the current limit${regroupReset}`
     : `${resolved.regroups} La Retraite card${resolved.regroups === 1 ? '' : 's'} — shuffle every hand into Le Peuple, then redeal to the current limit or until it runs out`;
   const royalPower = {
     easy: 'Easy — Officers / Queens / Kings strike 8 / 13 / 18',
@@ -192,10 +195,12 @@ export function gameRulesSummary(rules, playerCount) {
       ? `${resolved.drawOnVictory} per citoyen after each royal`
       : 'None after individual royals'],
     ['Tier transition', n === 1
-      ? 'Hand limit rises and you gain 1 La Retraite at Queens and Kings'
+      ? `Hand limit rises${resolved.regroupTierReset ? ' and La Retraite is renewed' : ''} at Queens and Kings`
       : 'Each citoyen draws 1 tier Spoil at Queens and Kings'],
     ['Lay Low', n === 1 ? 'Not available alone' : 'Once per citoyen per tier'],
-    ['Pamphleteers', `${resolved.pamphleteers} shared — majority vote, zero damage, turn continues`],
+    ['Pamphleteers', n === 1
+      ? `${resolved.pamphleteers} for the whole Revolution — zero damage, turn continues`
+      : `${resolved.pamphleteers} shared — majority vote, zero damage, turn continues`],
     ['La Retraite', regroup],
   ];
 }

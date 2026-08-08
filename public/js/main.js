@@ -3,7 +3,10 @@
 import * as engine from '/shared/engine.js';
 import { enemyMeta, SUIT_META, EXCLAIM } from '/shared/theme.js';
 import { cardSVG, cardBackSVG } from '/js/cards.js';
-import { showEntrance, dismissEntrance, showRoyalDefeat, riffleDeck, flyCards, animatePlayedCards } from '/js/anim.js';
+import {
+  showEntrance, showRoyalDefeat, riffleDeck, flyCards, animatePlayedCards,
+  armSkip, disarmSkip, skipNow, skipArmed, onSkippableChange,
+} from '/js/anim.js';
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
 import { SETTINGS, loadRules, saveRules, settingHelp, summarize, rulebookRuns } from '/js/constitution.js';
@@ -39,10 +42,25 @@ let animBusy = false;
 let pendingView = null;
 let lastHandCount = 0;       // "your" hand size as of the last processed view
 let lobbyCount = 2;          // citoyens in the salon, floored at 2 for rule display
-let assemblyChooserOpen = false;
+// The special a solo player has opened the confirmation for, or null.
+let motionPending = null;
+// Which card the motion screen is currently painted with, so a re-render that
+// changes nothing else doesn't repaint the art.
+let motionCardKind = null;
 let soloGameId = null;
 let soloStartedAt = null;
 let soloOutcomeQueued = false;
+// While a royal's defeat plays out, the server view already describes the NEXT
+// royal — it was revealed in the same action. The table must not: the card, its
+// emptied bars, the Régime count, the suit its immunity is crossing out in the
+// hand, and the cards still sitting In Play all belong to the royal being
+// judged. Every render consults this hold, so even a re-render triggered from
+// somewhere else (a hand tap) stays on the fallen royal, and the swap to the
+// newcomer happens in one stroke underneath its own entrance overlay.
+let boardHold = null;   // { enemy, castleCount, playedCards, prison: { count, top } }
+// The royal the board is actually showing, so a defeat can keep its real
+// health/strike maxima and immunity state rather than recomputing them.
+let shownEnemy = null;
 
 function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function save(k, v) { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }
@@ -647,29 +665,19 @@ function routeView(v) {
   // get held back from the hand until the fly-in ghosts actually deliver them.
   const prevHandCount = lastHandCount;
   lastHandCount = v.you?.hand.length ?? lastHandCount;
+  boardHold = null; // a fresh view is never mid-judgment
   if (v.phase === 'won' || v.phase === 'lost') {
     if (!endHandled) {
       endHandled = true;
       staged = [];
       if (v.phase === 'won' && v.lastEvent?.type === 'victory') {
-        // The board is left showing the about-to-fall royal (no renderGame
-        // yet) so the killing combo can make the same hand-to-enemy trip a
-        // survived hit gets, before a killing Heart/Diamond resolves and the
-        // victory cutscene plays.
-        withAnim(done => animateKillingBlow(v, prevHandCount, () => {
-          renderGame(v);
-          const arrivals = defeatArrivals(v, prevHandCount, v.lastEvent);
-          renderSeats(v, defeatSeatHolds(v, v.lastEvent, true));
-          animateEffects(v, prevHandCount, () => {
-            animatePlayedToPrison(v.lastEvent, () => {
-              audio.sfx(v.lastEvent.exact ? 'draw' : 'guillotine');
-              showRoyalDefeat(v.lastEvent.card, v.lastEvent.exact, captureRecipient(v, v.lastEvent), () => {
-                renderHand(v);
-                renderSeats(v);
-                done();
-              });
-            });
-          }, { holdAfter: arrivals.captured });
+        // The board is left showing the about-to-fall royal so the killing
+        // combo can make the same hand-to-enemy trip a survived hit gets,
+        // before a killing Heart/Diamond resolves and the victory cutscene
+        // plays.
+        withAnim(done => animateRoyalDefeat(v, v.lastEvent, prevHandCount, () => {
+          boardHold = null;
+          done();
         }), () => playCutscene('victory', () => renderEnd(v)));
       } else if (v.phase === 'lost' && v.lastSacrifice) {
         // The sacrifice itself succeeded, but it immediately doomed the next
@@ -708,32 +716,13 @@ function routeView(v) {
       staged = [];
       const ev = v.lastEvent;
       if (ev?.type === 'defeatAndReveal' && ev.seq === seq) {
-        // Board stays on the about-to-fall royal until the killing combo has
-        // made its trip; only then does the new enemy actually swap in,
-        // right before the royal's judgment covers the screen anyway.
-        withAnim(done => animateKillingBlow(v, prevHandCount, () => {
-          renderGame(v);
-          const arrivals = defeatArrivals(v, prevHandCount, ev);
-          renderSeats(v, defeatSeatHolds(v, ev, true));
-          animateEffects(v, prevHandCount, () => {
-            animatePlayedToPrison(ev, () => {
-              audio.sfx(ev.exact ? 'draw' : 'guillotine');
-              showRoyalDefeat(ev.card, ev.exact, captureRecipient(v, ev), () => {
-                // Exact-kill recruits arrive with the royal's judgment. Spoils
-                // and tier rewards remain held back until their own beats.
-                renderHand(v, arrivals.rewards);
-                renderSeats(v, defeatSeatHolds(v, ev, false));
-                animateTierAdvance(v, ev, () => {
-                  renderHand(v, arrivals.spoils);
-                  renderSeats(v, ev.spoilsByPlayer);
-                  animateSpoils(v, ev, () => {
-                    audio.sfx('enemy');
-                    showEntrance(v.enemy, done);
-                  });
-                });
-              });
-            });
-          }, { holdAfter: arrivals.captured + arrivals.rewards });
+        // The table stays on the fallen royal for its whole judgment — the
+        // newcomer only takes the board once its own entrance is covering it.
+        withAnim(done => animateRoyalDefeat(v, ev, prevHandCount, () => {
+          boardHold = null;
+          renderGame(v);      // the newcomer takes the table…
+          audio.sfx('enemy');
+          showEntrance(v.enemy, done); // …under the overlay that introduces it
         }));
         return;
       } else {
@@ -750,6 +739,21 @@ function routeView(v) {
     const firstPlayView = lastPlayActionSeq === -1;
     const isNewAction = v.actionSeq !== lastPlayActionSeq && !(firstPlayView && v.actionSeq > 1);
     lastPlayActionSeq = v.actionSeq;
+
+    // A vote that just finished gets its tally held on screen first; a reload
+    // straight into a decided game must not replay one, hence the first-view
+    // guard that mirrors firstPlayView above.
+    const res = v.lastAssemblyResult;
+    const firstVoteView = lastVoteSeq === -1;
+    const freshVote = !!res && !firstVoteView && res.seq !== lastVoteSeq;
+    if (firstVoteView || res) lastVoteSeq = res?.seq ?? 0;
+
+    const dispatch = () => dispatchAction(v, isNewAction, prevHandCount);
+    if (freshVote) withAnim(done => holdVoteResult(v, res, done), dispatch);
+    else dispatch();
+  };
+
+  const dispatchAction = (v, isNewAction, prevHandCount) => {
     if (isNewAction && v.lastPlay) {
       // Any Rally/Raid on this same play runs alongside the play animation,
       // not after it — otherwise La Prison/Le Peuple would sit at their
@@ -772,6 +776,7 @@ function routeView(v) {
   };
 
   if (freshGame) {
+    lastVoteSeq = -1; // a rematch must not inherit the last game's motion
     audio.setScene('game'); // let the music carry straight through the cutscene
     // Let the opening flourish establish the scene, then move straight to the
     // board. The exact table rules remain available at the bottom of contextual
@@ -786,21 +791,92 @@ function routeView(v) {
   }
 }
 
+// A defeated royal's whole sequence, shared by a mid-game defeat and the last
+// King's fall. Every beat waits for the one before it, and the board holds on
+// the fallen royal throughout, so nothing about what comes next — the next
+// card, its immunity, the Régime count — can appear before the caller's own
+// `after` step puts it there.
+//
+//   killing combo → In Play · suit powers · In Play → La Prison ·
+//   the judgment (guillotine or capture) · the new tier · the Spoils
+//
+function animateRoyalDefeat(v, ev, prevHandCount, after) {
+  const arrivals = defeatArrivals(v, prevHandCount, ev);
+  boardHold = holdFallenRoyal(v, ev);
+  animateKillingBlow(v, prevHandCount, () => {
+    // The combo has settled into In Play and the royal's bars are spent. Safe
+    // to render now: everything the resolved view knows about the newcomer is
+    // still masked by the hold.
+    renderGame(v);
+    renderSeats(v, defeatSeatHolds(v, ev, true));
+    animateEffects(v, prevHandCount, () => {
+      animatePlayedToPrison(v, ev, () => {
+        audio.sfx(ev.exact ? 'draw' : 'guillotine');
+        showRoyalDefeat(ev.card, ev.exact, captureRecipient(v, ev), () => {
+          // Judgment over: the royal has left the table, either to the basket
+          // or to its captor's hand — so the captured card is released here,
+          // while Spoils and tier rewards wait for their own beats.
+          renderHand(v, arrivals.rewards);
+          renderSeats(v, defeatSeatHolds(v, ev, false));
+          animateTierAdvance(v, ev, () => {
+            renderHand(v, arrivals.spoils);
+            renderSeats(v, ev.spoilsByPlayer);
+            animateSpoils(v, ev, after);
+          });
+        });
+      });
+    }, { holdAfter: arrivals.captured + arrivals.rewards });
+  });
+}
+
+// The royal that just fell, in the shape renderEnemyStats reads. Its maxima and
+// immunity come from the enemy the board is already showing; the killing blow
+// then drives `damage` and `effectiveAttack` down as the cards land.
+function holdFallenRoyal(v, ev) {
+  const prior = shownEnemy?.card && engine.sameCard(shownEnemy.card, ev.card) ? shownEnemy : null;
+  const stats = engine.ENEMY_STATS[ev.card.r];
+  const health = prior?.health ?? stats.health + (v.rules?.royalHealthBonus ?? 0);
+  const attack = prior?.attack ?? Math.max(0, stats.attack + (v.rules?.royalStrikeBonus ?? 0));
+  const played = ev.playedCards ?? [];
+  const prisonCount = Math.max(0, v.discardCount - played.length);
+  return {
+    enemy: {
+      card: ev.card, health, attack,
+      damage: 0, effectiveAttack: attack,
+      immunityCancelled: prior?.immunityCancelled ?? false,
+    },
+    // A newcomer was dealt off the Régime deck in this same action; until it is
+    // introduced, that deck still owes the table one card.
+    castleCount: v.castleCount + (v.enemy ? 1 : 0),
+    playedCards: played,
+    prison: { count: prisonCount, top: v.discardPile?.[prisonCount - 1] ?? null },
+  };
+}
+
 // Suit-power side effects become table motion: a diamond raid returns the
 // Prisoners under Le Peuple, then a heart rally recruits cards into hands.
 let lastActionSeq = -1;
-function animatePlayedToPrison(event, done) {
+function animatePlayedToPrison(v, event, done) {
   const cards = event?.playedCards ?? [];
   if (!cards.length) { done?.(); return; }
   audio.sfx('shuffle');
-  // The resolved state has already cleared In Play, but its stack remains the
-  // visual origin while the face-up committed cards fly into La Prison.
+  // The committed cards are still sitting In Play (the hold kept them there),
+  // so the stack they leave from is the stack the player has been looking at.
   flyCards(
     $('#stack-played'),
     $('#stack-discard'),
     cards.length,
     cards.slice(-5).map(card => cardSVG(card)),
-    () => { riffleDeck($('#stack-discard')); done?.(); }
+    () => {
+      // Both piles change hands here, as the cards actually land — not back
+      // when the server resolved the play.
+      if (boardHold) { boardHold.playedCards = null; boardHold.prison = null; }
+      renderPlayedCards([]);
+      renderDeck($('#stack-discard'), v.discardCount, v.discardTop);
+      $('#count-discard').textContent = v.discardCount;
+      riffleDeck($('#stack-discard'));
+      done?.();
+    }
   );
 }
 
@@ -935,8 +1011,8 @@ function animateSharedSpecial(v, done) {
   const card = ev.type === 'pamphleteer' ? { r: 'X' } : { r: 'R' };
   const royal = $('#enemy-zone');
   const rect = royal?.getBoundingClientRect();
-  $('#assembly').hidden = true;
-  assemblyChooserOpen = false;
+  $('#motion').hidden = true;
+  motionPending = null;
   if (!rect) { renderGame(v); done?.(); return; }
 
   const ghost = document.createElement('div');
@@ -950,9 +1026,12 @@ function animateSharedSpecial(v, done) {
   ghost.classList.add('playing');
 
   let finished = false;
+  let specialTimer = 0;
   const finish = () => {
     if (finished) return;
     finished = true;
+    disarmSkip(finish);
+    clearTimeout(specialTimer);
     ghost.remove();
     renderGame(v);
     if (ev.type === 'regroup') {
@@ -964,7 +1043,8 @@ function animateSharedSpecial(v, done) {
     done?.();
   };
   ghost.addEventListener('animationend', finish, { once: true });
-  setTimeout(finish, 1900);
+  armSkip(finish);
+  specialTimer = setTimeout(finish, 1900);
 }
 
 function rewardFan(count) {
@@ -984,13 +1064,15 @@ function rewardFan(count) {
 
 const rewardTimers = new Map();
 const rewardCallbacks = new Map();
+const rewardSkips = new Map();
 
 function finishReward(id) {
   const overlay = $(`#${id}-overlay`);
   if (!overlay || overlay.hidden) return;
   clearTimeout(rewardTimers.get(id));
   rewardTimers.delete(id);
-  overlay.onclick = null;
+  disarmSkip(rewardSkips.get(id));
+  rewardSkips.delete(id);
   $(`#${id}-stage`)?.classList.remove('playing');
   overlay.hidden = true;
   const cb = rewardCallbacks.get(id);
@@ -1005,9 +1087,12 @@ function playReward(id, duration, done) {
   rewardCallbacks.set(id, done);
   stage.classList.remove('playing');
   overlay.hidden = false;
-  // onclick is used instead of a newly bound closure so repeat rewards cannot
-  // accumulate stale skip handlers.
-  overlay.onclick = () => finishReward(id);
+  // One skip handler per reward, replaced rather than stacked, so repeat
+  // rewards cannot accumulate stale continuations.
+  disarmSkip(rewardSkips.get(id));
+  const skip = () => finishReward(id);
+  rewardSkips.set(id, skip);
+  armSkip(skip);
   void stage.offsetWidth;
   stage.classList.add('playing');
   rewardTimers.set(id, setTimeout(() => finishReward(id), duration));
@@ -1035,9 +1120,10 @@ function showSpoilsReward(playerName, beforeCount, afterCount, drawn, done) {
   $('#spoils-fan-before').innerHTML = rewardFan(beforeCount);
   $('#spoils-fan-after').innerHTML = rewardFan(afterCount);
   $('.spoils-card').innerHTML = cardBackSVG();
+  // The count waits for the card: spoil-card-trip reaches the fan at 1.95s.
   setTimeout(() => {
     if (!$('#spoils-overlay').hidden) $('#spoils-hand-count').textContent = afterCount;
-  }, 1960);
+  }, 1980);
   playReward('spoils', 2850, done);
 }
 
@@ -1045,6 +1131,10 @@ function showSpoilsReward(playerName, beforeCount, afterCount, drawn, done) {
 // in (everyone else) under the enemy, hold there while the health/strike
 // bars react, then continue on into the In Play pile.
 let lastPlayActionSeq = -1;
+// The motion whose tally has already been held. -1 means no view has been seen
+// yet, so a reload into a decided game adopts the result instead of replaying
+// its hold. Solo never sets it — there is no floor to vote.
+let lastVoteSeq = -1;
 // The combo's shared rise-from point: centered on the group of played cards,
 // but sized to a single card — a bounding box spanning all of them would be
 // far wider than any one card once more than one is played.
@@ -1110,21 +1200,6 @@ function captureRecipient(v, ev) {
   };
 }
 
-function setEnemyBarsForCard(card, hp, atk) {
-  const stats = engine.ENEMY_STATS[card.r];
-  const maxAttack = Math.max(0, stats.attack + (view?.rules?.royalStrikeBonus ?? 0));
-  const maxHealth = stats.health + (view?.rules?.royalHealthBonus ?? 0);
-  const hpRatio = hp / maxHealth;
-  const hpWrap = $('.hp-wrap');
-  $('#hp-bar').style.width = `${hpRatio * 100}%`;
-  $('#hp-text').textContent = `${hp} / ${maxHealth}`;
-  hpWrap.classList.toggle('low', hpRatio <= .5);
-  hpWrap.classList.toggle('critical', hpRatio <= .25);
-  const atkRatio = maxAttack > 0 ? atk / maxAttack : 0;
-  $('#strike-bar').style.width = `${atkRatio * 100}%`;
-  $('#strike-text').textContent = `${atk} / ${maxAttack}`;
-}
-
 function animateKillingBlow(v, prevHandCount, done) {
   const lp = v.lastPlay;
   const ev = v.lastEvent;
@@ -1142,15 +1217,24 @@ function animateKillingBlow(v, prevHandCount, done) {
   const arrivals = v.you ? Math.max(0, v.you.hand.length - (prevHandCount - removed)) : 0;
   renderHand(v, arrivals);
 
-  setEnemyBarsForCard(ev.card, lp.healthBefore, lp.attackBefore);
+  // The held royal owns the bars for the whole trip, so the drain reads as the
+  // cards landing on it rather than as the board jumping to a resolved state.
+  const showBars = (health, attack) => {
+    const held = boardHold?.enemy;
+    if (!held) return;
+    held.damage = Math.max(0, held.health - health);
+    held.effectiveAttack = attack;
+    renderEnemyStats(held);
+  };
+  showBars(lp.healthBefore, lp.attackBefore);
 
   animatePlayedCards({
     cards: lp.cards,
     origin,
     destinationEl: $('#stack-played'),
-    onArrived: () => setEnemyBarsForCard(ev.card, lp.healthAfter, lp.attackAfter),
+    onArrived: () => showBars(lp.healthAfter, lp.attackAfter),
     onDone: () => {
-      renderDeck($('#stack-played'), ev.playedCards.length, ev.playedCards.at(-1));
+      renderPlayedCards(ev.playedCards); // the combo has joined In Play
       done();
     },
   });
@@ -1192,7 +1276,56 @@ function withAnim(run, after) {
   });
 }
 
-$('#entrance-overlay').addEventListener('click', dismissEntrance);
+// ── tap to skip ─────────────────────────────────────────────────────────────
+// Every cinematic — an overlay, a cutscene, cards in flight — registers the way
+// to jump itself to its end (see anim.js). One tap anywhere runs whatever is
+// registered at that moment, so the sequence keeps its order and simply arrives
+// sooner. The tap is caught before anything else can act on it: mid-animation a
+// tap means "get on with it", never "stage that card" or "open that pile".
+const SKIP_EXEMPT = '.topbar, #sound-menu, .modal, .sheet, #help-panel, #walkthrough, #update-banner';
+document.addEventListener('pointerdown', e => {
+  if (!skipArmed()) return;
+  if (e.target.closest?.(SKIP_EXEMPT)) return;
+  e.stopPropagation();      // not stopImmediate: the audio unlock still needs this gesture
+  e.preventDefault();
+  swallowTapAfterSkip();
+  skipNow();
+}, { capture: true });
+
+// The pointerdown is only half the gesture. Once an overlay has been skipped it
+// is already hidden, so the pointerup/click that follows would otherwise land on
+// whatever the tap uncovered — a hand card, a deck.
+function swallowTapAfterSkip() {
+  const stop = e => { e.stopPropagation(); e.preventDefault(); };
+  const opts = { capture: true, once: true };
+  document.addEventListener('pointerup', stop, opts);
+  document.addEventListener('click', stop, opts);
+  // A tap that never completes (the pointer left the window) must not leave a
+  // handler behind to swallow some later, entirely legitimate click.
+  setTimeout(() => {
+    document.removeEventListener('pointerup', stop, true);
+    document.removeEventListener('click', stop, true);
+  }, 800);
+}
+
+// While a beat is skippable but carries no label of its own — cards crossing the
+// table rather than a full-screen cinematic — the board offers one, just beneath
+// the animation. A short delay keeps it from flashing on every quick beat.
+let boardHintTimer = null;
+onSkippableChange(armed => {
+  const hint = $('#skip-hint');
+  if (!hint) return;
+  clearTimeout(boardHintTimer);
+  if (!armed) { hint.hidden = true; return; }
+  boardHintTimer = setTimeout(() => {
+    hint.hidden = !skipArmed() || cinematicOpen();
+  }, 500);
+});
+
+// A cinematic carries its own "tap to skip" inside the overlay.
+function cinematicOpen() {
+  return !!$('.overlay:not([hidden])') || !$('#screen-begin').hidden || !$('#screen-victory').hidden;
+}
 
 // ── game rendering ──────────────────────────────────────────────────────────
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -1201,6 +1334,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 // pre-hit values and release them once the flying cards actually arrive,
 // rather than the bars/pile jumping to the new state before the cards do.
 function renderEnemyStats(e, hpOverride, atkOverride) {
+  shownEnemy = e;
   const meta = enemyMeta(e.card), sm = SUIT_META[e.card.s];
   $('#enemy-card').innerHTML = cardSVG(e.card);
   const hp = hpOverride ?? Math.max(0, e.health - e.damage);
@@ -1232,7 +1366,10 @@ function renderEnemyStats(e, hpOverride, atkOverride) {
 }
 
 function renderPlayedPile(combos) {
-  const playedCards = combos.flatMap(combo => combo.cards);
+  renderPlayedCards(combos.flatMap(combo => combo.cards));
+}
+
+function renderPlayedCards(playedCards) {
   const playedTop = playedCards[playedCards.length - 1] ?? null;
   renderDeck($('#stack-played'), playedCards.length, playedTop);
   $('#count-played').textContent = playedCards.length;
@@ -1249,17 +1386,22 @@ function renderGame(v) {
   gameScreen.classList.toggle('multiplayer', mode === 'mp');
   $('#topbar-room').textContent = mode === 'mp' ? `salon ${v.roomCode}` : 'solo';
 
-  // enemy
-  if (v.enemy) renderEnemyStats(v.enemy);
+  // enemy — the fallen royal while its judgment plays out, otherwise the
+  // royal the server says is facing the table
+  const enemy = boardHold?.enemy ?? v.enemy;
+  if (enemy) renderEnemyStats(enemy);
 
   // decks
-  renderDeck($('#stack-castle'), v.castleCount, null);
+  const castleCount = boardHold?.castleCount ?? v.castleCount;
+  const prisonCount = boardHold?.prison?.count ?? v.discardCount;
+  const prisonTop = boardHold?.prison ? boardHold.prison.top : v.discardTop;
+  renderDeck($('#stack-castle'), castleCount, null);
   renderDeck($('#stack-tavern'), v.tavernCount, null);
-  renderDeck($('#stack-discard'), v.discardCount, v.discardTop);
-  renderPlayedPile(v.playedCombos);
-  $('#count-castle').textContent = v.castleCount;
+  renderDeck($('#stack-discard'), prisonCount, prisonTop);
+  renderPlayedCards(boardHold?.playedCards ?? v.playedCombos.flatMap(combo => combo.cards));
+  $('#count-castle').textContent = castleCount;
   $('#count-tavern').textContent = v.tavernCount;
-  $('#count-discard').textContent = v.discardCount;
+  $('#count-discard').textContent = prisonCount;
 
   renderSeats(v);
 
@@ -1369,7 +1511,10 @@ function renderHand(v, holdBack = 0) {
   const canStage = myTurn && (v.phase === 'play' || v.phase === 'discard');
   // The enemy is immune to its own suit's power (until the Pamphleteer cancels
   // it), so a matching-suit card still deals damage but its power won't fire.
-  const immuneSuit = (v.enemy && !v.enemy.immunityCancelled) ? v.enemy.card.s : null;
+  // While a royal is being judged this still reads from the royal on the table:
+  // no suit may be crossed out for a newcomer nobody has been introduced to.
+  const enemy = boardHold?.enemy ?? v.enemy;
+  const immuneSuit = (enemy && !enemy.immunityCancelled) ? enemy.card.s : null;
 
   zone.innerHTML = hand.length ? '' : '<div class="hand-empty">Empty-handed — but not out of the fight.</div>';
   hand.forEach((card, i) => {
@@ -1457,9 +1602,7 @@ function layoutDecks(deckWidth) {
 window.addEventListener('resize', () => layoutHand());
 
 function renderActions(v) {
-  const confirm = $('#btn-confirm'), yield_ = $('#btn-yield'), regroup = $('#btn-regroup');
-  const pamphleteer = $('#btn-pamphleteer');
-  const assemblyButton = $('#btn-assembly');
+  const confirm = $('#btn-confirm'), yield_ = $('#btn-yield');
   const you = v.you, myTurn = you && v.current === you.index;
   const ps = pseudoState(v);
 
@@ -1483,90 +1626,189 @@ function renderActions(v) {
     yield_.hidden = true;
   }
 
-  // Alone you simply spend a Regroup; at a table you must move for one and let
-  // l'Assemblée decide.
-  const left = v.regroupsRemaining ?? 0;
-  regroup.hidden = !v.solo || !v.canRegroup || !myTurn;
-  regroup.textContent = `La Retraite (${left})`;
-  regroup.title = 'Discard the affected hand, return it to Le Peuple, and draw according to this table’s rules';
-
-  const pamphleteers = v.pamphleteersRemaining ?? 0;
-  pamphleteer.hidden = !v.solo || !v.canUsePamphleteer || !myTurn;
-  pamphleteer.textContent = `Pamphleteer (${pamphleteers})`;
-  pamphleteer.title = v.solo
-    ? 'Break this royal’s immunity without spending your turn'
-    : 'Move to unleash a shared Pamphleteer — the table votes, and your turn continues if it carries';
-
-  assemblyButton.hidden = !!v.solo || !myTurn || (!v.canRegroup && !v.canUsePamphleteer);
-  assemblyButton.textContent = "l'Assemblée";
-  assemblyButton.title = 'Move to use a shared Pamphleteer or La Retraite card';
-
   $('#projection').innerHTML = help.projectionText(v, staged, ps) || '';
-  renderAssembly(v);
+  renderSupply(v);
+  renderMotion(v);
 }
 
-// ── l'Assemblée ─────────────────────────────────────────────────────────────
-function renderAssembly(v) {
-  const a = v.assembly;
-  if (a) assemblyChooserOpen = false;
-  const choosing = assemblyChooserOpen && !a;
-  $('#assembly').hidden = !a && !choosing;
-  $('#assembly-chooser').hidden = !choosing;
-  $('#assembly-motion').hidden = !a;
-  $('#assembly-tally').hidden = !a;
-  if (choosing) {
-    const pLeft = v.pamphleteersRemaining ?? 0;
-    const rLeft = v.regroupsRemaining ?? 0;
-    $('#assembly-card-pamphleteer').innerHTML = cardSVG({ r: 'X' });
-    $('#assembly-card-regroup').innerHTML = cardSVG({ r: 'R' });
-    $('#assembly-count-pamphleteer').textContent = `×${pLeft}`;
-    $('#assembly-count-regroup').textContent = `×${rLeft}`;
-    $('#assembly-pick-pamphleteer').setAttribute('aria-label', `Use Pamphleteer, ${pLeft} available`);
-    $('#assembly-pick-regroup').setAttribute('aria-label', `Use La Retraite, ${rLeft} available`);
-    $('#assembly-pick-pamphleteer').disabled = !v.canUsePamphleteer;
-    $('#assembly-pick-regroup').disabled = !v.canRegroup;
-    $('#assembly-actions').hidden = true;
-    $('#assembly-wait').hidden = true;
-    return;
+// ── the shared specials ─────────────────────────────────────────────────────
+// Both are pooled rather than held, so each gets a chip in the action bar:
+// card art, name, and one pip per copy the Constitution granted — gold while it
+// remains, hollow once spent. A chip stays put whenever the pool opened above
+// zero, dimmed when the card cannot be called, so the whole table can read
+// what is left at any moment rather than only on its own turn.
+const SPECIALS = {
+  pamphleteer: { chip: '#chip-pamphleteer', card: { r: 'X' }, name: 'Pamphleteer' },
+  regroup: { chip: '#chip-regroup', card: { r: 'R' }, name: 'La Retraite' },
+};
+
+// The pool's opening size fixes the pip count, so the row never changes width
+// mid-game. regroupOnTransition can bank past that opening size; a numeral is
+// the only honest fallback there.
+function pipRow(total, left) {
+  if (left > total) return `<span class="supply-chip-over">×${left}</span>`;
+  return Array.from({ length: total }, (_, i) =>
+    `<i class="supply-pip${i < left ? '' : ' spent'}"></i>`).join('');
+}
+
+function renderSupply(v) {
+  const myTurn = v.you && v.current === v.you.index;
+  const rules = v.rules ?? engine.DEFAULT_RULES;
+  const rows = [
+    ['pamphleteer', rules.pamphleteers ?? 0, v.pamphleteersRemaining ?? 0, v.canUsePamphleteer],
+    ['regroup', rules.regroups ?? 0, v.regroupsRemaining ?? 0, v.canRegroup],
+  ];
+  let any = false;
+  for (const [kind, total, left, usable] of rows) {
+    const spec = SPECIALS[kind];
+    const chip = $(spec.chip);
+    chip.hidden = total === 0;
+    if (total === 0) continue;
+    any = true;
+    // The art never changes; paint it once rather than on every view tick.
+    if (!chip.dataset.art) {
+      chip.querySelector('.supply-chip-art').innerHTML = cardSVG(spec.card);
+      chip.dataset.art = '1';
+    }
+    chip.querySelector('.supply-chip-pips').innerHTML = pipRow(total, left);
+    chip.classList.toggle('empty', left === 0);
+    chip.disabled = !myTurn || !usable || !!v.assembly;
+    chip.setAttribute('aria-label', `${spec.name} — ${left} of ${total} remaining`);
+    chip.title = kind === 'pamphleteer'
+      ? 'Break this royal’s immunity without spending the turn'
+      : 'Return hands to Le Peuple and redeal';
   }
-  if (!a) return;
-  const mover = v.players[a.caller]?.name ?? 'A citoyen';
-  $('#assembly-motion').innerHTML = a.kind === 'pamphleteer'
-    ? `<strong>${esc(mover)}</strong> moves to unleash a Pamphleteer — it deals no damage, breaks this royal’s immunity, and leaves the mover’s turn intact. ${v.pamphleteersRemaining} remain in the pool.`
-    : `<strong>${esc(mover)}</strong> moves to use La Retraite — every hand returns to Le Peuple,
-       which is shuffled and redealt round by round until hands are full or it runs out. La Prison stays put.
-       ${v.regroupsRemaining} remain in the pool.`;
-  $('#assembly-tally').innerHTML = [a.caller, ...a.voters].map(i => {
-    const answered = i === a.caller ? true : a.votes[i] !== undefined;
-    const aye = i === a.caller ? true : a.votes[i];
-    const mark = !answered ? '<span class="vote-pending">…</span>'
-      : `<span class="vote-${aye ? 'aye' : 'nay'}">${aye ? 'Yea' : 'Nay'}</span>`;
-    return `<li><span>${esc(v.players[i]?.name ?? '—')}${i === a.caller ? ' <span class="tag">· mover</span>' : ''}</span>${mark}</li>`;
-  }).join('');
-  $('#assembly-actions').hidden = !a.youMayVote;
-  $('#assembly-wait').hidden = !!a.youMayVote;
-  $('#assembly-wait').textContent = v.you?.index === a.caller
+  $('#supply-chips').hidden = !any;
+}
+
+// ── the motion ──────────────────────────────────────────────────────────────
+// One screen covers three moments: a solo player confirming a spend, a citoyen
+// voting on someone else's motion, and the mover watching the floor. The card
+// art carries the identity, so the copy stays to a single line. Written for all
+// three readers at once — "the turn" rather than "your turn".
+const MOTION_LINE = {
+  pamphleteer: 'Breaks this royal’s immunity — no damage, and the turn goes on.',
+  regroupSolo: 'Your hand returns to Le Peuple, then redeals to the limit.',
+  regroupTable: 'Every hand returns to Le Peuple, then redeals to the limit.',
+};
+
+function renderMotion(v) {
+  const a = v.assembly;
+  // A live motion always wins over a solo confirm that never got answered.
+  if (a) motionPending = null;
+  const kind = a ? a.kind : motionPending;
+  $('#motion').hidden = !kind;
+  if (!kind) return;
+
+  const spec = SPECIALS[kind];
+  const left = kind === 'pamphleteer' ? (v.pamphleteersRemaining ?? 0) : (v.regroupsRemaining ?? 0);
+  const confirming = !a;
+  // Alone the card names the screen; at a table the house does, and the mover's
+  // line runs on into the card below it.
+  $('#motion-title').textContent = confirming ? spec.name : 'l’Assemblée';
+  $('#motion-caption').textContent = confirming
+    ? 'Spend one?'
+    : `${v.players[a.caller]?.name ?? 'A citoyen'} moves to use…`;
+  paintMotionCard(kind);
+  $('#motion-line').textContent = kind === 'pamphleteer'
+    ? MOTION_LINE.pamphleteer
+    : (v.solo ? MOTION_LINE.regroupSolo : MOTION_LINE.regroupTable);
+  $('#motion-remain').textContent = left === 1 ? 'The last one' : `${left} remain`;
+  $('#motion-remain').classList.remove('carried', 'fallen');
+
+  $('#motion-confirm-actions').hidden = !confirming;
+  $('#motion-tally').hidden = confirming;
+  $('#motion-vote').hidden = confirming || !a.youMayVote;
+  $('#motion-wait').hidden = confirming || !!a.youMayVote;
+  if (confirming) return;
+
+  $('#motion-tally').innerHTML = tallyHTML(v, a.caller, a.voters, a.votes);
+  $('#motion-wait').textContent = v.you?.index === a.caller
     ? 'Your motion is before the floor…'
     : 'The floor is still debating…';
+}
+
+function paintMotionCard(kind) {
+  if (motionCardKind === kind) return;
+  $('#motion-card').innerHTML = cardSVG(SPECIALS[kind].card);
+  motionCardKind = kind;
+}
+
+// The mover's own Yea is implied by moving, so it is never in the votes map.
+function tallyHTML(v, caller, voters, votes) {
+  return [caller, ...voters].map(i => {
+    const answered = i === caller ? true : votes[i] !== undefined;
+    const aye = i === caller ? true : votes[i];
+    const mark = !answered ? '<span class="vote-pending">…</span>'
+      : `<span class="vote-${aye ? 'aye' : 'nay'}">${aye ? 'Yea' : 'Nay'}</span>`;
+    return `<li><span>${esc(v.players[i]?.name ?? '—')}${i === caller ? ' <span class="tag">· mover</span>' : ''}</span>${mark}</li>`;
+  }).join('');
+}
+
+// A motion is gone from the view the instant it resolves, so without this the
+// floor would watch the screen close on the deciding vote. Hold the finished
+// tally — engine-supplied, since that last vote reaches no client any other
+// way — before the board is allowed to move on.
+const VOTE_HOLD_MS = 2400;
+
+function holdVoteResult(v, res, done) {
+  motionPending = null;
+  const margin = `${res.ayes}–${res.seated - res.ayes}`;
+  $('#motion').hidden = false;
+  $('#motion-title').textContent = 'l’Assemblée';
+  // Same line as the live motion — the verdict below carries the tense.
+  $('#motion-caption').textContent =
+    `${v.players[res.caller]?.name ?? 'A citoyen'} moves to use…`;
+  paintMotionCard(res.kind);
+  $('#motion-line').textContent = res.carried
+    ? (res.kind === 'pamphleteer' ? MOTION_LINE.pamphleteer : MOTION_LINE.regroupTable)
+    : 'Nothing is spent.';
+  $('#motion-remain').textContent = res.carried
+    ? `The motion carries, ${margin}`
+    : `The motion falls, ${margin}`;
+  $('#motion-remain').classList.toggle('carried', res.carried);
+  $('#motion-remain').classList.toggle('fallen', !res.carried);
+  $('#motion-tally').hidden = false;
+  $('#motion-tally').innerHTML = tallyHTML(v, res.caller, res.voters, res.votes);
+  $('#motion-confirm-actions').hidden = true;
+  $('#motion-vote').hidden = true;
+  $('#motion-wait').hidden = true;
+  setTimeout(() => {
+    $('#motion').hidden = true;
+    $('#motion-remain').classList.remove('carried', 'fallen');
+    done();
+  }, VOTE_HOLD_MS);
 }
 
 const castVote = aye => {
   audio.sfx('select');
   sendAction({ type: 'vote', aye }, flashError);
 };
-$('#assembly-aye').onclick = () => castVote(true);
-$('#assembly-nay').onclick = () => castVote(false);
-$('#assembly-cancel').onclick = () => {
-  assemblyChooserOpen = false;
-  $('#assembly').hidden = true;
-};
-$('#assembly-pick-pamphleteer').onclick = () => {
+$('#motion-aye').onclick = () => castVote(true);
+$('#motion-nay').onclick = () => castVote(false);
+
+// A chip is the whole choice now. Alone that opens a confirmation; at a table
+// it raises the motion at once and the assembly state takes over the screen.
+const openMotion = kind => {
+  staged = [];
   audio.sfx('select');
-  sendAction({ type: 'pamphleteerAssembly' }, flashError);
+  if (view?.solo) { motionPending = kind; renderMotion(view); return; }
+  sendAction({ type: kind === 'pamphleteer' ? 'pamphleteerAssembly' : 'assembly' }, flashError);
 };
-$('#assembly-pick-regroup').onclick = () => {
-  audio.sfx('select');
-  sendAction({ type: 'assembly' }, flashError);
+$('#chip-pamphleteer').onclick = () => openMotion('pamphleteer');
+$('#chip-regroup').onclick = () => openMotion('regroup');
+
+$('#motion-cancel').onclick = () => {
+  motionPending = null;
+  $('#motion').hidden = true;
+};
+$('#motion-confirm').onclick = () => {
+  const kind = motionPending;
+  motionPending = null;
+  $('#motion').hidden = true;
+  if (!kind) return;
+  // No shuffle sfx here — the regroup event plays it for every citoyen alike.
+  sendAction({ type: kind === 'pamphleteer' ? 'pamphleteer' : 'regroup' }, flashError);
 };
 
 function flashError(res) {
@@ -1584,23 +1826,6 @@ $('#btn-confirm').onclick = () => {
   sendAction({ type, cards }, res => { if (!res.ok) { staged = cards; renderGame(view); flashError(res); } });
 };
 $('#btn-yield').onclick = () => { audio.sfx('yield'); staged = []; sendAction({ type: 'yield' }, flashError); };
-$('#btn-regroup').onclick = () => {
-  staged = [];
-  // No shuffle sfx here — the regroup event plays it for every citoyen alike.
-  if (view?.solo) { sendAction({ type: 'regroup' }, flashError); return; }
-  audio.sfx('select');
-  sendAction({ type: 'assembly' }, flashError);
-};
-$('#btn-assembly').onclick = () => {
-  staged = [];
-  assemblyChooserOpen = true;
-  audio.sfx('select');
-  renderAssembly(view);
-};
-$('#btn-pamphleteer').onclick = () => {
-  staged = [];
-  sendAction({ type: view?.solo ? 'pamphleteer' : 'pamphleteerAssembly' }, flashError);
-};
 
 // ── cutscenes (game-start and victory) ────────────────────────────────────
 const CUTSCENE_FADE_MS = 500;
@@ -1617,10 +1842,10 @@ function playCutscene(name, next) {
   const finish = () => {
     if (finished) return;
     finished = true;
+    disarmSkip(finish);
     video.pause();
     audio.setMusicSilenced(false);
     video.removeEventListener('ended', finish);
-    screen.removeEventListener('click', finish);
     // Fade the stage out before cutting to what comes next, rather than
     // hard-switching between two very differently lit screens.
     screen.classList.add('fading');
@@ -1633,7 +1858,7 @@ function playCutscene(name, next) {
   // audible — a muted clip with silenced music would be ten seconds of nothing.
   audio.setMusicSilenced(!video.muted);
   video.addEventListener('ended', finish, { once: true });
-  screen.addEventListener('click', finish, { once: true });
+  armSkip(finish);
   const playing = video.play();
   // Autoplay-with-sound can be refused even mid-session; fall back to muted
   // playback rather than leaving the cutscene frozen on its first frame.
