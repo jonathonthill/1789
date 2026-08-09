@@ -337,14 +337,15 @@ export function playCards(state, playerIdx, cards) {
   let healedCount = 0;
   let drawnCount = 0;
 
-  // Raid before Rally so recovered cards are safely under Le Peuple before
-  // recruitment begins.
+  // Raid before Rally: randomize La Prison, transfer the liberated cards, then
+  // shuffle all of Le Peuple before recruitment begins.
   if (suits.includes('D') && active('D')) {
     shuffle(state.discard, state._rng);
     const healed = state.discard.splice(0, Math.min(value, state.discard.length));
-    state.tavern.unshift(...healed); // under the deck, no peeking
+    state.tavern.push(...healed);
+    if (healed.length) shuffle(state.tavern, state._rng);
     healedCount = healed.length;
-    if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} prisoner${healed.length === 1 ? '' : 's'} return beneath Le Peuple.`);
+    if (healed.length) log(state, `${player.name} raids la Prison — ${healed.length} prisoner${healed.length === 1 ? '' : 's'} return, and Le Peuple is reshuffled.`);
   }
   if (suits.includes('H') && active('H')) {
     let toDraw = value;

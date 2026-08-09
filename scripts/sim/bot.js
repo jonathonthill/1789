@@ -27,7 +27,7 @@ export const BASE_WEIGHTS = {
   spendValue: 4,     // the value leaving with it
   drawMine: 2.5,     // Rally, into my own hand
   drawTeam: 2.0,     // Rally, into everyone else's
-  heal: 0.8,         // Raid — prisoners back under Le Peuple, the deck's life
+  heal: 0.8,         // Raid — prisoners back into shuffled Le Peuple, the deck's life
   shield: 6,         // barricades still standing when the blow comes
   payCost: 10,       // what surviving the counterattack costs
   death: 500,        // a move that cannot be survived

@@ -139,12 +139,12 @@ export const RULE_SPEC = {
     default: 0,
     exposed: false,
   },
-  // Alone there is one Pamphleteer to spend across the whole Revolution; a
-  // table shares two.
+  // Every Revolution has two Pamphleteers. Alone they may be spent freely;
+  // a multiplayer table shares them and must approve each use.
   pamphleteers: {
     label: 'Pamphleteers',
     values: [0, 1, 2, 3],
-    bySize: { 1: 1, 2: 2, 3: 2, 4: 2 },
+    bySize: { 1: 2, 2: 2, 3: 2, 4: 2 },
     exposed: false,
   },
   // Where an exact kill sends the royal: won over to the slayer's own hand, or

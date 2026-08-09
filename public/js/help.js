@@ -115,7 +115,7 @@ export function pileInfo(kind, view) {
       return `<span class="mini-card ${red ? 'red' : ''}">${miniLabel(c)}</span>`;
     }).join('') || '<i>none yet</i>';
     return `<h3>🕯 ${TERMS.discard}</h3>
-      <p><b>${view.discardCount}</b> prisoners — spent attacks and sacrifices. ♦ Raid La Prison can free and return them (shuffled, face down) beneath ${TERMS.tavern}. Overkilled royals are removed from the game, not imprisoned.</p>
+      <p><b>${view.discardCount}</b> prisoners — spent attacks and sacrifices. ♦ Raid La Prison shuffles them, frees the required number into ${TERMS.tavern}, then reshuffles all of ${TERMS.tavern}. Overkilled royals are removed from the game, not imprisoned.</p>
       <div class="sheet-cards">${chips}</div>`;
   }
   if (kind === 'played') {
@@ -184,7 +184,7 @@ export function contextHelp(view) {
   const playedCount = (view.playedCombos ?? []).reduce((n, combo) => n + combo.cards.length, 0);
   const decksSection = `<h3>The Four Decks</h3><dl class="help-decks four">
     <div><dt>${TERMS.castle}</dt><dd>${view.castleCount ?? 0} royal${view.castleCount === 1 ? '' : 's'} still to come.</dd></div>
-    <div><dt>${TERMS.tavern}</dt><dd>${view.tavernCount ?? 0} recruits — ♥ Rally draws from it, ♦ Raid slips prisoners beneath it.</dd></div>
+    <div><dt>${TERMS.tavern}</dt><dd>${view.tavernCount ?? 0} recruits — ♥ Rally draws from it; ♦ Raid adds prisoners and reshuffles it.</dd></div>
     <div><dt>${TERMS.discard}</dt><dd>${view.discardCount ?? 0} prisoners — ♦ Raid La Prison can free them.</dd></div>
     <div><dt>In Play</dt><dd>${playedCount} card${playedCount === 1 ? '' : 's'} committed against the current royal.</dd></div>
   </dl>`;
@@ -325,13 +325,13 @@ ${constitutionSection(view)}
       </div>
       <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand as their spoil—no extra spoil card is drawn. <b>Overkill:</b> the royal is guillotined and removed from the game; they do not enter ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
     </div>
-    <p><b>Tier rewards:</b> hand limits rise on entering Queens and Kings, before rewards are dealt. Limits are 5/6/7 with one or two citoyens, and 4/5/6 with three or four. Solo takes two Spoils per royal. Multiplayer tables take no per-royal Spoils—instead, every citoyen takes one tier Spoil when Queens and Kings begin. A solo citoyen draws no transition card—their Spoils already came from the royal who ended the tier—but gains one La Retraite card at each transition.</p>
+    <p><b>Tier rewards:</b> hand limits rise on entering Queens and Kings, before rewards are dealt. Limits are 5/6/7 with one or two citoyens, and 4/5/6 with three or four. Solo takes two Spoils per royal. Multiplayer tables take no per-royal Spoils—instead, every citoyen takes one tier Spoil when Queens and Kings begin. A solo citoyen draws no transition card—their Spoils already came from the royal who ended the tier—but has La Retraite restored to one if it was spent.</p>
 
     <h3>The Three Decks</h3>
     <dl class="help-decks">
       <div><dt>${TERMS.castle}</dt><dd>Royals still waiting: Officers, Queens, then Kings.</dd></div>
       <div><dt>${TERMS.tavern}</dt><dd>Face-down recruits drawn by Rally Le Peuple.</dd></div>
-      <div><dt>${TERMS.discard}</dt><dd>Played and sacrificed cards; Raid La Prison returns prisoners beneath Le Peuple.</dd></div>
+      <div><dt>${TERMS.discard}</dt><dd>Played and sacrificed cards; Raid La Prison frees some of them and reshuffles Le Peuple.</dd></div>
     </dl>
 
     <h3>Table Talk</h3>
@@ -340,7 +340,7 @@ ${constitutionSection(view)}
     <h3>La Retraite</h3>
     <p>La Retraite is the table's way of catching its breath. Every hand returns to ${TERMS.tavern}; the deck is shuffled and dealt round by round until every citoyen reaches the current limit or it runs out. ${TERMS.discard} stays put. It may be called before attacking or while facing damage, and it does not break royal immunity.</p>
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
-    <p>You fight alone with hand limits of 5 / 6 / 7, two Pamphleteers, and one initial La Retraite card, spent freely with no Assemblée to convince. Gain another La Retraite upon entering Queens and Kings; unused cards carry forward. You take two Spoils after each royal, and no extra draw at those tier changes. Lay Low is not offered alone.</p>` : ''}
+    <p>You fight alone with hand limits of 5 / 6 / 7, two Pamphleteers, and one La Retraite card, spent freely with no Assemblée to convince. La Retraite is restored to one upon entering Queens and Kings if it was spent; it never accumulates. You take two Spoils after each royal, and no extra draw at those tier changes. Lay Low is not offered alone.</p>` : ''}
     ${view && !view.solo ? `<h3>l'Assemblée</h3>
     <p>At a table, La Retraite cards and Pamphleteers are <b>shared pools</b>. The active citoyen moves for one; moving counts as their own <b>Yea</b>, everyone else answers <b>Yea</b> or <b>Nay</b>, and a strict majority carries the motion. A fallen motion costs nothing. Every multiplayer table begins with one La Retraite.</p>` : ''}
   `;
@@ -361,10 +361,10 @@ export function walkthroughSteps(view) {
   const endurance = playerCount === 4 ? [25, 35, 45] : [20, 30, 40];
   const perRoyalSpoils = playerCount === 1 ? 2 : 0;
   const transitionCopy = playerCount === 1
-    ? 'You draw no extra transition card, but gain one La Retraite card; unused cards carry forward.'
+    ? 'You draw no extra transition card, but La Retraite is restored to one if it was spent.'
     : 'Instead of per-royal Spoils, each citoyen draws one tier Spoil when Queens and Kings begin.';
   const regroupCopy = view?.solo
-    ? `La Retraite is a fresh start: your hand goes back into Le Peuple, which is shuffled, and you draw to the current limit or until it runs out. La Prison stays put. You have ${left} left. Solo begins with one and gains another at Queens and Kings; unused cards carry forward.`
+    ? `La Retraite is a fresh start: your hand goes back into Le Peuple, which is shuffled, and you draw to the current limit or until it runs out. La Prison stays put. You have ${left} left. Solo has one per tier; it is restored upon entering Queens and Kings if spent, and never accumulates.`
     : `The table shares a pool of La Retraite cards — ${left} left. Spending one shuffles every hand into Le Peuple, then deals round by round until hands reach the current limit or it runs out. La Prison stays put. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
 
   return [
@@ -445,7 +445,7 @@ export function walkthroughSteps(view) {
     {
       eyebrow: 'Phase 2 of 4 · Resolve powers',
       title: 'Phase 2: Apply every suit power',
-      body: `<p><b>♥ Rally Le Peuple</b> draws up to the play's value, starting with you and circling past full hands. An empty deck is not a defeat. <b>♦ Raid La Prison</b> returns that many shuffled prisoners beneath Le Peuple.</p>
+      body: `<p><b>♥ Rally Le Peuple</b> draws up to the play's value, starting with you and circling past full hands. An empty deck is not a defeat. <b>♦ Raid La Prison</b> shuffles La Prison, moves that many prisoners into Le Peuple, then shuffles all of Le Peuple.</p>
         <p><b>♣ Rise en Masse</b> doubles the play's damage. <b>♠ Build Barricades</b> permanently reduces this royal's counterattack by the play's value. Before resolving a power, check the royal's immunity on the next slide.</p>`,
       stage: `<div class="walk-suits">
         <div class="hearts">${walkCard({ r: 5, s: 'H' }, '')}<span>♥ <b>Draw 5</b><small>Rally Le Peuple</small></span></div>
@@ -490,7 +490,7 @@ export function walkthroughSteps(view) {
       body: `<p>When the fourth Officer or fourth Queen falls, the hand limit rises <b>before Spoils</b> are dealt: this table advances through <b>${limits.join(' / ')}</b> cards.</p>
         <p>${perRoyalSpoils ? `Each citoyen takes ${perRoyalSpoils} Spoil${perRoyalSpoils === 1 ? '' : 's'} after every royal.` : 'There are no Spoils after individual royals.'} ${transitionCopy} Lay Low also refreshes for every citoyen when the new tier begins.</p>`,
       stage: `<div class="walk-goal"><span>Officers · ${limits[0]}</span><i>→</i><span>Queens · ${limits[1]}</span><i>→</i><span>Kings · ${limits[2]}</span></div>
-        <div class="walk-regroup"><div class="walk-regroup-hand old-hand"><strong>Tier cleared</strong><small>${playerCount >= 2 ? 'Tier Spoil earned' : 'Limit increases'}</small></div><div class="walk-regroup-arrow"><span>↑</span><b>New limit</b></div><div class="walk-regroup-hand new-hand"><strong>${playerCount === 1 ? '+1 La Retraite' : 'Lay Low restored'}</strong><small>${playerCount >= 2 ? '+ tier Spoil' : 'unused carry forward'}</small></div></div>`,
+        <div class="walk-regroup"><div class="walk-regroup-hand old-hand"><strong>Tier cleared</strong><small>${playerCount >= 2 ? 'Tier Spoil earned' : 'Limit increases'}</small></div><div class="walk-regroup-arrow"><span>↑</span><b>New limit</b></div><div class="walk-regroup-hand new-hand"><strong>${playerCount === 1 ? 'La Retraite restored' : 'Lay Low restored'}</strong><small>${playerCount >= 2 ? '+ tier Spoil' : 'returns to one if spent'}</small></div></div>`,
     },
     {
       eyebrow: 'Fight together',

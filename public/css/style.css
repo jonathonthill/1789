@@ -800,13 +800,13 @@ input {
    highlight and drop shadow — kept in a pill so they still read as tokens
    drawn from a pool rather than actions. */
 .supply-chip {
-  display: inline-flex; align-items: center; gap: 7px;
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
   padding: 3px 11px 3px 4px; border: 1.5px solid var(--gold); border-radius: 999px;
   background: linear-gradient(180deg, #27397a, var(--royal) 55%, var(--royal-deep));
   color: var(--paper);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 3px 8px rgba(16,20,40,.35);
   font-family: var(--serif-display); font-size: .76rem; letter-spacing: .04em;
-  cursor: pointer;
+  cursor: pointer; white-space: nowrap;
   transition: transform .06s, box-shadow .06s, opacity .2s, filter .15s;
 }
 .supply-chip:disabled { opacity: .45; cursor: default; filter: none; }
@@ -835,11 +835,10 @@ input {
 .supply-chip:active:not(:disabled) {
   transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
 }
-/* Below this the name is the first thing to go: the art and pips carry it. */
-@media (max-width: 420px) {
-  .supply-chip-name { display: none; }
-  .supply-chip { padding: 3px 9px 3px 4px; gap: 6px; }
-}
+/* Names are retained at every viewport width unless the measured full chips
+   cannot share one line. The art and pips remain as the compact fallback. */
+.supply-chips.compact .supply-chip-name { display: none; }
+.supply-chips.compact .supply-chip { padding-right: 9px; gap: 6px; }
 
 .pause-banner {
   position: fixed; left: 50%; transform: translateX(-50%);

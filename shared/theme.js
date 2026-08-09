@@ -14,7 +14,7 @@ export const TERMS = {
 
 export const SUIT_META = {
   H: { symbol: '♥', color: 'red',   power: 'Rally Le Peuple',    short: 'Draw',   desc: 'Recruit cards equal to the attack value from Le Peuple, starting with you, round the table, skipping full hands.' },
-  D: { symbol: '♦', color: 'red',   power: 'Raid La Prison',     short: 'Return', desc: 'Free prisoners from La Prison, shuffle them, and slip cards equal to the attack value under Le Peuple — liberated citoyens rejoin the cause.' },
+  D: { symbol: '♦', color: 'red',   power: 'Raid La Prison',     short: 'Return', desc: 'Shuffle La Prison, free prisoners equal to the attack value into Le Peuple, then shuffle all of Le Peuple.' },
   C: { symbol: '♣', color: 'black', power: 'Rise en Masse',      short: '×2 dmg', desc: 'The mob doubles your blow — damage dealt counts twice.' },
   S: { symbol: '♠', color: 'black', power: 'A La Barricade',     short: 'Shield', desc: 'Reduce the enemy’s attack by the attack value played. Barricades stack and hold until the enemy falls.' },
 };

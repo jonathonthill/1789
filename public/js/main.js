@@ -854,7 +854,7 @@ function holdFallenRoyal(v, ev) {
 }
 
 // Suit-power side effects become table motion: a diamond raid returns the
-// Prisoners under Le Peuple, then a heart rally recruits cards into hands.
+// Prisoners join the reshuffled Le Peuple, then a heart rally recruits cards.
 let lastActionSeq = -1;
 function animatePlayedToPrison(v, event, done) {
   const cards = event?.playedCards ?? [];
@@ -1651,6 +1651,27 @@ function pipRow(total, left) {
     `<i class="supply-pip${i < left ? '' : ' spent'}"></i>`).join('');
 }
 
+// Keep both names whenever the two chips genuinely fit side by side. Compact
+// mode is a measured fallback, not a phone breakpoint: it only drops the words
+// when their full rendered widths would force the row to wrap.
+function fitSupplyChipNames() {
+  const tray = $('#supply-chips');
+  tray.classList.remove('compact');
+  if (tray.hidden) return;
+  const chips = [...tray.querySelectorAll('.supply-chip:not([hidden])')];
+  if (chips.length < 2) return;
+  const style = getComputedStyle(tray);
+  const gap = parseFloat(style.columnGap) || 0;
+  const innerWidth = tray.clientWidth
+    - (parseFloat(style.paddingLeft) || 0)
+    - (parseFloat(style.paddingRight) || 0);
+  const fullWidth = chips.reduce((sum, chip) => sum + chip.getBoundingClientRect().width, 0)
+    + gap * (chips.length - 1);
+  tray.classList.toggle('compact', fullWidth > innerWidth + 0.5);
+}
+
+new ResizeObserver(fitSupplyChipNames).observe($('#supply-chips'));
+
 function renderSupply(v) {
   const myTurn = v.you && v.current === v.you.index;
   const rules = v.rules ?? engine.DEFAULT_RULES;
@@ -1679,6 +1700,7 @@ function renderSupply(v) {
       : 'Return hands to Le Peuple and redeal';
   }
   $('#supply-chips').hidden = !any;
+  fitSupplyChipNames();
 }
 
 // ── the motion ──────────────────────────────────────────────────────────────
@@ -1713,7 +1735,9 @@ function renderMotion(v) {
   $('#motion-line').textContent = kind === 'pamphleteer'
     ? MOTION_LINE.pamphleteer
     : (v.solo ? MOTION_LINE.regroupSolo : MOTION_LINE.regroupTable);
-  $('#motion-remain').textContent = left === 1 ? 'The last one' : `${left} remain`;
+  $('#motion-remain').textContent = v.solo && kind === 'regroup'
+    ? 'One per tier'
+    : (left === 1 ? 'The last one' : `${left} remain`);
   $('#motion-remain').classList.remove('carried', 'fallen');
 
   $('#motion-confirm-actions').hidden = !confirming;

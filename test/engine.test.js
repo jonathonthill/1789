@@ -32,7 +32,7 @@ test('deck composition per player count', () => {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
     assert.equal(all.filter(c => c.r === 'X').length, 0, `${n}p Pamphleteers are not hand cards`);
-    assert.equal(s.pamphleteersRemaining, n === 1 ? 1 : 2, `${n}p shared Pamphleteers`);
+    assert.equal(s.pamphleteersRemaining, 2, `${n}p Pamphleteers`);
     assert.equal(all.filter(c => c.r === 'A').length, 4, `${n}p companions`);
     assert.equal(all.length, 40, `${n}p tavern+hands size`);
     for (const p of s.players) assert.equal(p.hand.length, hand, `${n}p hand size`);
@@ -142,7 +142,7 @@ test('Rally resolves before counterattack survivability is checked', () => {
   assert.match(s.log.at(-1), /strikes Danton for 10/, 'counterattack resolves last');
 });
 
-test('Raid returns prisoners under Le Peuple before Rally recruits', () => {
+test('Raid shuffles prisoners into Le Peuple before Rally recruits', () => {
   const s = newGame(names2, { seed: 5 });
   rig(s, {
     hands: [[{ r: 5, s: 'H' }, { r: 5, s: 'D' }], [{ r: 2, s: 'C' }]],
@@ -152,11 +152,33 @@ test('Raid returns prisoners under Le Peuple before Rally recruits', () => {
   const tavernBefore = s.tavern.length;
   playCards(s, 0, [{ r: 5, s: 'H' }, { r: 5, s: 'D' }]); // pair of 5s: return 10 (capped 3), recruit 10
   assert.equal(s.discard.length, 0, 'the prisoners fully returned');
-  // returned 3 in, then recruits came off the top; the 3 returned went UNDER (start of array)
+  // Three return, all of Le Peuple is shuffled, then Rally recruits from it.
   assert.equal(s.enemy.damage, 10);
   assert.ok(s.tavern.length <= tavernBefore + 3, 'Le Peuple gained returned cards then supplied recruits');
   assert.equal(s.phase, 'discard', 'Jack of Clubs strikes back for 10');
   assert.equal(s.pendingDamage, 10);
+});
+
+test('Raid reshuffles all of Le Peuple after transferring the freed prisoners', () => {
+  const s = newGame(['Danton'], { seed: 505 });
+  const peupleBefore = Array.from({ length: 9 }, (_, i) => ({ r: i + 2, s: 'S' }));
+  rig(s, {
+    hands: [[{ r: 2, s: 'D' }, { r: 10, s: 'C' }]],
+    enemy: { r: 'J', s: 'C' },
+    discard: [{ r: 7, s: 'H' }, { r: 8, s: 'H' }, { r: 9, s: 'H' }],
+  });
+  s.tavern = peupleBefore.map(card => ({ ...card }));
+
+  playCards(s, 0, [{ r: 2, s: 'D' }]);
+
+  assert.equal(s.discard.length, 1, 'the Raid transfers exactly its value');
+  assert.equal(s.tavern.length, peupleBefore.length + 2, 'the freed cards join Le Peuple');
+  assert.equal(s.tavern.filter(card => card.s === 'H').length, 2, 'two shuffled prisoners were freed');
+  assert.notDeepEqual(
+    s.tavern.filter(card => card.s === 'S').map(card => card.r),
+    peupleBefore.map(card => card.r),
+    'the existing cards in Le Peuple are reshuffled too',
+  );
 });
 
 test('spades shield reduces enemy attack cumulatively; zero damage skips discard', () => {
@@ -260,7 +282,7 @@ test('a shared Pamphleteer breaks immunity for zero damage and leaves the turn i
   assert.equal(s.enemy.immunityCancelled, true);
   assert.equal(s.enemy.damage, 0);
   assert.equal(s.current, 0);
-  assert.equal(s.pamphleteersRemaining, 0, 'alone, the one Pamphleteer is spent');
+  assert.equal(s.pamphleteersRemaining, 1, 'alone, one of the two Pamphleteers is spent');
   playCards(s, 0, [{ r: 6, s: 'S' }]);
   assert.equal(currentShield(s), 6, 'immunity broken — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
@@ -366,7 +388,7 @@ test('Heart and Diamond powers resolve on a killing blow before the royal is def
   const tavernBefore = diamonds.tavern.length;
   playCards(diamonds, 0, [{ r: 10, s: 'D' }]);
   assert.deepEqual(diamonds.lastEffects, { healed: 3, drawn: 0 });
-  assert.equal(diamonds.tavern.length, tavernBefore + 3, 'three prisoners return beneath Le Peuple');
+  assert.equal(diamonds.tavern.length, tavernBefore + 3, 'three prisoners return to the reshuffled Le Peuple');
   assert.deepEqual(diamonds.players[0].hand.at(-1), { r: 'J', s: 'S' }, 'the royal is claimed after the Raid resolves');
   assert.deepEqual(diamonds.discard, [{ r: 10, s: 'D' }], 'the killing card is discarded only after Raid');
 });
@@ -673,8 +695,8 @@ test('rules resolve from partial and hostile input; difficulty sets royal power'
   assert.deepEqual(resolveRules(null, 3), { ...medium, regroupDraw: 3 });
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, drawOnVictory: 2, transitionDraw: 0, regroupTierReset: 1, regroupDraw: 3, pamphleteers: 1 },
-    'alone gets one Pamphleteer and two Spoils per royal, no transition draw, and a Regroup that refreshes',
+    { ...medium, drawOnVictory: 2, transitionDraw: 0, regroupTierReset: 1, regroupDraw: 3 },
+    'alone gets two Pamphleteers and two Spoils per royal, no transition draw, and a Regroup that refreshes',
   );
   assert.deepEqual(
     resolveRules(null, 2),
