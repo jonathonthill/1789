@@ -692,6 +692,39 @@ test('preview matches immunity context', () => {
   assert.equal(p.damage, 14, 'doubling once immunity is broken');
 });
 
+test('preview reports how many cards Rally can actually recruit', () => {
+  const full = rank => Array.from({ length: 5 }, (_, i) => ({ r: rank + i, s: 'S' }));
+  const capped = newGame(names2, { seed: 181 });
+  rig(capped, {
+    hands: [[{ r: 10, s: 'H' }, ...full(2).slice(0, 4)], full(2)],
+    enemy: { r: 'J', s: 'D' },
+  });
+  let p = previewPlay(capped, [{ r: 10, s: 'H' }]);
+  assert.equal(p.draws, 1, 'only the slot opened by the staged Heart is available');
+  playCards(capped, 0, [{ r: 10, s: 'H' }]);
+  assert.equal(capped.lastEffects.drawn, 1, 'the resolved play agrees with the projection');
+
+  const exact = newGame(names2, { seed: 182 });
+  rig(exact, {
+    hands: [[{ r: 10, s: 'H' }, ...full(2).slice(0, 4)], full(2)],
+    enemy: { r: 'J', s: 'D' },
+  });
+  exact.enemy.damage = 10;
+  p = previewPlay(exact, [{ r: 10, s: 'H' }]);
+  assert.equal(p.draws, 0, 'an exact kill reserves the opened slot for the recruited royal');
+
+  const raid = newGame(names2, { seed: 183 });
+  rig(raid, {
+    hands: [[{ r: 5, s: 'D' }, { r: 5, s: 'H' }], []],
+    enemy: { r: 'J', s: 'S' },
+  });
+  raid.tavern = [];
+  raid.discard = [{ r: 2, s: 'C' }, { r: 3, s: 'C' }, { r: 4, s: 'C' }];
+  p = previewPlay(raid, [{ r: 5, s: 'D' }, { r: 5, s: 'H' }]);
+  assert.equal(p.heals, 3);
+  assert.equal(p.draws, 3, 'Raid prisoners are counted because they return before Rally');
+});
+
 test('full game is winnable end-to-end (scripted exact plays)', () => {
   const s = newGame(names2, { seed: 19 });
   // brute-force play: always throw the biggest legal single card, discard greedily.

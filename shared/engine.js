@@ -290,12 +290,31 @@ export function previewPlay(state, cards) {
   const doubled = suits.includes('C') && active('C');
   const damage = doubled ? value * 2 : value;
   const exactKill = state.enemy.damage + damage === enemyHealth(state);
+  const heals = suits.includes('D') && active('D') ? Math.min(value, state.discard.length) : 0;
+
+  // Rally is limited by the cards that will actually exist and the room around
+  // the table after the staged cards leave the active hand. Raid resolves first
+  // and can add recruits. An exact kill also reserves one of the slayer's open
+  // slots for the captured royal. Public multiplayer views know hand counts,
+  // even though they deliberately do not know the other hands' cards.
+  let draws = 0;
+  if (suits.includes('H') && active('H')) {
+    const claimsRoyal = exactKill && state.rules.exactKillTo === 'hand';
+    const handCount = (player, idx) => {
+      const count = Number.isInteger(player.handCount) ? player.handCount : player.hand.length;
+      return idx === state.current ? Math.max(0, count - cards.length) : count;
+    };
+    const openSlots = state.players.reduce((sum, player, idx) => (
+      sum + Math.max(0, state.handSize - (claimsRoyal && idx === state.current ? 1 : 0) - handCount(player, idx))
+    ), 0);
+    draws = Math.min(value, state.tavern.length + heals, openSlots);
+  }
   return {
     value,
     damage,
     doubled,
-    heals: suits.includes('D') && active('D') ? Math.min(value, state.discard.length) : 0,
-    draws: suits.includes('H') && active('H') ? Math.min(value, state.tavern.length) : 0,
+    heals,
+    draws,
     shieldAdd: suits.includes('S') && active('S') ? value : 0,
     immuneSuits: cancelled ? [] : suits.filter(s => s === enemySuit),
     isJester,

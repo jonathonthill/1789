@@ -304,10 +304,10 @@ document.addEventListener('pointerdown', () => audio.nudge(), { capture: true })
 
 // ── pseudo-state: lets the client reuse engine validation on a partial view ──
 function pseudoState(v) {
-  const players = Array.from({ length: v.playerCount }, () => ({ hand: [] }));
-  if (v.you) players[v.you.index] = { hand: v.you.hand };
+  const players = v.players.map(player => ({ hand: [], handCount: player.handCount }));
+  if (v.you) players[v.you.index] = { hand: v.you.hand, handCount: v.you.hand.length };
   return {
-    phase: v.phase, current: v.current, players,
+    phase: v.phase, current: v.current, players, handSize: v.handSize,
     // validatePlay and previewPlay both read the table's Constitution.
     rules: v.rules ?? engine.DEFAULT_RULES,
     assembly: v.assembly ?? null,
