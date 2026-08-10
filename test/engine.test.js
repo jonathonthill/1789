@@ -68,6 +68,25 @@ test('a serialized solo game resumes with the exact future shuffle sequence', ()
   assert.throws(() => restoreGame({ playerCount: 1 }), /not valid/);
 });
 
+test('legacy solo saves upgrade from one Pamphleteer to the current pool of two', () => {
+  const unused = serializeGame(newGame(['Danton'], { seed: 1790 }));
+  unused.rules.pamphleteers = 1;
+  unused.pamphleteersRemaining = 1;
+  unused.pamphleteersUsed = 0;
+  const restoredUnused = restoreGame(unused);
+  assert.equal(restoredUnused.rules.pamphleteers, 2);
+  assert.equal(restoredUnused.pamphleteersRemaining, 2);
+
+  const spent = serializeGame(newGame(['Danton'], { seed: 1791 }));
+  spent.rules.pamphleteers = 1;
+  spent.pamphleteersRemaining = 0;
+  spent.pamphleteersUsed = 1;
+  const restoredSpent = restoreGame(spent);
+  assert.equal(restoredSpent.rules.pamphleteers, 2);
+  assert.equal(restoredSpent.pamphleteersRemaining, 1, 'the newly granted second token remains');
+  assert.equal(restoredSpent.pamphleteersUsed, 1, 'the previously spent token stays spent');
+});
+
 test('combo legality', () => {
   const s = newGame(names2, { seed: 2 });
   rig(s, { hands: [[

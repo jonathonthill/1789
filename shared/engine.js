@@ -148,6 +148,18 @@ export function restoreGame(snapshot) {
     || !Number.isInteger(state.rngState)) {
     throw new Error('The saved game is not valid.');
   }
+  // Solo saves made before the two-Pamphleteer rule carry the old resolved
+  // default as an explicit `1`, so ordinary rule resolution cannot distinguish
+  // them from an override. Upgrade that legacy pool while preserving anything
+  // already spent: unused saves resume at 2; a spent token resumes at 1.
+  if (state.rules?.pamphleteers === 1) {
+    const used = Number.isInteger(state.pamphleteersUsed)
+      ? state.pamphleteersUsed
+      : Math.max(0, 1 - (Number.isInteger(state.pamphleteersRemaining) ? state.pamphleteersRemaining : 1));
+    state.rules.pamphleteers = 2;
+    state.pamphleteersUsed = used;
+    state.pamphleteersRemaining = Math.max(0, 2 - used);
+  }
   state.rules = resolveRules(state.rules, 1);
   bindRng(state, makeRng(state.rngState));
   return state;
