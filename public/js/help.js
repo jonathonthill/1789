@@ -328,7 +328,7 @@ ${constitutionSection(view)}
       </div>
       <p><b>Exact damage:</b> the royal is won over to the Revolution and joins the slayer's own hand as their spoil—no extra spoil card is drawn. <b>Overkill:</b> the royal is guillotined and removed from the game; they do not enter ${TERMS.discard}. In either case the slayer takes no counterattack, and the <b>next citoyen</b> faces the royal who steps up.</p>
     </div>
-    <p><b>Tier rewards:</b> hand limits rise on entering Queens and Kings, before rewards are dealt. Limits are 5/6/7 with one or two citoyens, and 4/5/6 with three or four. Solo takes two Spoils per royal. Every citoyen also takes one tier Spoil when Queens and Kings begin; for multiplayer tables, which take no per-royal Spoils, this is the tier's only reward. A solo citoyen also has La Retraite restored to one if it was spent.</p>
+    <p><b>Tier rewards:</b> hand limits rise on entering Queens and Kings, before rewards are dealt. Limits are 5/6/7 with one or two citoyens, and 4/5/6 with three or four. Solo takes two Spoils per royal. Every citoyen also takes one tier Spoil when Queens and Kings begin; for multiplayer tables, which take no per-royal Spoils, this is the tier's only reward. Every table also has La Retraite restored to one if it was spent.</p>
 
     <h3>The Three Decks</h3>
     <dl class="help-decks">
@@ -345,7 +345,7 @@ ${constitutionSection(view)}
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
     <p>You fight alone with hand limits of 5 / 6 / 7, three Pamphleteers, and one La Retraite card, spent freely with no Assemblée to convince. La Retraite is restored to one upon entering Queens and Kings if it was spent; it never accumulates. You take two Spoils after each royal and one extra card at each tier change. Lay Low is not offered alone.</p>` : ''}
     ${view && !view.solo ? `<h3>l'Assemblée</h3>
-    <p>At a table, La Retraite cards and Pamphleteers are <b>shared pools</b>. The active citoyen moves for one; moving counts as their own <b>Yea</b>, everyone else answers <b>Yea</b> or <b>Nay</b>, and a strict majority carries the motion. A fallen motion costs nothing. Every multiplayer table begins with one La Retraite.</p>` : ''}
+    <p>At a table, La Retraite cards and Pamphleteers are <b>shared pools</b>. The active citoyen moves for one; moving counts as their own <b>Yea</b>, everyone else answers <b>Yea</b> or <b>Nay</b>, and a strict majority carries the motion. A fallen motion costs nothing. Every multiplayer table begins with one La Retraite; it is restored to one upon entering Queens and Kings if spent, and never accumulates.</p>` : ''}
   `;
 }
 function phaseSection(phase) {
@@ -365,10 +365,10 @@ export function walkthroughSteps(view) {
   const perRoyalSpoils = playerCount === 1 ? 2 : 0;
   const transitionCopy = playerCount === 1
     ? 'You draw one extra card, and La Retraite is restored to one if it was spent.'
-    : 'Instead of per-royal Spoils, each citoyen draws one tier Spoil when Queens and Kings begin.';
+    : 'Instead of per-royal Spoils, each citoyen draws one tier Spoil when Queens and Kings begin, and La Retraite is restored to one if it was spent.';
   const regroupCopy = view?.solo
     ? `La Retraite is a fresh start: your hand goes back into Le Peuple, which is shuffled, and you draw to the current limit or until it runs out. La Prison stays put. You have ${left} left. Solo has one per tier; it is restored upon entering Queens and Kings if spent, and never accumulates.`
-    : `The table shares a pool of La Retraite cards — ${left} left. Spending one shuffles every hand into Le Peuple, then deals round by round until hands reach the current limit or it runs out. La Prison stays put. Move for one on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
+    : `The table shares one La Retraite — ${left} available now. Spending it shuffles every hand into Le Peuple, then deals round by round until hands reach the current limit or it runs out. La Prison stays put. It is restored upon entering Queens and Kings if spent, and never accumulates. Move for it on your turn (or while suffering a blow) and l'Assemblée votes: the mover counts as a Yea, and a majority of the table carries it.`;
 
   return [
     {
@@ -493,7 +493,7 @@ export function walkthroughSteps(view) {
       body: `<p>When the fourth Officer or fourth Queen falls, the hand limit rises <b>before Spoils</b> are dealt: this table advances through <b>${limits.join(' / ')}</b> cards.</p>
         <p>${perRoyalSpoils ? `Each citoyen takes ${perRoyalSpoils} Spoil${perRoyalSpoils === 1 ? '' : 's'} after every royal.` : 'There are no Spoils after individual royals.'} ${transitionCopy} Lay Low also refreshes for every citoyen when the new tier begins.</p>`,
       stage: `<div class="walk-goal"><span>Officers · ${limits[0]}</span><i>→</i><span>Queens · ${limits[1]}</span><i>→</i><span>Kings · ${limits[2]}</span></div>
-        <div class="walk-regroup"><div class="walk-regroup-hand old-hand"><strong>Tier cleared</strong><small>${playerCount >= 2 ? 'Tier Spoil earned' : 'Limit increases'}</small></div><div class="walk-regroup-arrow"><span>↑</span><b>New limit</b></div><div class="walk-regroup-hand new-hand"><strong>${playerCount === 1 ? 'La Retraite restored' : 'Lay Low restored'}</strong><small>${playerCount >= 2 ? '+ tier Spoil' : 'returns to one if spent'}</small></div></div>`,
+        <div class="walk-regroup"><div class="walk-regroup-hand old-hand"><strong>Tier cleared</strong><small>${playerCount >= 2 ? 'Tier Spoil earned' : 'Limit increases'}</small></div><div class="walk-regroup-arrow"><span>↑</span><b>New limit</b></div><div class="walk-regroup-hand new-hand"><strong>La Retraite restored</strong><small>returns to one if spent</small></div></div>`,
     },
     {
       eyebrow: 'Fight together',

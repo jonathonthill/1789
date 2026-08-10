@@ -159,10 +159,10 @@ additional endurance.
 Solo draws two Spoils per royal. Every citoyen also draws one tier Spoil upon
 entering Queens and Kings; for multiplayer tables, which draw no per-royal
 Spoils, this is the tier's only reward. Lay Low refreshes
-at Queens and Kings. Solo holds one Regroup, handed back on entering Queens and
-Kings if it was spent — it refreshes rather than accumulates, so there is one to
-spend per tier and nothing to bank; every multiplayer table has one shared
-Regroup.
+at Queens and Kings. Every table holds one Regroup, handed back on entering
+Queens and Kings if it was spent — it refreshes rather than accumulates, so
+there is one to spend per tier and nothing to bank. At multiplayer tables it is
+shared and requires a majority vote.
 · ♥ Rally Le Peuple · ♦ Raid La Prison · ♣ Rise en Masse · ♠ A La Barricade
 
 Rules reference: `RegicideRulesA4.pdf` (original game by Paul Abrahams, Luke Badger,

@@ -81,15 +81,15 @@ export const RULE_SPEC = {
     bySize: { 1: 0, 2: 0, 3: 0, 4: 0 },
     exposed: false,
   },
-  // Solo holds one Regroup, and a new tier hands it back if it was spent. It
-  // refreshes rather than accumulates: there is one to spend against the
-  // Officers, one against the Queens and one against the Kings, and nothing to
-  // gain by hoarding it. Restoring never takes a Regroup away, so a pool
-  // already at its opening size is left alone.
+  // Every table holds one Regroup, and a new tier hands it back if it was
+  // spent. It refreshes rather than accumulates: there is one to spend against
+  // the Officers, one against the Queens and one against the Kings, and
+  // nothing to gain by hoarding it. Restoring never takes a Regroup away, so a
+  // pool already at its opening size is left alone.
   regroupTierReset: {
     label: 'Regroups restored at tier transitions',
     values: [0, 1],
-    bySize: { 1: 1, 2: 0, 3: 0, 4: 0 },
+    bySize: { 1: 1, 2: 1, 3: 1, 4: 1 },
     exposed: false,
   },
   // How many cards each citoyen takes when a Regroup is a shared draw rather

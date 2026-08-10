@@ -721,14 +721,14 @@ test('full game is winnable end-to-end (scripted exact plays)', () => {
 test('rules resolve from partial and hostile input; difficulty sets royal power', () => {
   const medium = {
     difficulty: 'medium', drawOnVictory: 0, transitionDraw: 1, regroups: 1, regroupOnTransition: 0,
-    regroupTierReset: 0, regroupDraw: 2,
+    regroupTierReset: 1, regroupDraw: 2,
     royalStrikeBonus: 0, royalHealthBonus: 0, regroupScope: 'table', handSizeDelta: 0, pamphleteers: 2,
     exactKillTo: 'hand', pamphleteerImmune: true, pamphleteerCompanion: false,
   };
   assert.deepEqual(resolveRules(null, 3), { ...medium, regroupDraw: 3 });
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, drawOnVictory: 2, regroupTierReset: 1, regroupDraw: 3, pamphleteers: 3 },
+    { ...medium, drawOnVictory: 2, regroupDraw: 3, pamphleteers: 3 },
     'alone gets three Pamphleteers, per-royal Spoils, a transition draw, and a Regroup that refreshes',
   );
   assert.deepEqual(
@@ -882,6 +882,7 @@ test('tier transitions raise the hand limit before rewards and deal each table i
   assert.equal(solo.lastEvent.transition.regroupsGained, 0);
 
   const two = newGame(names2, { seed: 166 });
+  two.regroupsRemaining = 0;
   rig(two, {
     hands: [[{ r: 2, s: 'C' }, { r: 3, s: 'H' }], [{ r: 4, s: 'S' }]],
     enemy: { r: 'J', s: 'H' },
@@ -890,6 +891,8 @@ test('tier transitions raise the hand limit before rewards and deal each table i
   two.enemy.damage = 19;
   playCards(two, 0, [{ r: 2, s: 'C' }]);
   assert.equal(two.handSize, 6, 'the Queen limit is active before rewards');
+  assert.equal(two.regroupsRemaining, 1, 'the shared Regroup is restored for Queens');
+  assert.equal(two.lastEvent.transition.regroupsGained, 1);
   assert.deepEqual(two.lastEvent.spoilsByPlayer, [0, 0]);
   assert.deepEqual(two.lastEvent.transition.byPlayer, [1, 1]);
   assert.deepEqual(two.players.map(p => p.hand.length), [2, 2]);
