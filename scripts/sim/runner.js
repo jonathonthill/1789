@@ -10,6 +10,7 @@ import {
 } from '../../shared/engine.js';
 import { decide, motionCarries, inLastResort, BASE_WEIGHTS } from './bot.js';
 import { speak, mute } from './signals.js';
+import { damageProfile } from './moves.js';
 
 const NAMES = ['Danton', 'Robespierre', 'Marat', 'Desmoulins'];
 const MAX_ACTIONS = 4000;
@@ -59,12 +60,24 @@ function unleashPamphleteer(state, caller) {
   return state;
 }
 
-function wantsPamphleteer(view, hand, tier, rng, humanProfile = {}) {
+export function wantsPamphleteer(view, hand, tier, rng, humanProfile = {}) {
   if (!view.canUsePamphleteer || !view.enemy || view.enemy.immunityCancelled) return false;
   const blocked = hand.filter(card => card.s === view.enemy.card.s);
   if (!blocked.length) return false;
   const strongest = Math.max(...blocked.map(card => typeof card.r === 'number' ? card.r : 1));
   const useful = strongest >= 5 || view.enemy.card.r === 'K';
+  if (view.solo && view.enemy.card.s === 'C') {
+    const before = damageProfile(view, hand);
+    const after = damageProfile({
+      ...view,
+      enemy: { ...view.enemy, immunityCancelled: true },
+    }, hand);
+    // Against Clubs, timing is arithmetic: wait until doubling a known Club
+    // play creates an exact finish, rather than spending the resource merely
+    // because a large blocked Club happens to be in hand.
+    if (before.hasExact) return false;
+    return after.hasExact;
+  }
   // Practiced humans still overlook or postpone a useful shared resource. The
   // reference bots retain their deterministic timing for regression studies.
   if (tier === 'human' && useful && rng && rng() < (humanProfile.pamphleteerMissRate ?? 0.15)) return false;

@@ -8,13 +8,20 @@ import { newGame, viewFor, playCards, cardValue } from '../shared/engine.js';
 import { enumeratePlays, outcomeOf, damageProfile } from '../scripts/sim/moves.js';
 import { choosePayment, optimalPayment, decide, inLastResort } from '../scripts/sim/bot.js';
 import { speak, cheapestPayment } from '../scripts/sim/signals.js';
-import { playGame } from '../scripts/sim/runner.js';
+import { playGame, wantsPamphleteer } from '../scripts/sim/runner.js';
 
 const names = ['Danton', 'Robespierre', 'Marat'];
 
 function fresh(seed, rules, hands, enemy) {
   const s = newGame(names, { seed, rules });
   hands.forEach((h, i) => { s.players[i].hand = h.map(c => ({ ...c })); });
+  if (enemy) { s.enemy.card = { ...enemy }; s.enemy.damage = 0; }
+  return s;
+}
+
+function soloFresh(seed, hand, enemy, rules = {}) {
+  const s = newGame(['Danton'], { seed, rules });
+  s.players[0].hand = hand.map(card => ({ ...card }));
   if (enemy) { s.enemy.card = { ...enemy }; s.enemy.damage = 0; }
   return s;
 }
@@ -99,6 +106,59 @@ test('a payment always covers the blow, and the careful one is never dearer', ()
     assert.ok(!greedy.some(c => c.r === 'X'), 'the Pamphleteer is never thrown away to pay');
   }
   assert.equal(cheapestPayment(hand, 100), null, 'a blow beyond the hand cannot be paid');
+});
+
+test('strong solo preserves Hearts and captured stacking royals when paying a blow', () => {
+  const decidePayment = (enemy, hand) => {
+    const s = soloFresh(130, hand, enemy);
+    s.phase = 'discard';
+    s.pendingDamage = 10;
+    return decide(viewFor(s, 0), s.players[0].hand, null, { tier: 'strong' }).cards;
+  };
+
+  const heartsUseful = decidePayment({ r: 'J', s: 'C' }, [{ r: 10, s: 'H' }, { r: 10, s: 'D' }]);
+  assert.deepEqual(heartsUseful, [{ r: 10, s: 'D' }], 'a useful Heart survives when an equal payment exists');
+
+  const heartsBlocked = decidePayment({ r: 'J', s: 'H' }, [{ r: 10, s: 'H' }, { r: 10, s: 'D' }]);
+  assert.deepEqual(heartsBlocked, [{ r: 10, s: 'H' }], 'a Heart royal makes Hearts the expendable equal payment');
+
+  const stack = decidePayment({ r: 'J', s: 'S' }, [{ r: 'J', s: 'C' }, { r: 10, s: 'D' }]);
+  assert.deepEqual(stack, [{ r: 10, s: 'D' }], 'the captured Club royal is kept for a stacking attack');
+});
+
+test('strong solo can plan three known attacks to an exact kill behind a finished barricade', () => {
+  const s = soloFresh(131, [
+    { r: 2, s: 'D' }, { r: 8, s: 'D' }, { r: 10, s: 'D' },
+  ], { r: 'J', s: 'H' });
+  s.playedCombos = [{ cards: [{ r: 10, s: 'S' }], value: 10, suits: ['S'] }];
+  const action = decide(viewFor(s, 0), s.players[0].hand, null, { tier: 'strong' });
+  assert.equal(action.type, 'play');
+  assert.deepEqual(action.cards, [{ r: 2, s: 'D' }], 'the bot starts the low-low-high exact sequence');
+  assert.deepEqual(action.plannedCards, [{ r: 8, s: 'D' }]);
+});
+
+test('strong solo spends La Retraite on a depleted final royal before it refreshes', () => {
+  const s = soloFresh(132, [
+    { r: 10, s: 'D' }, { r: 3, s: 'S' }, { r: 2, s: 'C' },
+  ], { r: 'J', s: 'H' });
+  s.castle = s.castle.slice(0, 8); // fourth Officer: Queens and Kings remain
+  const action = decide(viewFor(s, 0), s.players[0].hand, null, { tier: 'strong' });
+  assert.deepEqual(action, { type: 'regroup' });
+});
+
+test('strong solo times the Pamphleteer against Clubs for exact doubling', () => {
+  const s = soloFresh(133, [{ r: 6, s: 'C' }, { r: 9, s: 'D' }], { r: 'J', s: 'C' });
+  s.enemy.damage = 8; // twelve remain: 6♣ becomes exact only after immunity breaks
+  assert.equal(wantsPamphleteer(viewFor(s, 0), s.players[0].hand, 'strong'), true);
+
+  s.enemy.damage = 0;
+  assert.equal(wantsPamphleteer(viewFor(s, 0), s.players[0].hand, 'strong'), false,
+    'the same Pamphleteer is held while doubling would not yet finish exactly');
+
+  s.players[0].hand = [{ r: 10, s: 'D' }, { r: 6, s: 'C' }];
+  s.enemy.damage = 10;
+  assert.equal(wantsPamphleteer(viewFor(s, 0), s.players[0].hand, 'strong'), false,
+    'an exact finish that already works does not waste the Pamphleteer');
 });
 
 test('a bot is handed nothing but its own view, its own hand and what was said', () => {

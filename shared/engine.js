@@ -84,6 +84,7 @@ export function newGame(playerNames, opts = {}) {
 
   const state = {
     playerCount: n,
+    soloRulesVersion: 2,
     rules,
     handSize: Math.max(1, HAND_SIZE[n] + rules.handSizeDelta),
     tierRank: null,
@@ -148,17 +149,21 @@ export function restoreGame(snapshot) {
     || !Number.isInteger(state.rngState)) {
     throw new Error('The saved game is not valid.');
   }
-  // Solo saves made before the two-Pamphleteer rule carry the old resolved
-  // default as an explicit `1`, so ordinary rule resolution cannot distinguish
-  // them from an override. Upgrade that legacy pool while preserving anything
-  // already spent: unused saves resume at 2; a spent token resumes at 1.
-  if (state.rules?.pamphleteers === 1) {
+  if (!state.rules || typeof state.rules !== 'object' || Array.isArray(state.rules)) state.rules = {};
+  // Old solo saves carry their then-current defaults as explicit rules, so
+  // ordinary resolution cannot distinguish them from overrides. Bring them
+  // forward to the current three-Pamphleteer pool and transition draw while
+  // preserving any Pamphleteers already spent.
+  if (!state.soloRulesVersion || state.soloRulesVersion < 2) {
     const used = Number.isInteger(state.pamphleteersUsed)
       ? state.pamphleteersUsed
-      : Math.max(0, 1 - (Number.isInteger(state.pamphleteersRemaining) ? state.pamphleteersRemaining : 1));
-    state.rules.pamphleteers = 2;
+      : Math.max(0, (state.rules?.pamphleteers ?? 1)
+        - (Number.isInteger(state.pamphleteersRemaining) ? state.pamphleteersRemaining : 0));
+    state.rules.pamphleteers = 3;
+    state.rules.transitionDraw = 1;
     state.pamphleteersUsed = used;
-    state.pamphleteersRemaining = Math.max(0, 2 - used);
+    state.pamphleteersRemaining = Math.max(0, 3 - used);
+    state.soloRulesVersion = 2;
   }
   state.rules = resolveRules(state.rules, 1);
   bindRng(state, makeRng(state.rngState));
@@ -441,9 +446,8 @@ function defeatEnemy(state, playerIdx) {
   }
   // Crossing into Queens or Kings raises the hand limit before Spoils are
   // shared, so a previously full hand can take advantage of the new space.
-  // Multiplayer tables then receive their transition card — the tier's only
-  // Spoil. Solo draws none: it has already taken its Spoils from the royal
-  // that ended the tier. Raising the limit by itself never draws a card.
+  // Every table then receives its transition card. At multiplayer tables this
+  // is the tier's only Spoil; solo receives it alongside its per-royal Spoils.
   const oldTier = state.tierRank;
   const nextTier = state.castle[state.castle.length - 1].r;
   const tierChanged = nextTier !== oldTier;
@@ -659,7 +663,7 @@ function checkTurnStart(state) {
 }
 
 // ---- Pamphleteer -----------------------------------------------------------
-// Two Pamphleteers sit beside the table as a shared, single-use resource. They
+// Pamphleteers sit beside the table as a shared, single-use resource. They
 // deal no damage, provoke no reprisal, and do not spend the active citoyen's
 // turn; they simply break the current royal's immunity.
 

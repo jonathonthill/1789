@@ -63,10 +63,14 @@ actions, royals defeated, resources used, remaining card counts, and the exact
 Constitution. They do **not** include player names, room codes, IP addresses,
 hands, or the play-by-play log.
 
-Open `/api/outcomes/summary` on the running server for live totals, win rate,
-average duration and progress, plus breakdowns by solo/multiplayer, player
-count, difficulty, and loss type. Solo outcomes are held in the browser while
-offline and retried later; the server de-duplicates every game id.
+The unlinked owner dashboard at `/stats` shows live totals, win rate, average
+duration and progress, breakdowns by solo/multiplayer, player count, difficulty
+and loss type, plus the 100 most recent games. It can also download every record
+as CSV for Google Sheets. The page is absent from the game's navigation and
+marked `noindex`; open its address directly when needed. Its records are
+anonymous, but the URL itself is not an access-control boundary. Solo outcomes
+are held in the browser while offline and retried later; the server
+de-duplicates every game id.
 
 Set `OUTCOME_LOG_PATH` to choose another location:
 
@@ -143,8 +147,8 @@ the production Docker image.
 Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **The Ancien Régime**
 · Jester → **The Pamphleteer** · Animal Companion → **Les Renforts** · Yield → **Lay Low**
 
-**Les Renforts** are the 1-value Helper Cards marked **A**. Solo and multiplayer
-tables both have two Pamphleteers. They sit beside the table as shared,
+**Les Renforts** are the 1-value Helper Cards marked **A**. Solo has three
+Pamphleteers; multiplayer tables have two. They sit beside the table as shared,
 single-use resources: they deal zero damage and
 break immunity without spending the active citoyen's turn; multiplayer use
 requires a majority vote.
@@ -152,10 +156,9 @@ requires a majority vote.
 Hand limits rise through Officers / Queens / Kings: **5/6/7** with one or two
 citoyens, and **4/5/6** with three or four. At four players, every royal has 5
 additional endurance.
-Solo draws two Spoils per royal. Multiplayer tables draw no per-royal Spoils;
-every citoyen instead draws one tier Spoil upon entering Queens and Kings. Solo
-draws no transition card, having already taken Spoils from the royal who ended
-the tier. Lay Low refreshes
+Solo draws two Spoils per royal. Every citoyen also draws one tier Spoil upon
+entering Queens and Kings; for multiplayer tables, which draw no per-royal
+Spoils, this is the tier's only reward. Lay Low refreshes
 at Queens and Kings. Solo holds one Regroup, handed back on entering Queens and
 Kings if it was spent — it refreshes rather than accumulates, so there is one to
 spend per tier and nothing to bank; every multiplayer table has one shared

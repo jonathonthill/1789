@@ -123,6 +123,38 @@ export function summarizeOutcomes(records) {
   };
 }
 
+function csvCell(value) {
+  const text = value == null ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+export function outcomesToCsv(records) {
+  const columns = [
+    ['recordedAt', record => record.recordedAt],
+    ['gameId', record => record.gameId],
+    ['mode', record => record.mode],
+    ['outcome', record => record.outcome],
+    ['lossKind', record => record.lossKind],
+    ['playerCount', record => record.playerCount],
+    ['durationSeconds', record => record.durationSeconds],
+    ['actionCount', record => record.actionCount],
+    ['royalsDefeated', record => record.royalsDefeated],
+    ['tierReached', record => record.tierReached],
+    ['regroupsUsed', record => record.regroupsUsed],
+    ['pamphleteersUsed', record => record.pamphleteersUsed],
+    ['peupleRemaining', record => record.cardsRemaining?.peuple],
+    ['prisonRemaining', record => record.cardsRemaining?.prison],
+    ['handsRemaining', record => record.cardsRemaining?.hands],
+    ['difficulty', record => record.rules?.difficulty],
+    ['rules', record => JSON.stringify(record.rules ?? {})],
+  ];
+  const lines = [columns.map(([name]) => csvCell(name)).join(',')];
+  for (const record of records) {
+    lines.push(columns.map(([, read]) => csvCell(read(record))).join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 export function createOutcomeStore(filePath) {
   let loaded = false;
   let records = [];
@@ -155,6 +187,15 @@ export function createOutcomeStore(filePath) {
     summary() {
       load();
       return summarizeOutcomes(records);
+    },
+    list(limit = 100) {
+      load();
+      const count = finiteInteger(limit, { min: 1, max: 10000 });
+      return records.slice(-count).reverse().map(record => JSON.parse(JSON.stringify(record)));
+    },
+    csv() {
+      load();
+      return outcomesToCsv(records);
     },
   };
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createOutcomeStore, outcomeFromState, summarizeOutcomes } from '../server/outcomes.js';
+import { createOutcomeStore, outcomeFromState, outcomesToCsv, summarizeOutcomes } from '../server/outcomes.js';
 import { newGame, surrenderGame } from '../shared/engine.js';
 
 test('outcomeFromState produces an anonymous completed-game record', () => {
@@ -41,6 +41,22 @@ test('outcome store appends JSONL and ignores a duplicate game id', () => {
   assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /must be stripped/);
   assert.equal(store.summary().games, 1);
   assert.equal(store.summary().winRate, 1);
+  const recent = store.list(10);
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].outcome, 'win');
+  recent[0].outcome = 'loss';
+  assert.equal(store.summary().wins, 1, 'dashboard callers receive copies, not mutable stored records');
+  assert.match(store.csv(), /^recordedAt,gameId,mode,outcome,/);
+  assert.match(store.csv(), /,solo,win,/);
+});
+
+test('CSV export quotes structured rule data safely', () => {
+  const csv = outcomesToCsv([{
+    recordedAt: '2026-08-09T12:00:00.000Z', gameId: 'game-id', mode: 'solo', outcome: 'loss',
+    rules: { difficulty: 'medium', note: 'comma, quote"' },
+  }]);
+  assert.match(csv, /medium,"\{""difficulty"":""medium""/);
+  assert.match(csv, /comma, quote/);
 });
 
 test('summary groups real games by mode and player count', () => {

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>1789 · Owner Statistics</title>
+  <style>
+    :root { color-scheme: dark; --ink: #f3ead4; --muted: #b9ad96; --gold: #d8b75f; --red: #b33e43; --panel: #211d1b; --line: #4b4036; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #151311; color: var(--ink); font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; }
+    main { width: min(1120px, calc(100% - 28px)); margin: 34px auto 60px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    h1 { margin: 0; color: var(--gold); font: 700 clamp(28px, 5vw, 46px)/1 Georgia, serif; }
+    header p, .note { color: var(--muted); margin: 8px 0 0; }
+    .actions { display: flex; gap: 9px; flex-wrap: wrap; }
+    button, .button { appearance: none; border: 1px solid #78643d; border-radius: 8px; background: #30291f; color: var(--ink); padding: 9px 13px; font: inherit; text-decoration: none; cursor: pointer; }
+    button:hover, .button:hover { border-color: var(--gold); }
+    .cards { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 12px; }
+    .card, section { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 10px 30px #0004; }
+    .card { padding: 16px; }
+    .card span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .card strong { display: block; margin-top: 5px; color: var(--gold); font: 700 27px Georgia, serif; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+    section { padding: 17px; overflow: hidden; }
+    section.full { grid-column: 1 / -1; }
+    h2 { margin: 0 0 12px; color: var(--gold); font: 700 20px Georgia, serif; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #3a322b; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .win { color: #8fd19e; } .loss { color: #ed8f91; }
+    #status { min-height: 22px; color: var(--muted); }
+    @media (max-width: 760px) {
+      header { align-items: start; flex-direction: column; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .grid { grid-template-columns: 1fr; }
+      section.full { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>1789 · Owner Statistics</h1><p>Anonymous completed-game outcomes</p></div>
+      <div class="actions"><button id="refresh" type="button">Refresh</button><a class="button" href="/api/outcomes.csv">Download CSV</a></div>
+    </header>
+
+    <div class="cards">
+      <div class="card"><span>Games</span><strong id="games">—</strong></div>
+      <div class="card"><span>Wins</span><strong id="wins">—</strong></div>
+      <div class="card"><span>Win rate</span><strong id="win-rate">—</strong></div>
+      <div class="card"><span>Avg. royals</span><strong id="royals">—</strong></div>
+      <div class="card"><span>Avg. duration</span><strong id="duration">—</strong></div>
+    </div>
+
+    <div class="grid">
+      <section><h2>By table size</h2><div class="table-wrap"><table id="by-size"></table></div></section>
+      <section><h2>By difficulty</h2><div class="table-wrap"><table id="by-difficulty"></table></div></section>
+      <section><h2>By mode</h2><div class="table-wrap"><table id="by-mode"></table></div></section>
+      <section><h2>Losses</h2><div class="table-wrap"><table id="losses"></table></div></section>
+      <section class="full"><h2>Recent games</h2><div class="table-wrap"><table id="recent"></table></div></section>
+    </div>
+    <p id="status"></p>
+    <p class="note">No player names, room codes, IP addresses, hands, or play-by-play records are collected.</p>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const pct = value => `${(100 * (Number(value) || 0)).toFixed(1)}%`;
+    const duration = seconds => {
+      const minutes = Math.round((Number(seconds) || 0) / 60);
+      return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+    };
+    function table(id, headers, rows) {
+      const target = $(id);
+      target.replaceChildren();
+      const head = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      for (const label of headers) {
+        const cell = document.createElement('th'); cell.textContent = label; headRow.append(cell);
+      }
+      head.append(headRow); target.append(head);
+      const body = document.createElement('tbody');
+      for (const values of rows) {
+        const row = document.createElement('tr');
+        for (const value of values) {
+          const cell = document.createElement('td');
+          if (value && typeof value === 'object') {
+            cell.textContent = value.text; if (value.className) cell.className = value.className;
+          } else cell.textContent = value ?? '—';
+          row.append(cell);
+        }
+        body.append(row);
+      }
+      if (!rows.length) {
+        const row = document.createElement('tr'); const cell = document.createElement('td');
+        cell.colSpan = headers.length; cell.textContent = 'No completed games yet.'; row.append(cell); body.append(row);
+      }
+      target.append(body);
+    }
+    const groupedRows = group => Object.entries(group ?? {}).map(([label, row]) => [label, row.games, row.wins, pct(row.winRate)]);
+    async function loadStats() {
+      $('refresh').disabled = true; $('status').textContent = 'Updating…';
+      try {
+        const [summaryResponse, recentResponse] = await Promise.all([
+          fetch('/api/outcomes/summary', { cache: 'no-store' }),
+          fetch('/api/outcomes/recent?limit=100', { cache: 'no-store' }),
+        ]);
+        if (!summaryResponse.ok || !recentResponse.ok) throw new Error('Statistics could not be loaded.');
+        const summary = await summaryResponse.json();
+        const recent = (await recentResponse.json()).records ?? [];
+        $('games').textContent = summary.games;
+        $('wins').textContent = summary.wins;
+        $('win-rate').textContent = pct(summary.winRate);
+        $('royals').textContent = Number(summary.averageRoyalsDefeated || 0).toFixed(1);
+        $('duration').textContent = duration(summary.averageDurationSeconds);
+        table('by-size', ['Players', 'Games', 'Wins', 'Rate'], groupedRows(summary.byPlayerCount));
+        table('by-difficulty', ['Difficulty', 'Games', 'Wins', 'Rate'], groupedRows(summary.byDifficulty));
+        table('by-mode', ['Mode', 'Games', 'Wins', 'Rate'], groupedRows(summary.byMode));
+        table('losses', ['Reason', 'Games'], Object.entries(summary.lossesByKind ?? {}));
+        table('recent', ['Recorded', 'Table', 'Result', 'Royals', 'Time', 'Retreats', 'Pamphleteers', 'Difficulty'], recent.map(record => [
+          new Date(record.recordedAt).toLocaleString(),
+          record.mode === 'solo' ? 'Solo' : `${record.playerCount} players`,
+          { text: record.outcome, className: record.outcome === 'win' ? 'win' : 'loss' },
+          record.royalsDefeated,
+          duration(record.durationSeconds),
+          record.regroupsUsed,
+          record.pamphleteersUsed,
+          record.rules?.difficulty ?? '—',
+        ]));
+        $('status').textContent = `Updated ${new Date(summary.generatedAt).toLocaleString()}`;
+      } catch (error) {
+        $('status').textContent = error.message;
+      } finally { $('refresh').disabled = false; }
+    }
+    $('refresh').addEventListener('click', loadStats);
+    loadStats();
+  </script>
+</body>
+</html>

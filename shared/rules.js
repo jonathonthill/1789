@@ -55,12 +55,11 @@ export const RULE_SPEC = {
   // After the fourth Officer and fourth Queen fall, every citoyen draws one
   // card (still capped by the newly raised limit). At multiplayer tables this
   // is the tier's only Spoil; they receive none after individual royals. Solo
-  // already takes its Spoils after every royal, so it gets nothing extra here —
-  // the raised hand limit and the earned Regroup are the transition's reward.
+  // also receives the transition card in addition to its per-royal Spoils.
   transitionDraw: {
     label: 'Tier-transition draw',
     values: [0, 1],
-    bySize: { 1: 0, 2: 1, 3: 1, 4: 1 },
+    bySize: { 1: 1, 2: 1, 3: 1, 4: 1 },
     exposed: false,
   },
 
@@ -139,12 +138,12 @@ export const RULE_SPEC = {
     default: 0,
     exposed: false,
   },
-  // Every Revolution has two Pamphleteers. Alone they may be spent freely;
-  // a multiplayer table shares them and must approve each use.
+  // Solo has three Pamphleteers, spent freely. Multiplayer tables share two
+  // and must approve each use.
   pamphleteers: {
     label: 'Pamphleteers',
     values: [0, 1, 2, 3],
-    bySize: { 1: 2, 2: 2, 3: 2, 4: 2 },
+    bySize: { 1: 3, 2: 2, 3: 2, 4: 2 },
     exposed: false,
   },
   // Where an exact kill sends the royal: won over to the slayer's own hand, or

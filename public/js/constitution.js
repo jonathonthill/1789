@@ -195,7 +195,7 @@ export function gameRulesSummary(rules, playerCount) {
       ? `${resolved.drawOnVictory} per citoyen after each royal`
       : 'None after individual royals'],
     ['Tier transition', n === 1
-      ? `Hand limit rises${resolved.regroupTierReset ? ' and La Retraite is renewed' : ''} at Queens and Kings`
+      ? `Draw ${resolved.transitionDraw} extra card${resolved.transitionDraw === 1 ? '' : 's'}; hand limit rises${resolved.regroupTierReset ? ' and La Retraite is renewed' : ''} at Queens and Kings`
       : 'Each citoyen draws 1 tier Spoil at Queens and Kings'],
     ['Lay Low', n === 1 ? 'Not available alone' : 'Once per citoyen per tier'],
     ['Pamphleteers', n === 1

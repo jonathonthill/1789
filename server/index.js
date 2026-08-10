@@ -19,6 +19,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SHARED_DIR = path.join(__dirname, '..', 'shared');
 const OUTCOME_FILE = process.env.OUTCOME_LOG_PATH || path.join(__dirname, '..', 'data', 'game-outcomes.jsonl');
 const outcomeStore = createOutcomeStore(OUTCOME_FILE);
+const STATS_HTML = fs.readFileSync(path.join(__dirname, 'stats.html'), 'utf8');
 
 // ---- build stamp -----------------------------------------------------------
 // Everything the browser downloads, fingerprinted by size and mtime at boot.
@@ -71,9 +72,25 @@ app.post('/api/outcomes', (req, res) => {
     res.status(400).json({ ok: false, error: error.message });
   }
 });
+// Deliberately unlinked owner view. It contains anonymous outcome data only
+// and asks crawlers not to index it; knowing the direct URL is the only route
+// to it from the site.
+app.get('/stats', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.type('html').send(STATS_HTML);
+});
 app.get('/api/outcomes/summary', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json(outcomeStore.summary());
+});
+app.get('/api/outcomes/recent', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ records: outcomeStore.list(req.query.limit ?? 100) });
+});
+app.get('/api/outcomes.csv', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.attachment('game-outcomes.csv').type('text/csv').send(outcomeStore.csv());
 });
 
 // Code revalidates on every request (cheap — an unchanged file answers 304);

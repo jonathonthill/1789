@@ -32,7 +32,7 @@ test('deck composition per player count', () => {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
     assert.equal(all.filter(c => c.r === 'X').length, 0, `${n}p Pamphleteers are not hand cards`);
-    assert.equal(s.pamphleteersRemaining, 2, `${n}p Pamphleteers`);
+    assert.equal(s.pamphleteersRemaining, n === 1 ? 3 : 2, `${n}p Pamphleteers`);
     assert.equal(all.filter(c => c.r === 'A').length, 4, `${n}p companions`);
     assert.equal(all.length, 40, `${n}p tavern+hands size`);
     for (const p of s.players) assert.equal(p.hand.length, hand, `${n}p hand size`);
@@ -68,23 +68,37 @@ test('a serialized solo game resumes with the exact future shuffle sequence', ()
   assert.throws(() => restoreGame({ playerCount: 1 }), /not valid/);
 });
 
-test('legacy solo saves upgrade from one Pamphleteer to the current pool of two', () => {
+test('legacy solo saves receive the current Pamphleteer pool and transition draw', () => {
   const unused = serializeGame(newGame(['Danton'], { seed: 1790 }));
+  delete unused.soloRulesVersion;
   unused.rules.pamphleteers = 1;
+  unused.rules.transitionDraw = 0;
   unused.pamphleteersRemaining = 1;
   unused.pamphleteersUsed = 0;
   const restoredUnused = restoreGame(unused);
-  assert.equal(restoredUnused.rules.pamphleteers, 2);
-  assert.equal(restoredUnused.pamphleteersRemaining, 2);
+  assert.equal(restoredUnused.rules.pamphleteers, 3);
+  assert.equal(restoredUnused.rules.transitionDraw, 1);
+  assert.equal(restoredUnused.pamphleteersRemaining, 3);
 
   const spent = serializeGame(newGame(['Danton'], { seed: 1791 }));
-  spent.rules.pamphleteers = 1;
+  delete spent.soloRulesVersion;
+  spent.rules.pamphleteers = 2;
+  spent.rules.transitionDraw = 0;
   spent.pamphleteersRemaining = 0;
-  spent.pamphleteersUsed = 1;
+  spent.pamphleteersUsed = 2;
   const restoredSpent = restoreGame(spent);
-  assert.equal(restoredSpent.rules.pamphleteers, 2);
-  assert.equal(restoredSpent.pamphleteersRemaining, 1, 'the newly granted second token remains');
-  assert.equal(restoredSpent.pamphleteersUsed, 1, 'the previously spent token stays spent');
+  assert.equal(restoredSpent.rules.pamphleteers, 3);
+  assert.equal(restoredSpent.rules.transitionDraw, 1);
+  assert.equal(restoredSpent.pamphleteersRemaining, 1, 'the newly granted third token remains');
+  assert.equal(restoredSpent.pamphleteersUsed, 2, 'the previously spent tokens stay spent');
+
+  const currentOverride = serializeGame(newGame(['Danton'], {
+    seed: 1792,
+    rules: { pamphleteers: 2, transitionDraw: 0 },
+  }));
+  const restoredOverride = restoreGame(currentOverride);
+  assert.equal(restoredOverride.rules.pamphleteers, 2, 'current saved overrides remain intact');
+  assert.equal(restoredOverride.rules.transitionDraw, 0, 'current transition overrides remain intact');
 });
 
 test('combo legality', () => {
@@ -301,7 +315,7 @@ test('a shared Pamphleteer breaks immunity for zero damage and leaves the turn i
   assert.equal(s.enemy.immunityCancelled, true);
   assert.equal(s.enemy.damage, 0);
   assert.equal(s.current, 0);
-  assert.equal(s.pamphleteersRemaining, 1, 'alone, one of the two Pamphleteers is spent');
+  assert.equal(s.pamphleteersRemaining, 2, 'alone, one of the three Pamphleteers is spent');
   playCards(s, 0, [{ r: 6, s: 'S' }]);
   assert.equal(currentShield(s), 6, 'immunity broken — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
@@ -714,8 +728,8 @@ test('rules resolve from partial and hostile input; difficulty sets royal power'
   assert.deepEqual(resolveRules(null, 3), { ...medium, regroupDraw: 3 });
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, drawOnVictory: 2, transitionDraw: 0, regroupTierReset: 1, regroupDraw: 3 },
-    'alone gets two Pamphleteers and two Spoils per royal, no transition draw, and a Regroup that refreshes',
+    { ...medium, drawOnVictory: 2, regroupTierReset: 1, regroupDraw: 3, pamphleteers: 3 },
+    'alone gets three Pamphleteers, per-royal Spoils, a transition draw, and a Regroup that refreshes',
   );
   assert.deepEqual(
     resolveRules(null, 2),
@@ -853,9 +867,9 @@ test('tier transitions raise the hand limit before rewards and deal each table i
   assert.equal(solo.handSize, 6);
   assert.equal(solo.regroupsRemaining, 1, 'entering Queens hands the spent Regroup back');
   assert.equal(solo.lastEvent.transition.regroupsGained, 1);
-  assert.equal(solo.lastEvent.transition.drawn, 0, 'alone, the tier itself draws nothing extra');
-  assert.equal(solo.lastEvent.spoilsDrawn, 2, 'the per-royal Spoils are the whole reward');
-  assert.equal(solo.players[0].hand.length, 3, 'one card kept back, plus the two Spoils');
+  assert.equal(solo.lastEvent.transition.drawn, 1, 'alone, the tier draws one extra card');
+  assert.equal(solo.lastEvent.spoilsDrawn, 2, 'the per-royal Spoils remain two cards');
+  assert.equal(solo.players[0].hand.length, 4, 'one card kept back, plus two Spoils and the transition card');
 
   // The Regroup refreshes rather than accumulates: an untouched pool is left
   // where it is, so nothing is banked for the Kings by holding on to it.
