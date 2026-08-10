@@ -358,12 +358,12 @@ function showGuillotine(enemyCard, done) {
 function captureFan(count) {
   const n = Math.max(0, count);
   if (n === 0) return '';
-  const fanW = 190, cardW = 46;
-  const step = n === 1 ? 0 : Math.min(cardW * .65, (fanW - cardW) / (n - 1));
+  const fanW = 230, cardW = 46;
+  const step = n === 1 ? 0 : Math.min(cardW * .66, (fanW - cardW) / (n - 1));
   const x0 = (fanW - (cardW + step * (n - 1))) / 2;
   let html = '';
   for (let i = 0; i < n; i++) {
-    const rot = n === 1 ? 0 : -9 + 18 * i / (n - 1);
+    const rot = n === 1 ? 0 : -10 + 20 * i / (n - 1);
     html += `<span class="capture-fan-card" style="left:${(x0 + i * step).toFixed(1)}px;`
       + `transform:rotate(${rot.toFixed(1)}deg)">${cardBackSVG()}</span>`;
   }
@@ -397,7 +397,7 @@ function ensureCaptureOverlay() {
   if ($('#capture-overlay')) return;
   document.body.insertAdjacentHTML('beforeend', `
     <div id="capture-overlay" class="overlay" hidden>
-      <div id="capture-stage" class="capture-stage">
+      <div id="capture-stage" class="capture-stage cinematic-stage">
         <div class="capture-burst" aria-hidden="true"></div>
         <div id="capture-royal" class="capture-royal" aria-hidden="true">
           <div id="capture-card" class="capture-card"></div>

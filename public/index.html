@@ -194,6 +194,8 @@
     <div id="end-emblem" class="end-emblem"></div>
     <h2 id="end-title"></h2>
     <p id="end-detail"></p>
+    <p id="end-reason" class="end-reason"></p>
+    <div id="end-stats" class="end-stats" aria-label="Revolution statistics"></div>
     <button id="btn-rematch" class="btn primary">Once More to the Barricades</button>
     <p id="end-wait" class="lobby-status" hidden>Waiting for the host to call the next game…</p>
     <button id="btn-home" class="btn ghost">Back to the Streets</button>
@@ -202,7 +204,7 @@
 
 <!-- ═══ OVERLAYS ═══ -->
 <div id="entrance-overlay" class="overlay" hidden>
-  <div class="entrance-stage">
+  <div class="entrance-stage cinematic-stage">
     <div id="entrance-card" class="entrance-card"></div>
     <div class="speech">
       <div id="entrance-threat" class="speech-text"></div>
@@ -213,7 +215,7 @@
 </div>
 
 <div id="guillotine-overlay" class="overlay" hidden>
-  <div class="guillotine-stage">
+  <div class="guillotine-stage cinematic-stage">
     <div class="g-frame">
       <div class="g-blade" id="g-blade"></div>
       <div id="g-victim" class="g-victim"></div>
@@ -224,7 +226,7 @@
 </div>
 
 <div id="capture-overlay" class="overlay" hidden>
-  <div id="capture-stage" class="capture-stage">
+  <div id="capture-stage" class="capture-stage cinematic-stage">
     <div class="capture-burst" aria-hidden="true"></div>
     <div id="capture-royal" class="capture-royal" aria-hidden="true">
       <div id="capture-card" class="capture-card"></div>
@@ -252,23 +254,15 @@
 </div>
 
 <div id="tier-overlay" class="overlay reward-overlay" hidden>
-  <div id="tier-stage" class="tier-stage reward-stage">
+  <div id="tier-stage" class="tier-stage reward-stage cinematic-stage">
     <img class="tier-liberty" src="/img/specials/tier-victory.png" alt="" aria-hidden="true">
-    <div class="tier-copy">
-      <strong>The Revolution Advances</strong>
-      <span id="tier-name"></span>
-    </div>
-    <div class="reward-hand" aria-hidden="true">
-      <div id="tier-fan-before" class="reward-fan reward-fan-before"></div>
-      <div id="tier-fan-after" class="reward-fan reward-fan-after"></div>
-      <div class="hand-limit"><span>Hand limit</span> <b id="tier-limit-before"></b><i>→</i><b id="tier-limit-after"></b></div>
-    </div>
+    <div id="tier-phase" class="tier-phase" aria-live="polite"></div>
     <div class="reward-dismiss">tap to continue</div>
   </div>
 </div>
 
 <div id="spoils-overlay" class="overlay reward-overlay" hidden>
-  <div id="spoils-stage" class="spoils-stage reward-stage">
+  <div id="spoils-stage" class="spoils-stage reward-stage cinematic-stage">
     <div class="spoils-card" aria-hidden="true"></div>
     <div class="spoils-copy">
       <strong>Les Dépouilles</strong>

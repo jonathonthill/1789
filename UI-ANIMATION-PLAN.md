@@ -31,15 +31,29 @@
 
 1. Killing cards travel beneath the royal and then to La Prison.
 2. The royal receives the guillotine or exact-capture judgment.
-3. On entry to Queens or Kings, a tier-victory overlay plays:
-   - clip-art inspired by the forward motion and flag composition of *Liberty Leading the People*, without reproducing the painting;
-   - **THE REVOLUTION ADVANCES** and the new tier name;
-   - the hand limit changes visibly from its old value to its new value;
-   - a facedown hand fan opens an additional slot before any transition card arrives.
-4. A distinct **LES DÉPOUILLES** beat follows whenever the viewer actually receives Spoils. A mystery card flies from Le Peuple into a before/after hand fan, matching the capture visual language.
-5. Tier-transition draws remain distinct from Spoils and occur in the tier-advance beat.
-6. Other players' facedown hand counts update at the same narrative beat as their rewards.
-7. The next royal entrance begins only after these rewards finish.
+3. If the royal was won over, its capture hand remains in the same position and dimensions used by the following reward fans.
+4. A distinct **LES DÉPOUILLES** beat plays whenever the viewer actually receives Spoils. It comes before tier advancement and uses an ordinary before/after hand fan with no capacity outlines.
+5. On entry to Queens or Kings, a tier-victory overlay plays:
+   - all four royals from the completed tier remain in one compact row;
+   - an exact defeat carries a cockade, while an overkill is shown as a subtly split card;
+   - the captured/guillotined counts sit directly beneath that row;
+   - **THE REVOLUTION ADVANCES** and the new tier name bind every following benefit to the level change;
+   - only benefits actually received appear: the combined hand-size/card reward, renewed La Retraite, and refreshed Lay Low;
+   - each benefit receives its own roughly three-second, skippable phase;
+   - reset benefits turn a facedown card over to reveal the renewed card;
+   - **HAND SIZE INCREASE** combines the wider hand limit and transition card in one beat: the card flies into the hand while dotted empty-card outlines keep the full capacity visible.
+6. The combined hand-size beat deliberately reuses the exact Spoils card-to-hand motion, sizing, positioning, and before/after hand fan, while its copy explicitly ties the larger capacity to the new tier. Only this phase uses dotted outlines: the new capacity opens first, then the transition card adds exactly one card. Any capacity still unfilled remains outlined until this phase ends.
+7. Other players' facedown hand counts update at the same narrative beat as their rewards.
+8. The next royal entrance begins only after these rewards finish.
+9. The fourth King receives the same four-card **KINGS DEFEATED** summary before the victory cutscene.
+10. Single-card cinematics use the guillotine's original 118px card size; the guillotine retains its original 200×280 frame, full blade travel, and compact composition.
+
+## Result screens
+
+- Losses show royals defeated out of twelve, won over, and guillotined.
+- Loss encouragement advances through 0–3, 4–7, 8–10, and 11-royal progress bands while retaining the concrete loss reason.
+- Wins show won over, guillotined, Pamphleteers played, and Retreats played; twelve defeated is implicit in victory.
+- Short phone layouts keep the complete result and both navigation actions above the fold.
 
 ## Accessibility and replay rules
 

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import * as engine from '../shared/engine.js';
 import { createOutcomeStore, outcomeFromState } from './outcomes.js';
+import { roomResumeStatus } from './room-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -105,6 +106,14 @@ app.use('/shared', express.static(SHARED_DIR, { setHeaders: cacheHeaders }));
 
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const rooms = new Map(); // code -> room
+
+// The home screen validates a locally remembered seat before exposing its
+// Rejoin button. This never touches room activity, binds a socket, or reveals a
+// room from its short public code alone.
+app.post('/api/rooms/check', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(roomResumeStatus(rooms, req.body?.code, req.body?.token));
+});
 
 // Unambiguous alphabet (no O/I/0/1 lookalikes)
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';

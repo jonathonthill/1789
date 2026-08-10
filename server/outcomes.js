@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { RULE_KEYS } from '../shared/rules.js';
 
-export const OUTCOME_SCHEMA_VERSION = 1;
+export const OUTCOME_SCHEMA_VERSION = 2;
 
 function finiteInteger(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   const number = Number(value);
@@ -26,9 +26,10 @@ export function outcomeFromState({ gameId, mode, startedAt, state }) {
   const durationSeconds = Number.isNaN(started.getTime())
     ? 0
     : Math.max(0, Math.round((Date.now() - started.getTime()) / 1000));
-  const royalsDefeated = state.phase === 'won'
+  const royalHistory = Array.isArray(state.defeatedRoyals) ? state.defeatedRoyals : [];
+  const royalsDefeated = royalHistory.length || (state.phase === 'won'
     ? 12
-    : Math.max(0, 12 - state.castle.length - (state.enemy ? 1 : 0));
+    : Math.max(0, 12 - state.castle.length - (state.enemy ? 1 : 0)));
 
   return {
     gameId,
@@ -39,6 +40,8 @@ export function outcomeFromState({ gameId, mode, startedAt, state }) {
     durationSeconds,
     actionCount: state.actionSeq,
     royalsDefeated,
+    royalsCaptured: royalHistory.filter(defeat => defeat.outcome === 'captured').length,
+    royalsGuillotined: royalHistory.filter(defeat => defeat.outcome === 'guillotined').length,
     tierReached: state.phase === 'won' ? 'K' : (state.enemy?.card?.r ?? null),
     regroupsUsed: state.regroupsUsed,
     pamphleteersUsed: state.pamphleteersUsed,
@@ -79,6 +82,8 @@ function sanitizeRecord(input) {
     durationSeconds: finiteInteger(input.durationSeconds, { max: 7 * 24 * 60 * 60 }),
     actionCount: finiteInteger(input.actionCount, { max: 10000 }),
     royalsDefeated: finiteInteger(input.royalsDefeated, { max: 12 }),
+    royalsCaptured: finiteInteger(input.royalsCaptured, { max: 12 }),
+    royalsGuillotined: finiteInteger(input.royalsGuillotined, { max: 12 }),
     tierReached: ['J', 'Q', 'K'].includes(input.tierReached) ? input.tierReached : null,
     regroupsUsed: finiteInteger(input.regroupsUsed, { max: 100 }),
     pamphleteersUsed: finiteInteger(input.pamphleteersUsed, { max: 100 }),
@@ -139,6 +144,8 @@ export function outcomesToCsv(records) {
     ['durationSeconds', record => record.durationSeconds],
     ['actionCount', record => record.actionCount],
     ['royalsDefeated', record => record.royalsDefeated],
+    ['royalsCaptured', record => record.royalsCaptured],
+    ['royalsGuillotined', record => record.royalsGuillotined],
     ['tierReached', record => record.tierReached],
     ['regroupsUsed', record => record.regroupsUsed],
     ['pamphleteersUsed', record => record.pamphleteersUsed],

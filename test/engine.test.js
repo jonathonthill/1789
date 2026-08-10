@@ -111,6 +111,24 @@ test('legacy solo saves receive the current Pamphleteer pool and transition draw
   assert.equal(restoredOverride.rules.transitionDraw, 0, 'current transition overrides remain intact');
 });
 
+test('version-three solo saves rebuild captured and guillotined royal history', () => {
+  const snapshot = serializeGame(newGame(['Danton'], { seed: 1794 }));
+  snapshot.soloRulesVersion = 3;
+  delete snapshot.defeatedRoyals;
+  snapshot.castle = snapshot.castle.filter(card => !(card.r === 'Q' && ['H', 'D'].includes(card.s)));
+  snapshot.tavern.push({ r: 'Q', s: 'H' });
+
+  const restored = restoreGame(snapshot);
+  assert.equal(restored.soloRulesVersion, 4);
+  assert.deepEqual(
+    restored.defeatedRoyals.filter(defeat => defeat.card.r === 'Q'),
+    [
+      { card: { r: 'Q', s: 'H' }, outcome: 'captured' },
+      { card: { r: 'Q', s: 'D' }, outcome: 'guillotined' },
+    ],
+  );
+});
+
 test('combo legality', () => {
   const s = newGame(names2, { seed: 2 });
   rig(s, { hands: [[
@@ -401,6 +419,10 @@ test('exact kill claims the royal for the slayer’s hand; overkill removes it; 
   assert.equal(s.enemy.damage, 0);
   assert.equal(currentShield(s), 0, 'played cards cleared');
   assert.deepEqual(s.lastEvent.playedCards, [{ r: 10, s: 'C' }], 'defeat event retains the public In Play cards for the client animation');
+  assert.deepEqual(s.defeatedRoyals, [
+    { card: { r: 'J', s: 'H' }, outcome: 'captured' },
+  ]);
+  assert.deepEqual(viewFor(s, 0).defeatedRoyals, s.defeatedRoyals, 'royal outcomes are public progress');
   // the played 10C went to discard
   assert.ok(s.discard.some(c => c.r === 10 && c.s === 'C'));
 });
@@ -887,6 +909,10 @@ test('the Spoils of Victory deal every citoyen a share, never past the hand limi
   assert.equal(s.lastEvent.spoilsDrawn, 6);
   assert.deepEqual(s.lastEvent.spoilsByPlayer, [2, 2, 2]);
   assert.ok(!s.discard.some(c => c.r === 'J'), 'the overkilled royal is removed, not imprisoned');
+  assert.deepEqual(s.defeatedRoyals.at(-1), {
+    card: { r: 'J', s: 'D' },
+    outcome: 'guillotined',
+  });
 
   const full = newGame(names2, { seed: 63, rules: { drawOnVictory: 2 } });
   rig(full, { hands: [[{ r: 10, s: 'S' }, { r: 10, s: 'C' }], []], enemy: { r: 'J', s: 'D' } });
@@ -900,6 +926,11 @@ test('the Spoils of Victory deal every citoyen a share, never past the hand limi
 test('tier transitions raise the hand limit before rewards and deal each table its transition card', () => {
   const solo = newGame(['Citoyen'], { seed: 168 });
   solo.regroupsRemaining = 0; // the opening Regroup has already been spent
+  solo.players[0].laidLow = true;
+  solo.defeatedRoyals = ['S', 'D', 'C'].map((suit, index) => ({
+    card: { r: 'J', s: suit },
+    outcome: index === 1 ? 'guillotined' : 'captured',
+  }));
   rig(solo, {
     hands: [[{ r: 2, s: 'C' }, { r: 3, s: 'H' }]],
     enemy: { r: 'J', s: 'H' },
@@ -910,6 +941,12 @@ test('tier transitions raise the hand limit before rewards and deal each table i
   assert.equal(solo.handSize, 6);
   assert.equal(solo.regroupsRemaining, 1, 'entering Queens hands the spent Regroup back');
   assert.equal(solo.lastEvent.transition.regroupsGained, 1);
+  assert.equal(solo.lastEvent.transition.layLowsRestored, 1);
+  assert.equal(solo.lastEvent.transition.completedRoyals.length, 4);
+  assert.deepEqual(
+    solo.lastEvent.transition.completedRoyals.map(defeat => defeat.outcome),
+    ['captured', 'guillotined', 'captured', 'guillotined'],
+  );
   assert.equal(solo.lastEvent.transition.drawn, 1, 'alone, the tier draws one extra card');
   assert.equal(solo.lastEvent.spoilsDrawn, 2, 'the per-royal Spoils remain two cards');
   assert.equal(solo.players[0].hand.length, 4, 'one card kept back, plus two Spoils and the transition card');

@@ -84,7 +84,7 @@ export function newGame(playerNames, opts = {}) {
 
   const state = {
     playerCount: n,
-    soloRulesVersion: 3,
+    soloRulesVersion: 4,
     rules,
     handSize: Math.max(1, HAND_SIZE[n] + rules.handSizeDelta),
     tierRank: null,
@@ -93,6 +93,7 @@ export function newGame(playerNames, opts = {}) {
     pamphleteersUsed: 0,
     regroupsRemaining: rules.regroups, // one pool, spent by whoever l'Assemblée backs
     regroupsUsed: 0,
+    defeatedRoyals: [],  // [{ card, outcome: 'captured'|'guillotined' }]
     assembly: null,       // open motion: { caller, voters, votes }
     lastAssemblyResult: null, // the finished tally of the most recent motion
     players: playerNames.map(name => ({
@@ -166,6 +167,34 @@ export function restoreGame(snapshot) {
     state.pamphleteersUsed = used;
     state.pamphleteersRemaining = Math.max(0, 2 - used);
     state.soloRulesVersion = 3;
+  }
+  // Version 4 records how every fallen royal met their end. Captured royals
+  // remain somewhere in the 40-card economy; guillotined royals are the only
+  // royal cards absent from every live zone, so old solo saves can be rebuilt
+  // without guessing or losing their progress.
+  if (state.soloRulesVersion < 4 || !Array.isArray(state.defeatedRoyals)) {
+    const liveCards = [
+      ...state.castle,
+      ...(state.enemy?.card ? [state.enemy.card] : []),
+      ...state.tavern,
+      ...state.discard,
+      ...state.players.flatMap(player => player.hand),
+      ...state.playedCombos.flatMap(combo => combo.cards ?? []),
+    ];
+    const hasCard = (rank, suit) => liveCards.some(card => card.r === rank && card.s === suit);
+    const stillInRegime = (rank, suit) => state.castle.some(card => card.r === rank && card.s === suit)
+      || (state.enemy?.card?.r === rank && state.enemy.card.s === suit);
+    state.defeatedRoyals = [];
+    for (const rank of ['J', 'Q', 'K']) {
+      for (const suit of SUITS) {
+        if (stillInRegime(rank, suit)) continue;
+        state.defeatedRoyals.push({
+          card: { r: rank, s: suit },
+          outcome: hasCard(rank, suit) ? 'captured' : 'guillotined',
+        });
+      }
+    }
+    state.soloRulesVersion = 4;
   }
   state.rules = resolveRules(state.rules, 1);
   bindRng(state, makeRng(state.rngState));
@@ -441,6 +470,11 @@ function defeatEnemy(state, playerIdx) {
   const exact = state.enemy.damage === enemyHealth(state);
   const toHand = exact && state.rules.exactKillTo === 'hand';
   const enemyCard = state.enemy.card;
+  if (!Array.isArray(state.defeatedRoyals)) state.defeatedRoyals = [];
+  state.defeatedRoyals.push({
+    card: { ...enemyCard },
+    outcome: exact ? 'captured' : 'guillotined',
+  });
   // The client keeps this public history long enough to animate the committed
   // cards from In Play into La Prison after the royal falls.
   const playedCards = state.playedCombos.flatMap(combo => combo.cards);
@@ -504,6 +538,12 @@ function defeatEnemy(state, playerIdx) {
   // have been gathered from it — otherwise the table would simply draw them
   // straight back, and the rule would mean nothing.
   if (exact && !toHand) state.tavern.push(enemyCard);
+  const layLowsRestored = tierChanged
+    ? state.players.filter(player => player.laidLow).length
+    : 0;
+  const completedRoyals = tierChanged
+    ? state.defeatedRoyals.filter(defeat => defeat.card.r === oldTier)
+    : [];
   revealEnemy(state);
   state.lastEvent = {
     type: 'defeatAndReveal',
@@ -521,6 +561,9 @@ function defeatEnemy(state, playerIdx) {
       drawn: transitionDrawn,
       byPlayer: transitionByPlayer,
       regroupsGained,
+      regroupsAfter: state.regroupsRemaining,
+      layLowsRestored,
+      completedRoyals,
     } : null,
   };
   // The slayer skips the counterattack and hands on: the newcomer is faced by
@@ -927,6 +970,10 @@ export function viewFor(state, playerIdx) {
     regroupsUsed: state.regroupsUsed,
     pamphleteersRemaining: state.pamphleteersRemaining,
     pamphleteersUsed: state.pamphleteersUsed,
+    defeatedRoyals: (state.defeatedRoyals ?? []).map(defeat => ({
+      card: defeat.card,
+      outcome: defeat.outcome,
+    })),
     assembly: state.assembly ? {
       kind: state.assembly.kind,
       caller: state.assembly.caller,

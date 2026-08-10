@@ -893,13 +893,51 @@ input {
 }
 .end-inner h2 { font-family: var(--serif-display); font-size: 2.1rem; margin: 6px 0; letter-spacing: .04em; }
 .end-inner .btn { margin-top: 12px; }
-#end-detail { font-family: var(--serif-fell); font-style: italic; color: var(--ink-soft); }
+#end-detail { margin: 8px auto 0; font: italic 1.08rem/1.35 var(--serif-fell); color: var(--ink-soft); }
+.end-reason {
+  margin: 6px auto 0; max-width: 390px; color: #716858;
+  font: .82rem/1.35 Georgia, serif; opacity: .9;
+}
+.end-reason:empty { display: none; }
+.end-stats {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  margin: 18px auto 4px; max-width: 410px;
+}
+.end-stat {
+  min-height: 76px; display: flex; flex-direction: column; justify-content: center;
+  padding: 9px 8px; border: 1.5px solid var(--parchment-deep); border-radius: 10px;
+  background: rgba(248,241,223,.72); box-shadow: 0 3px 10px rgba(60,40,10,.1);
+}
+.end-stat-value { color: var(--crimson); font: 700 1.5rem/1 var(--serif-display); }
+.end-stat-label { margin-top: 6px; color: var(--ink-soft); font-size: .72rem; line-height: 1.15; text-transform: uppercase; letter-spacing: .045em; }
+.end-stat.captured { border-color: var(--royal); }
+.end-stat.guillotined { border-color: var(--crimson); }
+.end-stats.loss .end-stat.defeated { grid-column: 1 / -1; }
+@media (max-height: 640px) {
+  .end-inner { padding: 4px 7px 10px; }
+  .end-emblem { font-size: 2.8rem; line-height: 1; }
+  .end-banner { max-width: 220px; max-height: 92px; object-fit: contain; }
+  .end-inner h2 { margin: 3px 0; font-size: 1.65rem; line-height: 1.15; }
+  #end-detail { margin-top: 5px; font-size: .94rem; line-height: 1.25; }
+  .end-reason { margin-top: 3px; font-size: .72rem; line-height: 1.2; }
+  .end-stats { gap: 6px; margin-top: 9px; }
+  .end-stat { min-height: 56px; padding: 5px 6px; }
+  .end-stat-value { font-size: 1.22rem; }
+  .end-stat-label { margin-top: 4px; font-size: .64rem; }
+  .end-inner .btn { margin-top: 7px; padding-top: 9px; padding-bottom: 9px; font-size: .85rem; }
+}
 
 /* ── overlays ── */
 .overlay {
   position: fixed; inset: 0; z-index: 60;
   background: rgba(12, 10, 22, .85);
   display: flex; align-items: center; justify-content: center;
+}
+.cinematic-stage {
+  --cinematic-card-w: 118px;
+  --focus-card-center-y: 31%;
+  position: relative; width: min(100vw, 720px); height: min(600px, calc(100dvh - 16px));
+  overflow: hidden; isolation: isolate; text-align: center;
 }
 
 /* A carried shared special is laid beneath the royal like any remote play,
@@ -922,9 +960,12 @@ input {
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 /* entrance */
-.entrance-stage { text-align: center; width: min(92vw, 420px); }
-.entrance-card { width: 168px; margin: 0 auto; animation: slam .55s cubic-bezier(.2, 1.6, .4, 1); filter: drop-shadow(0 0 26px rgba(217,188,99,.35)) drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
-.entrance-card svg { width: 100%; height: auto; }
+.entrance-stage {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: 94px 18px 34px;
+}
+.entrance-card { width: var(--cinematic-card-w); aspect-ratio: 240 / 336; margin: 0 auto; line-height: 0; animation: slam .55s cubic-bezier(.2, 1.6, .4, 1); filter: drop-shadow(0 0 26px rgba(217,188,99,.35)) drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
+.entrance-card svg { display: block; width: 100%; height: auto; }
 @keyframes slam {
   0% { transform: scale(2.6) rotate(-9deg); opacity: 0; }
   60% { transform: scale(.95) rotate(1deg); opacity: 1; }
@@ -960,7 +1001,9 @@ input {
 /* the dismiss/skip labels are styled together further down */
 
 /* guillotine */
-.guillotine-stage { text-align: center; }
+.guillotine-stage {
+  width: min(92vw, 420px); height: auto; padding: 0; overflow: visible; text-align: center;
+}
 .g-frame {
   position: relative; width: 200px; height: 280px; margin: 0 auto;
   border-left: 11px solid #5d4326; border-right: 11px solid #5d4326; border-top: 15px solid #5d4326;
@@ -989,8 +1032,7 @@ input {
   100% { transform: translateY(190px); }
 }
 .g-victim {
-  position: absolute; bottom: 8px; left: calc(50% - 59px);
-  width: 118px; height: 165px;
+  position: absolute; bottom: 8px; left: calc(50% - 59px); width: 118px; height: 165px;
 }
 /* The outer .victim-half carries only the z-index so the bottom half (z4, in
    front of the frame) and top half (z1, behind it) stay direct participants of
@@ -1009,19 +1051,10 @@ input {
 .vh-back { transform: rotateX(180deg); }
 .victim-half-top .vh-face { clip-path: polygon(0 0, 100% 0, 100% 45%, 0 57%); }
 .victim-half-bottom .vh-face { clip-path: polygon(0 57%, 100% 45%, 100% 100%, 0 100%); }
-.g-victim::after {
-  content: ''; position: absolute; z-index: 3; left: 1px; right: 1px; top: 51%;
-  height: 2px; border-radius: 2px; opacity: 0; pointer-events: none;
-  background: linear-gradient(90deg, transparent, #fff 18%, #dfe7ee 82%, transparent);
-  transform: rotate(-9.5deg);
+.g-caption {
+  position: relative; z-index: 0; margin-top: 16px;
+  color: var(--paper); font-family: var(--serif-display); font-size: 1.6rem; opacity: 0;
 }
-.g-victim.severed::after { animation: cut-glint .22s ease-out forwards .83s; }
-@keyframes cut-glint {
-  0% { opacity: 0; transform: rotate(-9.5deg) scaleX(.2); }
-  35% { opacity: .95; transform: rotate(-9.5deg) scaleX(1); }
-  100% { opacity: 0; transform: rotate(-9.5deg) scaleX(1.04); }
-}
-.g-caption { color: var(--paper); font-family: var(--serif-display); font-size: 1.6rem; margin-top: 16px; opacity: 0; }
 /* The blade speaks first: the verdict is only pronounced once the card has
    actually been parted (the cut glints at .83s), never over a raised blade. */
 .g-caption.show { animation: fadein .4s ease .92s forwards; }
@@ -1034,10 +1067,9 @@ input {
   /* The royal's resting height drives the layout: the caption hangs from it
      rather than from the bottom of the stage, so the card can never come down
      on top of its own announcement on a tall screen. */
-  --royal-top: 33%;
-  --royal-half: 104px;
-  position: relative; width: min(100vw, 720px); height: min(560px, calc(100dvh - 16px));
-  overflow: hidden; isolation: isolate;
+  --royal-top: var(--focus-card-center-y);
+  --royal-half: 83px;
+  position: relative;
 }
 .capture-stage::before {
   content: ''; position: absolute; inset: 0;
@@ -1047,29 +1079,29 @@ input {
 }
 .capture-burst {
   position: absolute; z-index: 1; left: 50%; top: var(--royal-top);
-  width: 290px; height: 290px; border: 2px solid var(--gold-hi); border-radius: 50%;
+  width: 232px; height: 232px; border: 2px solid var(--gold-hi); border-radius: 50%;
   opacity: 0; transform: translate(-50%, -50%) scale(.38);
   box-shadow: 0 0 0 8px rgba(217,188,99,.08), 0 0 34px rgba(217,188,99,.3);
 }
 .capture-royal {
   position: absolute; z-index: 4; left: 50%; top: var(--royal-top);
-  width: 148px; height: 207px; transform: translate(-50%, -50%);
+  width: var(--cinematic-card-w); aspect-ratio: 240 / 336; transform: translate(-50%, -50%);
   transform-origin: 50% 50%; filter: drop-shadow(0 6px 14px rgba(20,12,6,.45));
 }
 .capture-card, .capture-card svg { display: block; width: 100%; height: auto; }
 .capture-cockade {
-  position: absolute; z-index: 7; top: 48px; right: -27px;
-  width: 60px; height: auto; opacity: 0;
+  position: absolute; z-index: 7; top: 38px; right: -21px;
+  width: 48px; height: auto; opacity: 0;
   filter: drop-shadow(0 3px 3px rgba(12,10,22,.52));
   transform: translate(92px,-54px) rotate(58deg) scale(1.5);
   transform-origin: 50% 37%;
 }
 .capture-pin-glint {
-  position: absolute; z-index: 8; top: 67px; right: -9px;
-  width: 24px; height: 24px; opacity: 0;
+  position: absolute; z-index: 8; top: 53px; right: -7px;
+  width: 20px; height: 20px; opacity: 0;
 }
 .capture-pin-glint::before, .capture-pin-glint::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 24px; height: 2px;
+  content: ''; position: absolute; left: 50%; top: 50%; width: 20px; height: 2px;
   border-radius: 2px; background: var(--paper); box-shadow: 0 0 7px var(--gold-hi);
   transform: translate(-50%,-50%);
 }
@@ -1087,10 +1119,10 @@ input {
 }
 .capture-hand {
   position: absolute; z-index: 2; left: 50%; bottom: 48px;
-  width: 190px; height: 78px; transform: translateX(-50%); opacity: .74;
+  width: 230px; height: 92px; transform: translateX(-50%); opacity: .84;
 }
 .capture-fan {
-  position: absolute; left: 0; right: 0; bottom: 42px; height: 65px;
+  position: absolute; left: 0; right: 0; bottom: 38px; height: 70px;
 }
 .capture-fan-after { opacity: 0; }
 .capture-fan-card {
@@ -1099,12 +1131,11 @@ input {
 }
 .capture-fan-card svg { width: 100%; height: 100%; display: block; }
 .capture-seat-name {
-  position: absolute; left: 0; right: 0; bottom: 0; width: max-content; margin: 0 auto;
-  font-size: .82rem; padding: 3px 12px; border-radius: 999px;
-  background: var(--paper); border: 1.5px solid var(--parchment-deep);
-  color: var(--ink-soft); white-space: nowrap; box-shadow: 0 1px 3px rgba(60,40,10,.2);
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: max-content;
+  padding: 3px 13px; border: 1.5px solid var(--gold); border-radius: 999px;
+  background: var(--paper); color: var(--ink-soft); font-size: .82rem; white-space: nowrap;
 }
-.capture-seat-name b { font-weight: 400; }
+.capture-seat-name b { color: var(--crimson); font: 700 1rem var(--serif-display); }
 /* The beats run in the order the story does, each waiting on the one before it:
    the royal is presented (0—.33s), the cockade is pinned and bursts (.61—1.23s),
    only then is the conversion announced (1.28s), the card travels down into the
@@ -1157,7 +1188,7 @@ input {
 }
 @keyframes capture-caption-out { to { opacity: 0; transform: translateY(7px); } }
 @keyframes capture-hand-receive {
-  0% { opacity: .74; transform: translateX(-50%) scale(1); filter: none; }
+  0% { opacity: .84; transform: translateX(-50%) scale(1); filter: none; }
   50% { opacity: 1; transform: translateX(-50%) scale(1.08); filter: drop-shadow(0 0 12px rgba(217,188,99,.52)); }
   100% { opacity: .84; transform: translateX(-50%) scale(1); filter: none; }
 }
@@ -1170,7 +1201,6 @@ input {
   /* A narrow column wraps the subtitle onto a second line, so the royal sits
      higher and the announcement is set a little smaller to keep clear of the
      hand fan beneath it. */
-  .capture-stage { --royal-top: 30%; }
   .capture-caption strong { font-size: 1.35rem; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1192,10 +1222,6 @@ input {
 
 /* tier advance and Spoils share the same before/after hand-fan grammar as an
    exact capture, but remain separate beats so their rules never blur. */
-.reward-stage {
-  position: relative; width: min(100vw, 720px); height: min(520px, calc(100dvh - 12px));
-  overflow: hidden; isolation: isolate; text-align: center;
-}
 .reward-stage::before {
   content: ''; position: absolute; inset: 0;
   background: radial-gradient(ellipse at 50% 40%, rgba(217,188,99,.2), transparent 42%),
@@ -1203,60 +1229,143 @@ input {
 }
 .tier-liberty {
   position: absolute; z-index: 2; left: 50%; top: 2px; width: min(310px, 66vw); height: 335px;
-  object-fit: contain; transform: translate(-50%, 44px) scale(.92); opacity: 0;
-  filter: drop-shadow(0 8px 13px rgba(12,10,22,.55));
+  object-fit: contain; opacity: 0; transform: translate(-50%, 44px) scale(.92);
+  filter: drop-shadow(0 8px 13px rgba(12,10,22,.55)); pointer-events: none;
 }
-.tier-copy, .spoils-copy {
-  position: absolute; z-index: 4; left: 14px; right: 14px; color: var(--paper);
+.tier-stage {
+  color: var(--paper);
 }
-.tier-copy { top: 306px; opacity: 0; }
-.tier-copy strong, .spoils-copy strong {
-  display: block; font: 500 1.55rem var(--serif-display); text-transform: uppercase;
+.tier-phase {
+  position: absolute; z-index: 3; inset: 0; opacity: 0;
 }
-.tier-copy span, .spoils-copy span {
-  color: var(--gold-hi); font: italic 1rem var(--serif-fell);
+.tier-stage.playing .tier-phase { animation: tier-phase-in .38s ease-out both; }
+.tier-phase-layout { position: absolute; inset: 0; }
+.tier-phase-visual {
+  position: absolute; z-index: 3; left: 14px; right: 14px; top: 10px; height: 276px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tier-phase-copy {
+  position: absolute; z-index: 4; left: 14px; right: 14px; top: 306px;
+  color: var(--paper); text-align: center;
+}
+.tier-kicker {
+  display: block; margin-bottom: 2px; color: var(--gold-hi);
+  font: italic 1rem var(--serif-fell); letter-spacing: 0; text-transform: none;
+}
+.tier-kicker:empty { display: none; }
+.tier-stage.phase-advance.playing .tier-liberty,
+.tier-stage.phase-finale.playing .tier-liberty { animation: tier-liberty-rise .72s cubic-bezier(.2,.9,.3,1) both; }
+.tier-royals {
+  display: flex; align-items: center; justify-content: center; gap: clamp(7px, 2.2vw, 13px);
+  margin: 0 auto;
+}
+.tier-royal {
+  position: relative; flex: 0 0 auto; width: clamp(54px, 12vw, 80px); aspect-ratio: 240 / 336;
+  filter: drop-shadow(0 4px 7px rgba(8,8,18,.48));
+}
+.tier-royal-card, .tier-royal-card svg,
+.tier-royal-split, .tier-royal-half, .tier-royal-half svg {
+  display: block; width: 100%; height: 100%;
+}
+.tier-royal-split, .tier-royal-half { position: absolute; inset: 0; }
+.tier-royal-top { clip-path: polygon(0 0,100% 0,100% 45%,0 57%); transform: translate(-2px,-2px) rotate(-1.2deg); }
+.tier-royal-bottom { clip-path: polygon(0 57%,100% 45%,100% 100%,0 100%); transform: translate(2px,3px) rotate(1.2deg); }
+.tier-cockade {
+  position: absolute; z-index: 5; right: -11px; top: 17%; width: 32px; height: auto;
+  filter: drop-shadow(0 2px 3px rgba(12,10,22,.62));
+}
+.tier-flip-card {
+  width: 118px; aspect-ratio: 240/336; perspective: 900px;
+}
+.tier-flip-inner {
+  position: relative; width: 100%; height: 100%; transform-style: preserve-3d;
+}
+.tier-stage.playing .tier-flip-inner {
+  animation: tier-card-flip .86s cubic-bezier(.25,.75,.28,1) .35s both;
+}
+.tier-flip-face {
+  position: absolute; inset: 0; overflow: hidden; border-radius: 7px;
+  backface-visibility: hidden; filter: drop-shadow(0 7px 13px rgba(12,10,22,.52));
+}
+.tier-flip-face svg { display: block; width: 100%; height: 100%; }
+.tier-flip-front { transform: rotateY(180deg); }
+.tier-lay-low-face {
+  box-sizing: border-box; width: 100%; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; border: 5px double var(--royal);
+  border-radius: 7px; background: var(--paper); color: var(--royal);
+}
+.tier-lay-low-face b { font: 700 2.5rem/1 var(--serif-display); }
+.tier-lay-low-face span { font: 700 .92rem var(--serif-display); text-transform: uppercase; }
+.tier-lay-low-face small { font: italic .72rem var(--serif-fell); }
+.tier-phase-copy strong {
+  display: block; font: 500 1.55rem/1.08 var(--serif-display); text-transform: uppercase;
+}
+.tier-phase-copy small {
+  display: block; margin-top: 4px; color: var(--gold-hi); font: italic 1rem var(--serif-fell);
+}
+@keyframes tier-phase-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes tier-liberty-rise {
+  from { opacity: 0; transform: translate(-50%, 44px) scale(.92); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes tier-card-flip {
+  from { transform: rotateY(0); }
+  to { transform: rotateY(180deg); }
 }
 .reward-hand {
   position: absolute; z-index: 3; left: 50%; bottom: 48px; width: 230px; height: 92px;
-  transform: translateX(-50%); opacity: .8;
+  transform: translateX(-50%); opacity: .84;
 }
 .reward-fan { position: absolute; left: 0; right: 0; bottom: 38px; height: 70px; }
-.reward-fan-after { opacity: 0; }
+.reward-fan-expanded, .reward-fan-after { opacity: 0; }
 .reward-fan-card {
   position: absolute; bottom: 0; width: 46px; aspect-ratio: 240/336;
   transform-origin: 50% 90%; filter: drop-shadow(0 3px 5px rgba(12,10,22,.35));
 }
 .reward-fan-card svg { display: block; width: 100%; height: 100%; }
+.reward-fan-slot {
+  box-sizing: border-box; border: 2px dotted rgba(217,188,99,.82); border-radius: 4px;
+  background: rgba(217,188,99,.045); filter: drop-shadow(0 2px 3px rgba(12,10,22,.22));
+}
 .hand-limit, .reward-hand-label {
   position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: max-content;
   padding: 3px 13px; border: 1.5px solid var(--gold); border-radius: 999px;
   background: var(--paper); color: var(--ink-soft); font-size: .82rem;
 }
-.hand-limit b { color: var(--crimson); font: 700 1rem var(--serif-display); }
+.hand-limit b, .reward-hand-label b { color: var(--crimson); font: 700 1rem var(--serif-display); }
 .hand-limit i { margin: 0 7px; color: var(--gold); font-style: normal; }
-.tier-stage.playing .tier-liberty { animation: tier-liberty-rise .72s cubic-bezier(.2,.9,.3,1) both; }
-.tier-stage.playing .tier-copy { animation: capture-caption-in .35s ease-out .35s both; }
-.tier-stage.playing .reward-hand { animation: capture-hand-receive .46s ease-out 1.12s both; }
-.tier-stage.playing .reward-fan-before { animation: capture-fan-out .2s ease-in 1.02s forwards; }
-.tier-stage.playing .reward-fan-after { animation: capture-fan-in .5s cubic-bezier(.22,.78,.32,1) 1.02s both; }
-@keyframes tier-liberty-rise {
-  from { opacity: 0; transform: translate(-50%, 44px) scale(.92); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
-}
 .spoils-card {
-  position: absolute; z-index: 5; left: 50%; top: 38%; width: 118px; aspect-ratio: 240/336;
+  position: absolute; z-index: 5; left: 50%; top: var(--focus-card-center-y); width: var(--cinematic-card-w); aspect-ratio: 240/336;
   opacity: 0; transform: translate(-50%,-50%) rotate(-5deg);
   filter: drop-shadow(0 7px 13px rgba(12,10,22,.55));
 }
 .spoils-card svg { display: block; width: 100%; height: 100%; }
-.spoils-copy { top: 58px; opacity: 0; }
+.spoils-copy {
+  position: absolute; z-index: 4; left: 14px; right: 14px; top: 18px;
+  color: var(--paper); opacity: 0;
+}
+.spoils-copy strong { display: block; font: 500 1.55rem var(--serif-display); text-transform: uppercase; }
+.spoils-copy span { color: var(--gold-hi); font: italic 1rem var(--serif-fell); }
 /* Same rule as the capture: the mystery card reaches the fan (1.95s) before the
    fan gains a card and the count moves. */
-.spoils-stage.playing .spoils-card { animation: spoil-card-trip 1.95s cubic-bezier(.25,.8,.25,1) both; }
-.spoils-stage.playing .spoils-copy { animation: capture-caption-in .32s ease-out .18s both; }
-.spoils-stage.playing .reward-hand { animation: capture-hand-receive .42s ease-out 1.9s both; }
+.spoils-stage.playing .spoils-card,
+.tier-stage.phase-hand-size.playing .spoils-card { animation: spoil-card-trip 1.95s cubic-bezier(.25,.8,.25,1) both; }
+.spoils-stage.playing .spoils-copy,
+.tier-stage.phase-hand-size.playing .spoils-copy { animation: capture-caption-in .32s ease-out .18s both; }
+.spoils-stage.playing .reward-hand,
+.tier-stage.phase-hand-size.playing .reward-hand { animation: capture-hand-receive .42s ease-out 1.9s both; }
 .spoils-stage.playing .reward-fan-before { animation: capture-fan-out .18s ease-in 1.86s forwards; }
 .spoils-stage.playing .reward-fan-after { animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 1.88s both; }
+.tier-stage.phase-hand-size.playing .reward-fan-before { animation: capture-fan-out .18s ease-in .68s forwards; }
+.tier-stage.phase-hand-size.playing .reward-fan-expanded {
+  animation: capture-fan-in .36s cubic-bezier(.22,.78,.32,1) .64s both,
+    capture-fan-out .18s ease-in 1.86s forwards;
+}
+.tier-stage.phase-hand-size.playing .reward-fan-after { animation: capture-fan-in .48s cubic-bezier(.22,.78,.32,1) 1.88s both; }
+.tier-stage.phase-hand-size.playing .tier-phase { opacity: 1; animation: none; }
 @keyframes spoil-card-trip {
   0% { opacity: 0; transform: translate(-50%,-85%) rotate(-7deg) scale(.9); }
   15% { opacity: 1; transform: translate(-50%,-50%) rotate(-3deg) scale(1); }
@@ -1264,21 +1373,30 @@ input {
   100% { opacity: 0; transform: translate(-50%,165px) rotate(7deg) scale(.34); }
 }
 @media (max-width: 420px) {
+  .tier-phase-visual { top: 0; height: 266px; }
+  .tier-phase-copy { top: 286px; }
   .tier-liberty { width: min(285px, 72vw); height: 310px; }
-  .tier-copy { top: 286px; }
+  .tier-royals { gap: 7px; }
+  .tier-royal { width: clamp(46px, 15vw, 57px); }
+  .tier-cockade { right: -8px; width: 25px; }
+  .tier-phase-copy strong { font-size: 1.25rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .special-play-card.playing { animation: fadein .01ms both; }
+  .tier-stage.playing .tier-phase,
   .tier-stage.playing .tier-liberty,
-  .tier-stage.playing .tier-copy,
-  .tier-stage.playing .reward-hand,
-  .tier-stage.playing .reward-fan-before,
-  .tier-stage.playing .reward-fan-after,
+  .tier-stage.playing .tier-flip-inner,
   .spoils-stage.playing .spoils-card,
   .spoils-stage.playing .spoils-copy,
   .spoils-stage.playing .reward-hand,
   .spoils-stage.playing .reward-fan-before,
-  .spoils-stage.playing .reward-fan-after {
+  .spoils-stage.playing .reward-fan-after,
+  .tier-stage.phase-hand-size.playing .spoils-card,
+  .tier-stage.phase-hand-size.playing .spoils-copy,
+  .tier-stage.phase-hand-size.playing .reward-hand,
+  .tier-stage.phase-hand-size.playing .reward-fan-before,
+  .tier-stage.phase-hand-size.playing .reward-fan-expanded,
+  .tier-stage.phase-hand-size.playing .reward-fan-after {
     animation-duration: .01ms; animation-delay: 0ms;
   }
 }
@@ -1777,8 +1895,8 @@ body.walkthrough-open { overflow: hidden; }
   .help-example-row p, .help-exact p { text-align: left; }
   .help-exact-cards { min-width: 0; }
   .help-decks { grid-template-columns: 1fr; }
-  .entrance-stage { max-height: calc(100dvh - 20px); overflow-y: auto; padding: 8px 0; }
-  .entrance-card { width: 142px; }
+  .entrance-stage { max-height: calc(100dvh - 20px); overflow-y: auto; padding: 94px 12px 28px; }
+  .entrance-card { width: var(--cinematic-card-w); }
   .speech { min-height: 50px; margin: 12px auto 8px; padding: 11px 14px; font-size: 1rem; }
   .entrance-facts { font-size: .84rem; line-height: 1.3; }
   .entrance-facts > * { margin-top: 5px; }

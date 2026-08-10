@@ -2,7 +2,7 @@
 // views over Socket.IO) and solo (the same engine running locally).
 import * as engine from '/shared/engine.js';
 import { enemyMeta, SUIT_META, EXCLAIM } from '/shared/theme.js';
-import { cardSVG, cardBackSVG } from '/js/cards.js';
+import { cardSVG, cardBackSVG, royalCockadeSVG } from '/js/cards.js';
 import {
   showEntrance, showRoyalDefeat, riffleDeck, flyCards, animatePlayedCards,
   armSkip, disarmSkip, skipNow, skipArmed, onSkippableChange,
@@ -10,6 +10,7 @@ import {
 import * as help from '/js/help.js';
 import * as audio from '/js/audio.js';
 import { SETTINGS, loadRules, saveRules, settingHelp, summarize, rulebookRuns } from '/js/constitution.js';
+import { resultScreenContent } from '/js/results.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -164,7 +165,10 @@ function queueSoloOutcome(v) {
     playerCount: 1,
     durationSeconds: Math.max(0, Math.round((Date.now() - soloStartedAt) / 1000)),
     actionCount: v.actionSeq,
-    royalsDefeated: v.phase === 'won' ? 12 : Math.max(0, 12 - v.castleCount - (v.enemy ? 1 : 0)),
+    royalsDefeated: v.defeatedRoyals?.length
+      ?? (v.phase === 'won' ? 12 : Math.max(0, 12 - v.castleCount - (v.enemy ? 1 : 0))),
+    royalsCaptured: v.defeatedRoyals?.filter(defeat => defeat.outcome === 'captured').length ?? 0,
+    royalsGuillotined: v.defeatedRoyals?.filter(defeat => defeat.outcome === 'guillotined').length ?? 0,
     tierReached: v.phase === 'won' ? 'K' : (v.enemy?.card?.r ?? null),
     regroupsUsed: v.regroupsUsed,
     pamphleteersUsed: v.pamphleteersUsed,
@@ -342,17 +346,86 @@ function net() {
 }
 
 let rejoinInFlight = false;
+let resumeCheckSeq = 0;
+let verifiedResumeKey = '';
+
+function seatKey(seat) {
+  return seat?.code && seat?.token ? `${seat.code}:${seat.token}` : '';
+}
+
+function sameSeat(a, b) {
+  return !!seatKey(a) && seatKey(a) === seatKey(b);
+}
+
+// Remove only the stale seat that was checked. Another tab may have written a
+// newer room to localStorage while the request was in flight.
+function forgetSeat(attempted) {
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      if (sameSeat(storedSession(store), attempted)) store.removeItem('r1789_session');
+    } catch { /* Storage may be unavailable; hiding the button still works. */ }
+  }
+  if (sameSeat(session, attempted)) session = null;
+}
+
+function exposeResumeButton(btn, resumable) {
+  session = resumable;
+  btn.innerHTML = `Rejoin salon ${esc(resumable.code)} <small>as ${esc(resumable.name ?? 'Citoyen')}</small>`;
+  btn.hidden = false;
+  btn.onclick = () => tryRejoin();
+}
+
+async function checkResumeAvailability(resumable, checkSeq) {
+  const btn = $('#btn-resume');
+  const key = seatKey(resumable);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch('/api/rooms/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: resumable.code, token: resumable.token }),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error('availability check failed');
+    const availability = await response.json();
+    if (checkSeq !== resumeCheckSeq || seatKey(storedSession(localStorage)) !== key) return;
+    if (availability.open) {
+      verifiedResumeKey = key;
+      exposeResumeButton(btn, resumable);
+    } else {
+      verifiedResumeKey = '';
+      forgetSeat(resumable);
+      btn.hidden = true;
+      btn.onclick = null;
+    }
+  } catch {
+    // A network failure says nothing about whether the room survives. Keep a
+    // recovery path instead of deleting a potentially valid seat.
+    if (checkSeq === resumeCheckSeq && seatKey(storedSession(localStorage)) === key) {
+      exposeResumeButton(btn, resumable);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function showResumeButton() {
   const btn = $('#btn-resume');
   const resumable = storedSession(localStorage);
-  if (resumable?.code) {
-    session = resumable;
-    btn.innerHTML = `Rejoin salon ${esc(resumable.code)} <small>as ${esc(resumable.name ?? 'Citoyen')}</small>`;
-    btn.hidden = false;
-    btn.onclick = () => tryRejoin();
+  const checkSeq = ++resumeCheckSeq;
+  const key = seatKey(resumable);
+  if (key) {
+    // A previously verified button stays steady during later rechecks. A new
+    // or unverified seat remains hidden until the server confirms it.
+    if (verifiedResumeKey === key) exposeResumeButton(btn, resumable);
+    else { btn.hidden = true; btn.onclick = null; }
+    void checkResumeAvailability(resumable, checkSeq);
   } else {
+    verifiedResumeKey = '';
     btn.hidden = true;
+    btn.onclick = null;
   }
 
   const soloBtn = $('#btn-resume-solo');
@@ -798,7 +871,7 @@ function routeView(v) {
 // `after` step puts it there.
 //
 //   killing combo → In Play · suit powers · In Play → La Prison ·
-//   the judgment (guillotine or capture) · the new tier · the Spoils
+//   the judgment (guillotine or capture) · the Spoils · the new tier
 //
 function animateRoyalDefeat(v, ev, prevHandCount, after) {
   const arrivals = defeatArrivals(v, prevHandCount, ev);
@@ -818,10 +891,12 @@ function animateRoyalDefeat(v, ev, prevHandCount, after) {
           // while Spoils and tier rewards wait for their own beats.
           renderHand(v, arrivals.rewards);
           renderSeats(v, defeatSeatHolds(v, ev, false));
-          animateTierAdvance(v, ev, () => {
-            renderHand(v, arrivals.spoils);
-            renderSeats(v, ev.spoilsByPlayer);
-            animateSpoils(v, ev, after);
+          animateSpoils(v, ev, () => {
+            animateTierAdvance(v, ev, () => {
+              renderHand(v);
+              renderSeats(v);
+              after?.();
+            });
           });
         });
       });
@@ -972,35 +1047,53 @@ function defeatSeatHolds(v, event, includeCapture) {
   return holds;
 }
 
-// Spoils are a separate reward beat, after the royal's judgment has cleared. Hold
-// this viewer's actual spoil cards out of their hand until their own draw
-// finishes; other citoyens' spoils are represented at their seats.
+// Spoils are the first reward beat after judgment. If a tier card follows,
+// keep it held back so the hand can remain visually continuous: Spoils lands,
+// then the expansion opens its new slot and receives the transition card.
 function animateSpoils(v, event, done) {
   const drawn = v.you ? (event?.spoilsByPlayer?.[v.you.index] ?? 0) : 0;
+  const transitionHeld = v.you ? (event?.transition?.byPlayer?.[v.you.index] ?? 0) : 0;
+  const transitionHolds = event?.transition?.byPlayer ?? [];
   if (drawn <= 0) {
-    renderHand(v);
-    renderSeats(v);
+    renderHand(v, transitionHeld);
+    renderSeats(v, transitionHolds);
     done?.();
     return;
   }
   audio.sfx('draw');
-  const afterCount = v.you.hand.length;
+  const afterCount = Math.max(0, v.you.hand.length - transitionHeld);
   const beforeCount = Math.max(0, afterCount - drawn);
-  showSpoilsReward(v.players[v.you.index]?.name ?? 'Citoyen', beforeCount, afterCount, drawn, () => {
-    renderHand(v);
-    renderSeats(v);
-    done?.();
-  });
+  showSpoilsReward(
+    v.players[v.you.index]?.name ?? 'Citoyen',
+    beforeCount, afterCount, drawn,
+    () => {
+      renderHand(v, transitionHeld);
+      renderSeats(v, transitionHolds);
+      done?.();
+    },
+  );
 }
 
-// The increased hand limit is its own victory beat. Any transition cards are
-// revealed by releasing the held-back cards only after the new slot appears;
-// Spoils remain hidden for the following overlay.
+// After Spoils, the increased hand limit opens a visible new slot and the held
+// transition card fills it.
 function animateTierAdvance(v, event, done) {
   const transition = event?.transition;
-  if (!transition) { done?.(); return; }
+  if (!transition) {
+    if (v.phase === 'won') showFinalTierComplete(v.defeatedRoyals ?? [], done);
+    else done?.();
+    return;
+  }
   audio.sfx('draw');
-  showTierAdvance(transition, done);
+  const playerIndex = v.you?.index;
+  const tierDrawn = playerIndex == null ? 0 : (transition.byPlayer?.[playerIndex] ?? 0);
+  const afterCount = playerIndex == null ? 0 : v.you.hand.length;
+  const recipient = tierDrawn > 0 ? {
+    name: v.players[playerIndex]?.name ?? 'Citoyen',
+    drawn: tierDrawn,
+    beforeCount: Math.max(0, afterCount - tierDrawn),
+    afterCount,
+  } : null;
+  showTierAdvance(transition, v.defeatedRoyals ?? [], recipient, done);
 }
 
 // A shared special is not dealt from a hand or placed into a pile. It appears
@@ -1062,6 +1155,26 @@ function rewardFan(count) {
   return html;
 }
 
+// A tier hand shows capacity as well as cards held. Empty positions stay in
+// the fan as dotted silhouettes, so the extra slot is visible even when the
+// citoyen has not yet filled it.
+function rewardCapacityFan(count, limit) {
+  const slots = Math.max(0, limit);
+  if (!slots) return '';
+  const held = Math.max(0, Math.min(count, slots));
+  const fanW = 230, cardW = 46;
+  const step = slots === 1 ? 0 : Math.min(cardW * .66, (fanW - cardW) / (slots - 1));
+  const x0 = (fanW - (cardW + step * (slots - 1))) / 2;
+  let html = '';
+  for (let i = 0; i < slots; i++) {
+    const rot = slots === 1 ? 0 : -10 + 20 * i / (slots - 1);
+    const missing = i >= held;
+    html += `<span class="reward-fan-card${missing ? ' reward-fan-slot' : ''}" style="left:${(x0 + i * step).toFixed(1)}px;`
+      + `transform:rotate(${rot.toFixed(1)}deg)">${missing ? '' : cardBackSVG()}</span>`;
+  }
+  return html;
+}
+
 const rewardTimers = new Map();
 const rewardCallbacks = new Map();
 const rewardSkips = new Map();
@@ -1098,22 +1211,205 @@ function playReward(id, duration, done) {
   rewardTimers.set(id, setTimeout(() => finishReward(id), duration));
 }
 
-function showTierAdvance(transition, done) {
+function royalOutcomeCard(defeat) {
+  const captured = defeat.outcome === 'captured';
+  const meta = enemyMeta(defeat.card);
+  const card = cardSVG(defeat.card);
+  return `<div class="tier-royal ${captured ? 'captured' : 'guillotined'}" role="img" `
+    + `aria-label="${meta.name}, ${captured ? 'won over' : 'guillotined'}">`
+    + (captured
+      ? `<div class="tier-royal-card">${card}</div>${royalCockadeSVG('tier-cockade')}`
+      : `<div class="tier-royal-split" aria-hidden="true">`
+        + `<span class="tier-royal-half tier-royal-top">${card}</span>`
+        + `<span class="tier-royal-half tier-royal-bottom">${card}</span></div>`)
+    + `</div>`;
+}
+
+function tierOutcomePhase(tierName, completed) {
+  const captured = completed.filter(defeat => defeat.outcome === 'captured').length;
+  const guillotined = completed.filter(defeat => defeat.outcome === 'guillotined').length;
+  return {
+    // The entrance takes a fraction of a second; the remainder leaves the
+    // completed outcome fully readable for a little over three seconds.
+    kind: 'defeated', duration: 3500,
+    html: tierPhaseLayout(
+      `<div class="tier-royals" aria-label="Completed tier royal outcomes">${completed.map(royalOutcomeCard).join('')}</div>`,
+      'Tier complete', `${tierName} defeated`, `${captured} won over · ${guillotined} guillotined`,
+    ),
+  };
+}
+
+function tierPhaseLayout(visual, kicker, title, detail) {
+  return `<div class="tier-phase-layout">`
+    + `<div class="tier-phase-visual" aria-hidden="true">${visual}</div>`
+    + `<div class="tier-phase-copy"><span class="tier-kicker">${kicker}</span>`
+      + `<strong>${title}</strong><small>${detail}</small></div>`
+    + `</div>`;
+}
+
+function tierFlipPhase(kind, title, detail, front) {
+  return {
+    // Hold the revealed face for three seconds after the turn completes.
+    kind, duration: 4400,
+    html: tierPhaseLayout(
+      `<div class="tier-flip-card"><div class="tier-flip-inner">`
+        + `<div class="tier-flip-face tier-flip-back">${cardBackSVG()}</div>`
+        + `<div class="tier-flip-face tier-flip-front">${front}</div>`
+      + `</div></div>`,
+      'Tier benefit', title, detail,
+    ),
+  };
+}
+
+let tierSequenceTimer = 0;
+let tierPhaseEffectTimers = [];
+let tierSequenceIndex = -1;
+let tierSequencePhases = [];
+let tierSequenceDone = null;
+
+function finishTierSequence() {
+  const overlay = $('#tier-overlay');
+  if (!overlay || overlay.hidden) return;
+  clearTimeout(tierSequenceTimer);
+  tierPhaseEffectTimers.forEach(clearTimeout);
+  tierPhaseEffectTimers = [];
+  disarmSkip(advanceTierSequence);
+  $('#tier-stage').className = 'tier-stage reward-stage cinematic-stage';
+  overlay.hidden = true;
+  const done = tierSequenceDone;
+  tierSequenceDone = null;
+  tierSequencePhases = [];
+  tierSequenceIndex = -1;
+  done?.();
+}
+
+function advanceTierSequence() {
+  clearTimeout(tierSequenceTimer);
+  tierPhaseEffectTimers.forEach(clearTimeout);
+  tierPhaseEffectTimers = [];
+  disarmSkip(advanceTierSequence);
+  tierSequenceIndex++;
+  if (tierSequenceIndex >= tierSequencePhases.length) {
+    finishTierSequence();
+    return;
+  }
+  const phase = tierSequencePhases[tierSequenceIndex];
+  const stage = $('#tier-stage');
+  stage.className = `tier-stage reward-stage cinematic-stage phase-${phase.kind}`;
+  $('#tier-phase').innerHTML = phase.html;
+  $('#tier-overlay').hidden = false;
+  void stage.offsetWidth;
+  stage.classList.add('playing');
+  const effectTimers = phase.onStart?.(stage) ?? [];
+  tierPhaseEffectTimers = Array.isArray(effectTimers) ? effectTimers : [effectTimers];
+  armSkip(advanceTierSequence);
+  tierSequenceTimer = setTimeout(advanceTierSequence, phase.duration);
+}
+
+function playTierSequence(phases, done) {
+  clearTimeout(tierSequenceTimer);
+  disarmSkip(advanceTierSequence);
+  tierSequencePhases = phases;
+  tierSequenceDone = done;
+  tierSequenceIndex = -1;
+  advanceTierSequence();
+}
+
+function handSizeIncreasePhase(transition, toName, recipient) {
+  const received = recipient?.drawn ?? 0;
+  const beforeCount = received > 0 ? recipient.beforeCount : 0;
+  const afterCount = received > 0 ? recipient.afterCount : Math.min(transition.drawn, 6);
+  const beforeLimit = transition.handSizeBefore;
+  const afterLimit = transition.handSizeAfter;
+  const label = received > 0 ? recipient.name : 'Your hand';
+  return {
+    // The heading finishes fading in at .5s, then remains fully readable for
+    // three seconds. Like every tier phase, the player can still skip it.
+    kind: 'hand-size', duration: 3500,
+    html: (received > 0
+      ? `<div class="spoils-card tier-hand-size-card" aria-hidden="true">${cardBackSVG()}</div>`
+      : '')
+      + `<div class="spoils-copy tier-hand-size-copy"><strong>Hand Size Increase</strong>`
+        + `<span>For reaching ${toName} · ${beforeLimit} → ${afterLimit} cards</span></div>`
+      + `<div class="reward-hand tier-hand-size-hand" aria-hidden="true">`
+        + `<div class="reward-fan reward-fan-before">${rewardFan(beforeCount)}</div>`
+        + `<div class="reward-fan reward-fan-expanded">${rewardCapacityFan(beforeCount, afterLimit)}</div>`
+        + `<div class="reward-fan reward-fan-after">${rewardCapacityFan(afterCount, afterLimit)}</div>`
+        + `<div class="reward-hand-label"><span>${label}</span> · `
+          + `<b class="tier-hand-count">${beforeCount}</b> / <b class="tier-hand-limit">${beforeLimit}</b></div>`
+      + `</div>`,
+    onStart: stage => [
+      setTimeout(() => {
+        const limit = stage.querySelector('.tier-hand-limit');
+        if (limit) limit.textContent = afterLimit;
+      }, 760),
+      setTimeout(() => {
+        const count = stage.querySelector('.tier-hand-count');
+        if (count) count.textContent = afterCount;
+      }, 1980),
+    ],
+  };
+}
+
+function showTierAdvance(transition, royalHistory, recipient, done) {
   const before = transition.handSizeBefore;
   const after = transition.handSizeAfter;
-  $('#tier-name').textContent = transition.to === 'Q' ? 'The Queens' : 'The Kings';
-  $('#tier-limit-before').textContent = before;
-  $('#tier-limit-after').textContent = after;
-  $('#tier-fan-before').innerHTML = rewardFan(before);
-  $('#tier-fan-after').innerHTML = rewardFan(after);
-  // Let the new tier land as a celebration rather than a transition card: the
-  // motion completes early, then the final hand-limit state holds for reading.
-  playReward('tier', 4500, done);
+  const fromName = transition.from === 'J' ? 'Officers' : 'Queens';
+  const toName = transition.to === 'Q' ? 'The Queens' : 'The Kings';
+  const completed = transition.completedRoyals?.length
+    ? transition.completedRoyals
+    : royalHistory.filter(defeat => defeat.card.r === transition.from);
+  const phases = [{
+    kind: 'advance', duration: 3400,
+    html: tierPhaseLayout('', '', 'The Revolution Advances!', toName),
+  }, tierOutcomePhase(fromName, completed)];
+
+  if (transition.regroupsGained > 0) {
+    phases.push(tierFlipPhase(
+      'retreat', 'La Retraite renewed',
+      `${transition.regroupsGained} restored · ${transition.regroupsAfter ?? transition.regroupsGained} available`,
+      cardSVG({ r: 'R' }),
+    ));
+  }
+  if (transition.layLowsRestored > 0) {
+    phases.push(tierFlipPhase(
+      'lay-low', 'Lay Low refreshed',
+      transition.layLowsRestored === 1
+        ? '1 citoyen may lie low again'
+        : `${transition.layLowsRestored} citoyens may lie low again`,
+      `<div class="tier-lay-low-face"><b>↺</b><span>Lay Low</span><small>Refreshed</small></div>`,
+    ));
+  }
+  if (after > before) {
+    phases.push(handSizeIncreasePhase(transition, toName, recipient));
+  }
+  playTierSequence(phases, done);
+}
+
+function showFinalTierComplete(royalHistory, done) {
+  const completed = royalHistory.filter(defeat => defeat.card.r === 'K');
+  playTierSequence([
+    tierOutcomePhase('Kings', completed),
+    {
+      kind: 'finale', duration: 3600,
+      html: tierPhaseLayout(
+        '', 'The Ancien Régime has fallen', 'The Republic is born', 'Vive la République!',
+      ),
+    },
+  ], done);
 }
 
 function showSpoilsReward(playerName, beforeCount, afterCount, drawn, done) {
   $('#spoils-player-name').textContent = playerName;
   $('#spoils-hand-count').textContent = beforeCount;
+  // Remove the capacity suffix if a running local preview still has the
+  // immediately previous cached shell. Capacity belongs only to expansion.
+  const staleLimit = $('#spoils-hand-limit');
+  if (staleLimit) {
+    const separator = staleLimit.previousSibling;
+    if (separator?.nodeType === Node.TEXT_NODE && separator.textContent.includes('/')) separator.remove();
+    staleLimit.remove();
+  }
   $('#spoils-sub').textContent = drawn === 1
     ? 'A mystery card joins your hand'
     : `${drawn} mystery cards join your hand`;
@@ -1124,7 +1420,7 @@ function showSpoilsReward(playerName, beforeCount, afterCount, drawn, done) {
   setTimeout(() => {
     if (!$('#spoils-overlay').hidden) $('#spoils-hand-count').textContent = afterCount;
   }, 1980);
-  playReward('spoils', 2850, done);
+  playReward('spoils', 3500, done);
 }
 
 // A just-played combo: the cards rise from the hand (acting player) or fade
@@ -1896,15 +2192,21 @@ function playCutscene(name, next) {
 // ── end screen ──────────────────────────────────────────────────────────────
 function renderEnd(v) {
   show('end');
-  const won = v.phase === 'won';
+  const summary = resultScreenContent(v);
+  const won = summary.won;
   audio.sfx(won ? 'win' : 'lose');
   $('#end-emblem').innerHTML = won
     ? `<img class="end-banner" src="/img/specials/victory-banner.png" alt="Citoyens triumphant on the barricade">`
     : '⚰️';
   $('#end-title').textContent = won ? EXCLAIM.win : EXCLAIM.lose;
-  $('#end-detail').textContent = won
-    ? 'The twelve royals have fallen. The Republic is born.'
-    : (v.result?.reason ?? '');
+  $('#end-detail').textContent = summary.message;
+  $('#end-reason').textContent = summary.reason;
+  $('#end-stats').className = `end-stats ${won ? 'win' : 'loss'}`;
+  $('#end-stats').innerHTML = summary.stats.map(stat =>
+    `<div class="end-stat ${stat.kind}">`
+      + `<span class="end-stat-value">${stat.value}${stat.suffix ?? ''}</span>`
+      + `<span class="end-stat-label">${stat.label}</span>`
+    + `</div>`).join('');
   // A rematch carries a fresh Constitution, so only the host may call one.
   const mayRematch = v.solo || v.youAreHost;
   $('#btn-rematch').hidden = !mayRematch;
@@ -2327,21 +2629,93 @@ async function checkForUpdate() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForUpdate();
+  if (document.visibilityState === 'visible') {
+    checkForUpdate();
+    if (!$('#screen-home').hidden) showResumeButton();
+  }
 });
 checkForUpdate();
 
 // ── boot ────────────────────────────────────────────────────────────────────
-// Dev shortcuts: /?win jumps straight to the victory cutscene and end screen,
-// /?begin plays the game-start cutscene on its own — both skip an actual game
-// so either sequence can be previewed on demand. Neither touches real game
-// state; /?win just fakes the view shape renderEnd reads.
+// Dev shortcuts preview the cinematic states without changing a real game.
 const debugParams = new URLSearchParams(location.search);
+const debugRoyalDefeats = ['J', 'Q', 'K'].flatMap((rank, rankIndex) =>
+  ['S', 'H', 'D', 'C'].map((suit, suitIndex) => ({
+    card: { r: rank, s: suit },
+    outcome: (rankIndex + suitIndex) % 3 === 0 ? 'captured' : 'guillotined',
+  })));
 if (debugParams.has('win')) {
   mode = 'solo';
-  const debugView = { phase: 'won', solo: true, result: null };
+  const debugView = {
+    phase: 'won', solo: true, result: null, defeatedRoyals: debugRoyalDefeats,
+    pamphleteersUsed: 2, regroupsUsed: 1,
+  };
   view = debugView;
   playCutscene('victory', () => renderEnd(debugView));
+} else if (debugParams.has('loss')) {
+  mode = 'solo';
+  const debugView = {
+    phase: 'lost', solo: true,
+    result: { reason: 'Louis XV struck for 20. The Revolution is crushed.' },
+    defeatedRoyals: debugRoyalDefeats.slice(0, 9), pamphleteersUsed: 2, regroupsUsed: 1,
+  };
+  view = debugView;
+  renderEnd(debugView);
+} else if (debugParams.has('draw-flow')) {
+  show('game');
+  showRoyalDefeat({ r: 'J', s: 'H' }, true, {
+    name: 'Danton', handCount: 3, isYou: true,
+  }, () => showSpoilsReward('Danton', 3, 4, 1, () => playTierSequence([
+    handSizeIncreasePhase({
+      to: 'Q', handSizeBefore: 5, handSizeAfter: 6,
+      drawn: 1, byPlayer: [1],
+    }, 'The Queens', {
+      name: 'Danton', drawn: 1, beforeCount: 4, afterCount: 5,
+    }),
+  ], () => {})));
+} else if (debugParams.has('hand-size') || debugParams.has('tier-bonus')) {
+  show('game');
+  const kingsPreview = debugParams.get('hand-size') === 'kings';
+  playTierSequence([handSizeIncreasePhase({
+    to: kingsPreview ? 'K' : 'Q',
+    handSizeBefore: kingsPreview ? 6 : 5,
+    handSizeAfter: kingsPreview ? 7 : 6,
+    drawn: 3, byPlayer: [1, 1, 1],
+  }, kingsPreview ? 'The Kings' : 'The Queens', {
+    name: 'Danton', drawn: 1,
+    beforeCount: kingsPreview ? 5 : 4,
+    afterCount: kingsPreview ? 6 : 5,
+  })], () => {});
+} else if (debugParams.has('tier')) {
+  show('game');
+  if (debugParams.get('tier') === 'final') {
+    showFinalTierComplete(debugRoyalDefeats, () => {});
+  } else {
+    const completedRoyals = debugRoyalDefeats.slice(0, 4);
+    showTierAdvance({
+      from: 'J', to: 'Q', handSizeBefore: 5, handSizeAfter: 6,
+      regroupsGained: 1, regroupsAfter: 1, layLowsRestored: 2,
+      drawn: 3, byPlayer: [1, 1, 1], completedRoyals,
+    }, completedRoyals, { name: 'Danton', drawn: 1, beforeCount: 4, afterCount: 5 }, () => {});
+  }
+} else if (debugParams.has('entrance')) {
+  show('game');
+  showEntrance({
+    card: { r: 'Q', s: 'H' }, health: 30, effectiveAttack: 15, threatVariant: 0,
+  }, () => {});
+} else if (debugParams.has('capture')) {
+  show('game');
+  showRoyalDefeat(
+    { r: 'Q', s: 'D' }, true,
+    { name: 'Danton', handCount: 5, isYou: true },
+    () => {},
+  );
+} else if (debugParams.has('guillotine')) {
+  show('game');
+  showRoyalDefeat({ r: 'Q', s: 'C' }, false, null, () => {});
+} else if (debugParams.has('spoils')) {
+  show('game');
+  showSpoilsReward('Danton', 4, 5, 1, () => {});
 } else if (debugParams.has('begin')) {
   playCutscene('begin', () => show('home'));
 } else {

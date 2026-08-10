@@ -48,6 +48,19 @@ export function miniLabel(card) {
   return `${card.r}${SUIT_GLYPH[card.s] ?? ''}`;
 }
 
+// The tricolour cockade pinned to an exactly defeated royal. Tier summaries
+// reuse this exact vector instead of approximating it with CSS circles.
+export function royalCockadeSVG(className = '') {
+  const cls = className ? ` class="${className}"` : '';
+  return `<svg${cls} viewBox="0 0 82 104" aria-hidden="true">`
+    + `<path d="M19 57L13 100L34 84L42 103L48 57Z" fill="#1b2a5e" stroke="#b08d2c" stroke-width="2"/>`
+    + `<path d="M39 58L48 101L60 83L73 96L62 51Z" fill="#9e2235" stroke="#b08d2c" stroke-width="2"/>`
+    + `<circle cx="41" cy="38" r="32" fill="#1b2a5e" stroke="#b08d2c" stroke-width="3"/>`
+    + `<circle cx="41" cy="38" r="21" fill="#f8f1df" stroke="#b08d2c" stroke-width="2"/>`
+    + `<circle cx="41" cy="38" r="10" fill="#9e2235" stroke="#b08d2c" stroke-width="2"/>`
+    + `<circle cx="41" cy="38" r="3" fill="#d9bc63"/></svg>`;
+}
+
 // ── the fleur-de-lis motif (used on backs, decks, and the board) ────────────
 export const FLEUR_PATH = `
   M50 3
