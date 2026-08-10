@@ -138,12 +138,12 @@ export const RULE_SPEC = {
     default: 0,
     exposed: false,
   },
-  // Solo has three Pamphleteers, spent freely. Multiplayer tables share two
-  // and must approve each use.
+  // Every table has two Pamphleteers. Solo spends them freely; multiplayer
+  // tables share them and must approve each use.
   pamphleteers: {
     label: 'Pamphleteers',
     values: [0, 1, 2, 3],
-    bySize: { 1: 3, 2: 2, 3: 2, 4: 2 },
+    bySize: { 1: 2, 2: 2, 3: 2, 4: 2 },
     exposed: false,
   },
   // Where an exact kill sends the royal: won over to the slayer's own hand, or

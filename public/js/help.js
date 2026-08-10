@@ -66,7 +66,7 @@ export function statusText(view, stagedCount) {
 export function cardInfo(card, view) {
   const v = cardValue(card);
   const e = view.enemy;
-  const pamphleteerCount = view?.rules?.pamphleteers ?? (view?.solo ? 3 : 2);
+  const pamphleteerCount = view?.rules?.pamphleteers ?? 2;
   let html = '';
   if (card.r === 'X') {
     html = `<h3>P✒ The Pamphleteer</h3>
@@ -154,7 +154,7 @@ export function enemyInfo(view) {
 // to be selected to use it. Always ends with a way into the full rulebook.
 export function contextHelp(view) {
   const hand = view.you?.hand ?? [];
-  const pamphleteerCount = view.rules?.pamphleteers ?? (view.solo ? 3 : 2);
+  const pamphleteerCount = view.rules?.pamphleteers ?? 2;
   const heldSuits = new Set(hand.filter(c => c.s).map(c => c.s));
   const hasRenforts = hand.some(c => c.r === 'A');
   const hasCapturedRoyal = hand.some(c => c.r === 'J' || c.r === 'Q' || c.r === 'K');
@@ -260,7 +260,7 @@ function constitutionSection(view) {
 export function helpHTML(view) {
   const phase = view?.phase;
   const here = id => (id === phaseSection(phase) ? 'here' : '');
-  const pamphleteerCount = view?.rules?.pamphleteers ?? (view?.solo ? 3 : 2);
+  const pamphleteerCount = view?.rules?.pamphleteers ?? 2;
   return `
     <h2>How to Play — 1789</h2>
     <button class="help-walkthrough-link" type="button">
@@ -343,7 +343,7 @@ ${constitutionSection(view)}
     <h3>La Retraite</h3>
     <p>La Retraite is the table's way of catching its breath. Every hand returns to ${TERMS.tavern}; the deck is shuffled and dealt round by round until every citoyen reaches the current limit or it runs out. ${TERMS.discard} stays put. It may be called before attacking or while facing damage, and it does not break royal immunity.</p>
     ${view?.solo ? `<h3 class="${here('solo')}">Solo — Défendre Seul</h3>
-    <p>You fight alone with hand limits of 5 / 6 / 7, three Pamphleteers, and one La Retraite card, spent freely with no Assemblée to convince. La Retraite is restored to one upon entering Queens and Kings if it was spent; it never accumulates. You take two Spoils after each royal and one extra card at each tier change. Lay Low is not offered alone.</p>` : ''}
+    <p>You fight alone with hand limits of 5 / 6 / 7, two Pamphleteers, and one La Retraite card, spent freely with no Assemblée to convince. La Retraite is restored to one upon entering Queens and Kings if it was spent; it never accumulates. You take two Spoils after each royal and one extra card at each tier change. Lay Low is not offered alone.</p>` : ''}
     ${view && !view.solo ? `<h3>l'Assemblée</h3>
     <p>At a table, La Retraite cards and Pamphleteers are <b>shared pools</b>. The active citoyen moves for one; moving counts as their own <b>Yea</b>, everyone else answers <b>Yea</b> or <b>Nay</b>, and a strict majority carries the motion. A fallen motion costs nothing. Every multiplayer table begins with one La Retraite; it is restored to one upon entering Queens and Kings if spent, and never accumulates.</p>` : ''}
   `;
@@ -408,7 +408,7 @@ export function walkthroughSteps(view) {
             <div class="walk-demo-status">Your turn, citoyen. Tap cards to stage an attack.</div>
             <div class="walk-demo-hand">${[2, 5, 8, 10].map((r, i) => walkCard({ r, s: ['H','S','D','C'][i] }, '')).join('')}</div>
           </div>
-          <div class="walk-demo-actions"><span>Pamphleteer (${view?.pamphleteersRemaining ?? (view?.solo ? 3 : 2)})</span><span>La Retraite</span><span>Lay Low</span><b>Attaquez!</b></div>
+          <div class="walk-demo-actions"><span>Pamphleteer (${view?.pamphleteersRemaining ?? 2})</span><span>La Retraite</span><span>Lay Low</span><b>Attaquez!</b></div>
         </div>
       </div>`,
     },
@@ -416,7 +416,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Know your cards',
       title: 'Les Renforts and the Pamphleteers',
       body: `<p><b>A marks Les Renforts</b>, the 1-value Helper Card. Pair it with one card to add the Ace's suit and value to the play.</p>
-        <p><b>Pamphleteers are shared resources</b>, not hand cards. ${view?.rules?.pamphleteers ?? (view?.solo ? 3 : 2)} wait beside the table; each may be spent once to break a royal's immunity for zero damage without ending the active citoyen's turn. <b>Next: the four phases of a turn.</b></p>`,
+        <p><b>Pamphleteers are shared resources</b>, not hand cards. ${view?.rules?.pamphleteers ?? 2} wait beside the table; each may be spent once to break a royal's immunity for zero damage without ending the active citoyen's turn. <b>Next: the four phases of a turn.</b></p>`,
       stage: `<div class="walk-play-examples">
         <div><span>Helper Card · A</span><div>${walkCard({ r: 'A', s: 'S' }, 'Les Renforts · value 1')}</div></div>
         <div><span>Shared resource · P</span><div>${walkCard({ r: 'X', s: null }, 'Pamphleteer · zero damage')}</div></div>
@@ -461,7 +461,7 @@ export function walkthroughSteps(view) {
       eyebrow: 'Phase 2 continued · Immunity',
       title: 'Phase 2: Check the royal’s immunity',
       body: `<p>A royal is immune to the <b>power</b> of cards matching their suit, but those cards still deal their normal damage.</p>
-        <p><b>Pamphleteer — Breaks Immunity:</b> spend one of the ${view?.rules?.pamphleteers ?? (view?.solo ? 3 : 2)} shared Pamphleteers before attacking. It deals zero damage, provokes no counterattack, and leaves the active citoyen's turn intact. In multiplayer, the active citoyen proposes it and a strict majority must agree. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
+        <p><b>Pamphleteer — Breaks Immunity:</b> spend one of the ${view?.rules?.pamphleteers ?? 2} shared Pamphleteers before attacking. It deals zero damage, provokes no counterattack, and leaves the active citoyen's turn intact. In multiplayer, the active citoyen proposes it and a strict majority must agree. Earlier Spade barricades begin working; earlier Club attacks are not doubled retroactively. <b>Next: Phase 3 — Judge the Royal.</b></p>`,
       stage: `<div class="walk-immunity">
         <div class="walk-immune-royal">${walkCard({ r: 'Q', s: 'H' }, 'immune to ♥')}</div>
         <div class="walk-immune-card">${walkCard({ r: 6, s: 'H' }, '6 damage · no draw')}<span class="walk-block">×</span></div>

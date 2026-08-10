@@ -32,7 +32,7 @@ test('deck composition per player count', () => {
     const s = newGame(names4.slice(0, n), { seed: 1 });
     const all = [...s.tavern, ...s.players.flatMap(p => p.hand)];
     assert.equal(all.filter(c => c.r === 'X').length, 0, `${n}p Pamphleteers are not hand cards`);
-    assert.equal(s.pamphleteersRemaining, n === 1 ? 3 : 2, `${n}p Pamphleteers`);
+    assert.equal(s.pamphleteersRemaining, 2, `${n}p Pamphleteers`);
     assert.equal(all.filter(c => c.r === 'A').length, 4, `${n}p companions`);
     assert.equal(all.length, 40, `${n}p tavern+hands size`);
     for (const p of s.players) assert.equal(p.hand.length, hand, `${n}p hand size`);
@@ -76,9 +76,9 @@ test('legacy solo saves receive the current Pamphleteer pool and transition draw
   unused.pamphleteersRemaining = 1;
   unused.pamphleteersUsed = 0;
   const restoredUnused = restoreGame(unused);
-  assert.equal(restoredUnused.rules.pamphleteers, 3);
+  assert.equal(restoredUnused.rules.pamphleteers, 2);
   assert.equal(restoredUnused.rules.transitionDraw, 1);
-  assert.equal(restoredUnused.pamphleteersRemaining, 3);
+  assert.equal(restoredUnused.pamphleteersRemaining, 2);
 
   const spent = serializeGame(newGame(['Danton'], { seed: 1791 }));
   delete spent.soloRulesVersion;
@@ -87,10 +87,20 @@ test('legacy solo saves receive the current Pamphleteer pool and transition draw
   spent.pamphleteersRemaining = 0;
   spent.pamphleteersUsed = 2;
   const restoredSpent = restoreGame(spent);
-  assert.equal(restoredSpent.rules.pamphleteers, 3);
+  assert.equal(restoredSpent.rules.pamphleteers, 2);
   assert.equal(restoredSpent.rules.transitionDraw, 1);
-  assert.equal(restoredSpent.pamphleteersRemaining, 1, 'the newly granted third token remains');
+  assert.equal(restoredSpent.pamphleteersRemaining, 0, 'two previously spent tokens stay spent');
   assert.equal(restoredSpent.pamphleteersUsed, 2, 'the previously spent tokens stay spent');
+
+  const versionTwo = serializeGame(newGame(['Danton'], { seed: 1793 }));
+  versionTwo.soloRulesVersion = 2;
+  versionTwo.rules.pamphleteers = 3;
+  versionTwo.pamphleteersRemaining = 2;
+  versionTwo.pamphleteersUsed = 1;
+  const restoredVersionTwo = restoreGame(versionTwo);
+  assert.equal(restoredVersionTwo.rules.pamphleteers, 2);
+  assert.equal(restoredVersionTwo.pamphleteersRemaining, 1, 'the obsolete third token is removed');
+  assert.equal(restoredVersionTwo.pamphleteersUsed, 1);
 
   const currentOverride = serializeGame(newGame(['Danton'], {
     seed: 1792,
@@ -315,7 +325,7 @@ test('a shared Pamphleteer breaks immunity for zero damage and leaves the turn i
   assert.equal(s.enemy.immunityCancelled, true);
   assert.equal(s.enemy.damage, 0);
   assert.equal(s.current, 0);
-  assert.equal(s.pamphleteersRemaining, 2, 'alone, one of the three Pamphleteers is spent');
+  assert.equal(s.pamphleteersRemaining, 1, 'alone, one of the two Pamphleteers is spent');
   playCards(s, 0, [{ r: 6, s: 'S' }]);
   assert.equal(currentShield(s), 6, 'immunity broken — shield works vs Spades Jack');
   assert.equal(s.pendingDamage, 4);
@@ -728,8 +738,8 @@ test('rules resolve from partial and hostile input; difficulty sets royal power'
   assert.deepEqual(resolveRules(null, 3), { ...medium, regroupDraw: 3 });
   assert.deepEqual(
     resolveRules(null, 1),
-    { ...medium, drawOnVictory: 2, regroupDraw: 3, pamphleteers: 3 },
-    'alone gets three Pamphleteers, per-royal Spoils, a transition draw, and a Regroup that refreshes',
+    { ...medium, drawOnVictory: 2, regroupDraw: 3 },
+    'alone gets two Pamphleteers, per-royal Spoils, a transition draw, and a Regroup that refreshes',
   );
   assert.deepEqual(
     resolveRules(null, 2),

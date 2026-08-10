@@ -147,9 +147,9 @@ the production Docker image.
 Tavern deck → **Le Peuple** · Discard → **La Prison** · Castle deck → **The Ancien Régime**
 · Jester → **The Pamphleteer** · Animal Companion → **Les Renforts** · Yield → **Lay Low**
 
-**Les Renforts** are the 1-value Helper Cards marked **A**. Solo has three
-Pamphleteers; multiplayer tables have two. They sit beside the table as shared,
-single-use resources: they deal zero damage and
+**Les Renforts** are the 1-value Helper Cards marked **A**. Every table has two
+Pamphleteers. They sit beside the table as shared, single-use resources: they
+deal zero damage and
 break immunity without spending the active citoyen's turn; multiplayer use
 requires a majority vote.
 
